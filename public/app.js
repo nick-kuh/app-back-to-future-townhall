@@ -243,9 +243,11 @@
       <div class="spacer"></div>
       <p class="small center">a bordo como ${esc(me.name)}</p>`;
   }
+  // escapa o texto e depois transforma URLs em links (o href nasce do texto já escapado)
+  const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   function vMessage() {
     const m = S.state.message;
-    return `${vHeader()}<div class="panel glow msgbox"><div class="e">${esc(m.emoji || '📣')}</div><h2>${esc(m.title)}</h2><p>${esc(m.body)}</p></div>`;
+    return `${vHeader()}<div class="panel glow msgbox"><div class="e">${esc(m.emoji || '📣')}</div><h2>${esc(m.title)}</h2><p>${linkify(m.body)}</p></div>`;
   }
   function vClosing() {
     const r = S.me.result;
