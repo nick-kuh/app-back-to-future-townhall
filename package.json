@@ -1,0 +1,24 @@
+{
+  "name": "app-back-to-future-townhall",
+  "version": "1.0.0",
+  "description": "De Volta ao Futuro · app do townhall (check-in, blocos e dinâmica de conexões em duplas)",
+  "main": "server/index.js",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning server/index.js",
+    "dev": "node --no-warnings=ExperimentalWarning --watch server/index.js",
+    "test": "node --no-warnings=ExperimentalWarning scripts/test-matching.js && node --no-warnings=ExperimentalWarning scripts/test-flow.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nick-kuh/app-back-to-future-townhall.git"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.22.3",
+    "socket.io": "^4.8.4"
+  }
+}
