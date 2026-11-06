@@ -224,3 +224,7 @@ body.off .sky .horizon{opacity:.25}
 .standby .st-title{font:900 14px Orbitron;letter-spacing:4px;color:var(--muted);margin:14px 0 8px}
 .standby .st-line{margin-top:16px;font:700 11px 'Share Tech Mono',monospace;letter-spacing:3px;color:var(--cyan);opacity:.8}
 .standby .blink{animation:blink 1s steps(2) infinite}
+
+/* ---- sem conexão ---- */
+.offline{position:fixed;left:0;right:0;top:0;z-index:65;padding:calc(8px + var(--safe-top)) 12px 8px;text-align:center;font:700 12px Inter;color:#1a0700;background:var(--amber);transform:translateY(-110%);transition:.3s}
+.offline.on{transform:none}

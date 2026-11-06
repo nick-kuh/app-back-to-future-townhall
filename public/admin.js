@@ -16,7 +16,10 @@
 
   const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'control', round: 1, offset: 0, socket: null, peopleQ: '', connected: false };
 
-  function toast(msg, err) { const t = $('#toast'); t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 3500); }
+  function toast(msg, err) {
+    const t = $('#toast'); t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 3500);
+    const d = $('#dlg'); if (d && d.open) { let m = $('#dlgMsg'); if (!m) { m = document.createElement('p'); m.id = 'dlgMsg'; m.className = 'small'; m.style.marginTop = '10px'; d.appendChild(m); } m.textContent = msg; m.style.color = err ? 'var(--red)' : 'var(--green)'; }
+  }
   async function api(method, path, body) {
     const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json', 'x-admin-key': A.key }, body: body ? JSON.stringify(body) : undefined });
     const j = await r.json().catch(() => ({}));
@@ -53,13 +56,17 @@
   function render(force) {
     if (!A.O) return;
     renderStatus();
+    if (A.pressing) { clearTimeout(A.renderLater); A.renderLater = setTimeout(() => render(force), 250); return; }
     const live = ['control', 'people', 'questions'].includes(A.tab);
     if (!force && !live && $('#main').dataset.view === A.tab) return;
+    const html = ({ control: vControl, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.tab]();
+    if (!force && $('#main').dataset.view === A.tab && html === A.lastHtml) return;
+    A.lastHtml = html;
     const y = window.scrollY;
     const ae = document.activeElement, focusId = ae && ae.id && $('#main').contains(ae) ? ae.id : null;
     const caret = focusId && typeof ae.selectionStart === 'number' ? ae.selectionStart : null;
     $('#main').dataset.view = A.tab;
-    $('#main').innerHTML = ({ control: vControl, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.tab]();
+    $('#main').innerHTML = html;
     window.scrollTo(0, y);
     if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); if (caret !== null && el.setSelectionRange) el.setSelectionRange(caret, caret); } }
   }
@@ -85,6 +92,7 @@
     const late = O.people.filter(p => p.late);
     const notRanked = O.people.filter(p => p.active && p.checkedInAt && p.inRounds && !p.ranked);
     const round = O.rounds[A.round - 1];
+    const regenFrom = ph === 'matching' ? c.round : c.round + 1;
     const levelTxt = { strict: 'área ≠ e WL ≠ em todas as duplas', wl: 'precisou liberar WL igual em algumas duplas', area: 'precisou liberar área igual em algumas duplas', all: 'sem restrição em algumas duplas' };
     return `
       <div class="card">
@@ -104,8 +112,8 @@
             <div class="small">Regras: área diferente, WL diferente, nunca repetir dupla. Número ímpar forma um trio.${c.generatedAt ? ` · Geradas em ${new Date(c.generatedAt).toLocaleTimeString('pt-BR')} · ${levelTxt[c.worstLevel] || ''}` : ''}</div>
             ${late.length ? `<div class="warn">⚠ ${late.length} pessoa(s) fizeram check-in depois do cálculo e estão fora das rotas: ${esc(late.map(p => p.name).join(', '))}. Recalcule as rodadas restantes para incluí-las.</div>` : ''}
             <div class="actions">
-              <button class="btn" data-act="generate" ${O.counts.checkedIn < 2 ? 'disabled' : ''}>⚡ ${c.generatedAt ? 'Gerar novamente (todas)' : 'Gerar duplas'}</button>
-              ${c.generatedAt && !canGenerate && ph !== 'ranking' && ph !== 'results' ? `<button class="btn ghost" data-act="regenRest">↻ Recalcular ${ph === 'matching' ? 'a partir desta viagem' : 'rodadas restantes'}</button>` : ''}
+              ${!(c.played >= 1) ? `<button class="btn" data-act="generate" ${O.counts.checkedIn < 2 ? 'disabled' : ''}>⚡ ${c.generatedAt ? 'Gerar novamente (todas)' : 'Gerar duplas'}</button>` : '<span class="small">Viagens já realizadas não podem ser refeitas. Para recomeçar do zero, use "Resetar bloco de conexões".</span>'}
+              ${c.generatedAt && !canGenerate && ph !== 'ranking' && ph !== 'results' && regenFrom <= 3 ? `<button class="btn ghost" data-act="regenRest">↻ Recalcular ${ph === 'matching' ? `a partir desta viagem (${regenFrom})` : `viagens ${regenFrom}–3`}</button>` : ''}
             </div>
           </div></div>
 
@@ -262,14 +270,14 @@
 
   /* ---------- diálogos ---------- */
   function dialog(html, onMount) {
-    const d = $('#dlg'); $('#dlgBody').innerHTML = html; d.showModal(); if (onMount) onMount(d);
+    const d = $('#dlg'); $('#dlgBody').innerHTML = html; const m = $('#dlgMsg'); if (m) m.remove(); d.showModal(); if (onMount) onMount(d);
   }
   const closeDialog = () => $('#dlg').close();
   function personForm(p = {}) {
     return `<h3>${p.id ? 'Editar viajante' : 'Novo viajante'}</h3><div class="form two">
       <label class="f">Nome<input class="input" id="fName" value="${esc(p.name || '')}"></label>
       <label class="f">E-mail<input class="input" id="fEmail" value="${esc(p.email || '')}"></label>
-      <label class="f">WL<select class="input" id="fWl">${['', ...WLS].map(w => `<option value="${w}" ${(p.wl || '') === w ? 'selected' : ''}>${w || '—'}</option>`).join('')}</select></label>
+      <label class="f">WL<select class="input" id="fWl">${['', ...WLS, ...(p.wl && !WLS.includes(p.wl) ? [p.wl] : [])].map(w => `<option value="${esc(w)}" ${(p.wl || '') === w ? 'selected' : ''}>${esc(w) || '—'}</option>`).join('')}</select></label>
       <label class="f">Área<input class="input" id="fArea" value="${esc(p.area || '')}" list="areas"><datalist id="areas">${[...new Set(A.O.people.map(x => x.area).filter(Boolean))].map(a => `<option value="${esc(a)}">`).join('')}</datalist></label>
       <label class="f">Time<input class="input" id="fTeam" value="${esc(p.team || '')}"></label>
       <label class="f">Gestor(a)<input class="input" id="fManager" value="${esc(p.manager || '')}"></label>
@@ -346,7 +354,7 @@
     const act_ = el.dataset.act, id = el.dataset.id, O = A.O;
     switch (act_) {
       case 'generate': return confirmRun(O.state.conn.generatedAt ? 'Gerar novamente TODAS as duplas? As rodadas atuais serão descartadas.' : `Gerar as duplas com ${O.counts.checkedIn} viajantes a bordo?`, async () => { const r = await act('generate', { fromRound: 1 }); toast(`Duplas geradas · ${r.worstLabel}`); });
-      case 'regenRest': { const from = O.state.conn.phase === 'matching' ? O.state.conn.round : O.state.conn.round + 1; return confirmRun(`Recalcular as duplas a partir da viagem ${from} com quem está a bordo agora?`, async () => { const r = await act('generate', { fromRound: from }); toast(`Rodadas ${from}–3 recalculadas · ${r.worstLabel}`); }); }
+      case 'regenRest': { const from = O.state.conn.phase === 'matching' ? O.state.conn.round : O.state.conn.round + 1; if (from > 3) return toast('Não há viagens restantes para recalcular.', true); return confirmRun(`Recalcular as duplas da${from < 3 ? 's viagens' : ' viagem'} ${from < 3 ? `${from} a 3` : '3'} com quem está a bordo agora? As viagens já realizadas não mudam.`, async () => { const r = await act('generate', { fromRound: from }); toast(`Viagens ${from}–3 recalculadas · ${r.worstLabel}`); }); }
       case 'reveal': return run(() => act('reveal', { round: +el.dataset.round }), `Duplas da viagem ${el.dataset.round} reveladas`);
       case 'startTalk': return run(() => act('startTalk'), 'Conversa iniciada');
       case 'pause': return run(() => act('pause'));
@@ -363,8 +371,10 @@
       case 'demoTime': return run(() => act('settings', { settings: { roundSeconds: 30 } }), 'Conversas de 30s');
       case 'normalTime': return run(() => act('settings', { settings: { roundSeconds: 240 } }), 'Conversas de 4 min');
       case 'saveSettings': {
-        const agenda = $('#cfgAgenda').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [a, b] = l.split('|').map(x => x.trim()); return b !== undefined ? { time: a, title: b } : { time: '', title: a }; });
-        return run(() => act('settings', { settings: { eventName: $('#cfgName').value, roundSeconds: +$('#cfgSeconds').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda } }), 'Configurações salvas');
+        const agenda = $('#cfgAgenda').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const i = l.indexOf('|'); return i >= 0 ? { time: l.slice(0, i).trim(), title: l.slice(i + 1).trim() } : { time: '', title: l }; });
+        const secs = +$('#cfgSeconds').value;
+        if (!(secs >= 10 && secs <= 3600)) return toast('O tempo de cada conversa deve ficar entre 10 e 3600 segundos.', true);
+        return run(async () => { await act('settings', { settings: { eventName: $('#cfgName').value, roundSeconds: secs, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda } }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
       }
       case 'saveMessage': case 'showMessage': return run(() => act('setMessage', { message: { emoji: $('#msgEmoji').value, title: $('#msgTitle').value, body: $('#msgBody').value }, show: act_ === 'showMessage' }), act_ === 'showMessage' ? 'Mensagem exibida nos celulares' : 'Mensagem salva');
       case 'logout': localStorage.removeItem('bttf.admin'); location.reload(); return;
@@ -389,12 +399,18 @@
       case 'toggleQuestion': return run(() => api('PUT', `/api/admin/questions/${id}`, { active: el.dataset.v === '1' }));
       case 'deleteQuestion': return confirmRun('Excluir esta pergunta?', () => api('DELETE', `/api/admin/questions/${id}`), 'Excluída');
       case 'resetQuestions': return confirmRun('Restaurar o banco de perguntas padrão? As edições atuais serão perdidas.', () => api('POST', '/api/admin/questions/reset'), 'Banco restaurado');
-      case 'bulkQuestions': return dialog(`<h3>Substituir perguntas em massa</h3><p class="small">Uma pergunta por linha. Use um prefixo para a era: <span class="mono">[passado]</span>, <span class="mono">[presente]</span> ou <span class="mono">[futuro]</span>. Sem prefixo, a linha herda a última era usada (começa em presente).</p>
-        <textarea class="input" id="bulkText" style="min-height:220px;margin:10px 0">${esc(O.questions.map(q => `[${q.era}] ${q.text}`).join('\n'))}</textarea>
+      case 'bulkQuestions': return dialog(`<h3>Substituir perguntas em massa</h3><p class="small">Uma pergunta por linha. Use um prefixo para a era: <span class="mono">[passado]</span>, <span class="mono">[presente]</span> ou <span class="mono">[futuro]</span>. Sem prefixo, a linha herda a última era usada (começa em presente). <span class="mono">[off]</span> marca uma pergunta desativada. Perguntas cujo texto não mudou mantêm o histórico (quem já viu não vê de novo).</p>
+        <textarea class="input" id="bulkText" style="min-height:220px;margin:10px 0">${esc(O.questions.map(q => `[${q.era}]${q.active ? '' : '[off]'} ${q.text}`).join('\n'))}</textarea>
         <div class="actions"><button class="btn red" id="bulkGo">Substituir todas</button><button class="btn ghost" data-close>Cancelar</button></div>`, () => {
         $('#bulkGo').onclick = () => confirmRun('Substituir TODO o banco de perguntas?', async () => {
           let era = 'presente'; const list = [];
-          for (const line of $('#bulkText').value.split('\n')) { const t = line.trim(); if (!t) continue; const m = t.match(/^\[(passado|presente|futuro)\]\s*(.*)$/i); if (m) { era = m[1].toLowerCase(); if (m[2]) list.push({ era, text: m[2] }); } else list.push({ era, text: t }); }
+          for (const line of $('#bulkText').value.split('\n')) {
+            let t = line.trim(); if (!t) continue;
+            let active = true;
+            const m = t.match(/^\[(passado|presente|futuro)\]\s*(.*)$/i); if (m) { era = m[1].toLowerCase(); t = m[2]; }
+            const off = t.match(/^\[off\]\s*(.*)$/i); if (off) { active = false; t = off[1]; }
+            if (t) list.push({ era, text: t, active });
+          }
           await api('POST', '/api/admin/questions/replace', { questions: list }); closeDialog();
         }, 'Banco substituído');
       });
@@ -409,6 +425,9 @@
     const el = e.target.closest('[data-act]'); if (el) onAction(el);
   });
   document.addEventListener('input', e => { if (e.target.id === 'peopleQ') { A.peopleQ = e.target.value; render(true); } });
+  document.addEventListener('pointerdown', () => { A.pressing = true; }, true);
+  document.addEventListener('pointerup', () => { A.pressing = false; }, true);
+  document.addEventListener('pointercancel', () => { A.pressing = false; }, true);
 
   if (A.key) { $('#login').classList.add('hidden'); connect(); }
 })();

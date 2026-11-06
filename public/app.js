@@ -67,24 +67,29 @@
       }
     }, 42);
   }
-  function webNotify(n) {
-    try {
-      if (document.visibilityState === 'visible') return;
-      if ('Notification' in window && Notification.permission === 'granted') new Notification(n.title || 'De Volta ao Futuro', { body: n.body || '', tag: 'bttf' });
-    } catch { /* ignora */ }
+  function setOffline(off) {
+    S.offline = off;
+    const b = $('#offline'); if (b) b.classList.toggle('on', !!off);
   }
 
   /* ---------------- rede ---------------- */
   function connect() {
-    S.socket = io({ transports: ['websocket', 'polling'] });
-    S.socket.on('connect', () => { S.offline = false; hello(); });
-    S.socket.on('disconnect', () => { S.offline = true; });
+    // websocket primeiro; se a rede bloquear o upgrade, cai para polling (tryAllTransports)
+    S.socket = io({ transports: ['websocket', 'polling'], tryAllTransports: true });
+    S.socket.on('connect', () => { setOffline(false); hello(); });
+    S.socket.on('disconnect', () => { setOffline(true); });
+    S.socket.io.on('reconnect_attempt', () => { setOffline(true); });
     S.socket.on('state', st => { S.state = st; S.offset = st.now - Date.now(); maybeRender(); });
-    S.socket.on('me', me => { S.me = me; maybeRender(); });
+    S.socket.on('me', me => {
+      if (me === null && S.token) { // pessoa removida pelo painel
+        localStorage.removeItem('bttf.token'); S.token = null; S.me = null; S.screen = 'splash'; toast('Seu registro foi removido pelo apresentador.', true); maybeRender(true); return;
+      }
+      S.me = me; maybeRender();
+    });
     S.socket.on('group:update', ({ groupId, position }) => {
       if (S.me && S.me.group && S.me.group.id === groupId && S.me.group.position !== position) { S.me.group.position = position; patchQuestion(true); }
     });
-    S.socket.on('notify', n => { toast(`${n.title || ''}${n.body ? ' · ' + n.body : ''}`); webNotify(n); });
+    S.socket.on('notify', n => { toast(`${n.title || ''}${n.body ? ' · ' + n.body : ''}`); });
   }
   function hello() {
     S.socket.emit('hello', { token: S.token }, res => {
@@ -112,7 +117,10 @@
     if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}`;
     const c = S.state.conn, g = S.me && S.me.group;
     const paused = c.talk ? c.talk.paused : '';
-    return ['app', S.state.block, c.phase, c.round, paused, g ? g.id : '', g && g.missing ? 'miss' : '', S.me && S.me.ranking ? 'ranked' : '', S.editing ? 'edit' : '', S.me && S.me.result ? 'res' : ''].join('|');
+    // conteúdo que a tela mostra (mensagem, textos, dupla, resultado): se mudar no servidor, a tela redesenha
+    const content = JSON.stringify([S.state.message, S.state.event, S.state.settings, S.me && S.me.person, g && g.partners, g && g.flags, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result]);
+    let h = 0; for (let i = 0; i < content.length; i++) h = (h * 31 + content.charCodeAt(i)) >>> 0;
+    return ['app', S.state.block, c.phase, c.round, paused, g ? g.id : '', g && g.missing ? 'miss' : '', S.me && S.me.ranking ? 'ranked' : '', S.editing ? 'edit' : '', S.me && S.me.result ? 'res' : '', h].join('|');
   }
   function maybeRender(force) {
     const k = viewKey();
@@ -196,7 +204,6 @@
   }
   function vWelcome() {
     const st = S.state, me = S.me.person, pct = Math.round(100 * st.counts.checkedIn / Math.max(1, st.counts.total));
-    const canAsk = 'Notification' in window && Notification.permission === 'default';
     return `${vHeader()}
       <div class="panel glow match">
         <div class="kicker">Check-in confirmado</div>
@@ -212,7 +219,6 @@
         <p class="small" style="margin-top:10px">Fique com o app aberto: as próximas etapas aparecem aqui automaticamente.</p>
       </div>
       ${st.event.agenda && st.event.agenda.length ? `<div class="panel"><div class="kicker">Roteiro da viagem</div><ul class="agenda">${st.event.agenda.map(a => `<li><span class="t">${esc(a.time || '•')}</span><span class="x">${esc(a.title)}</span></li>`).join('')}</ul></div>` : ''}
-      ${canAsk ? '<button class="btn ghost" data-action="alerts">🔔 Ativar alertas neste celular</button>' : ''}
       <div class="spacer"></div>
       <button class="linkbtn" data-action="logout">Não sou ${esc(first(me.name))} · trocar de viajante</button>`;
   }
@@ -441,15 +447,19 @@
         case 'checkin': {
           unlockAudio(); el.disabled = true;
           const r = await api('/api/checkin', { personId: S.pick.id, token: S.token });
-          S.token = r.token; localStorage.setItem('bttf.token', r.token); S.pick = null; S.screen = 'app';
-          hello(); toast(`Bem-vindo(a) a bordo, ${first(r.person.name)}! ⚡`); buzz(60);
+          S.token = r.token; localStorage.setItem('bttf.token', r.token); S.pick = null; S.screen = 'app'; S.me = null;
+          maybeRender(true); hello(); toast(`Bem-vindo(a) a bordo, ${first(r.person.name)}! ⚡`); buzz(60);
           break;
         }
         case 'logout': if (confirm('Sair deste viajante neste celular?')) { localStorage.removeItem('bttf.token'); S.token = null; S.me = null; S.screen = 'splash'; hello(); } break;
-        case 'alerts': try { await Notification.requestPermission(); } catch { /* ignora */ } maybeRender(true); break;
         case 'next': case 'prev': {
           el.disabled = true;
-          S.socket.emit('group:step', { dir: action === 'next' ? 1 : -1 }, res => { if (!res.ok) { toast(res.error, true); el.disabled = false; } });
+          const g = S.me && S.me.group;
+          S.socket.emit('group:step', { dir: action === 'next' ? 1 : -1, from: g ? g.position : null, token: S.token }, res => {
+            if (!res || !res.ok) { toast((res && res.error) || 'Sem resposta do servidor', true); el.disabled = false; return; }
+            if (S.me && S.me.group && S.me.group.id === res.groupId && S.me.group.position !== res.position) { S.me.group.position = res.position; patchQuestion(true); }
+            else if (S.me && S.me.group) patchQuestion(false), (el.disabled = false);
+          });
           break;
         }
         case 'rank': {
@@ -462,9 +472,9 @@
         case 'submit': {
           const ranks = {}; S.draft.forEach((round, i) => { ranks[round] = i + 1; });
           el.disabled = true;
-          S.socket.emit('ranking:submit', { ranks }, res => {
-            if (!res.ok) { toast(res.error, true); el.disabled = false; return; }
-            S.editing = false; S.draft = []; toast('Avaliação enviada! ⚡'); buzz(60);
+          S.socket.emit('ranking:submit', { ranks, token: S.token }, res => {
+            if (!res || !res.ok) { toast((res && res.error) || 'Sem resposta do servidor', true); el.disabled = false; return; }
+            S.editing = false; S.draft = []; toast('Avaliação enviada! ⚡'); buzz(60); maybeRender(true);
           });
           break;
         }
@@ -473,7 +483,9 @@
   }
   document.addEventListener('click', e => { const el = e.target.closest('[data-action]'); if (el) act(el.dataset.action, el); });
   document.addEventListener('input', e => { if (e.target.id === 'q') { S.q = e.target.value; const l = $('#plist'); if (l) l.innerHTML = vPeopleList(); } });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (S.socket && S.socket.connected) hello(); wakeLock(); } });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (S.socket && S.socket.connected) hello(); wakeLock(); unlockAudio(); } });
+  document.addEventListener('pointerdown', unlockAudio, { passive: true });
+  document.addEventListener('touchstart', unlockAudio, { passive: true });
   setInterval(() => { if (Math.random() < .08) flashSky(); }, 6000);
 
   render();

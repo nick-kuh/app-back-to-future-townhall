@@ -84,7 +84,10 @@ function pushAll(notice) {
   const state = engine.publicState();
   io.emit('state', state);
   for (const [, socket] of io.of('/').sockets) {
-    if (socket.data.personId) socket.emit('me', engine.meState(socket.data.personId));
+    if (!socket.data.personId) continue;
+    const me = engine.meState(socket.data.personId);
+    if (!me) { socket.leave('person:' + socket.data.personId); socket.data.personId = null; }
+    socket.emit('me', me);
   }
   if (notice) io.emit('notify', notice);
   pushAdmin();
@@ -92,10 +95,18 @@ function pushAll(notice) {
 let adminTimer = null;
 function pushAdmin() {
   if (adminTimer) return;
-  adminTimer = setTimeout(() => { adminTimer = null; io.to('admin').emit('admin:overview', engine.adminOverview()); }, 150);
+  adminTimer = setTimeout(() => { adminTimer = null; io.to('admin').emit('admin:overview', engine.adminOverview()); }, 500);
 }
 engine.onChange(pushAll);
 
+// Após uma reconexão, eventos enfileirados chegam antes do 'hello': identifica pelo token do próprio evento.
+function personOf(socket, payload) {
+  if (!socket.data.personId && payload && payload.token) {
+    const p = engine.personByToken(payload.token);
+    if (p) { socket.data.personId = p.id; socket.join('person:' + p.id); }
+  }
+  return socket.data.personId;
+}
 io.on('connection', socket => {
   socket.on('hello', (payload, ack) => {
     const p = engine.personByToken(payload && payload.token);
@@ -106,17 +117,18 @@ io.on('connection', socket => {
   });
   socket.on('group:step', (payload, ack) => {
     try {
-      if (!socket.data.personId) throw new Error('Identifique-se primeiro.');
-      const r = engine.groupStep(socket.data.personId, (payload && payload.dir) || 1);
-      for (const id of r.members) io.to('person:' + id).emit('group:update', { groupId: r.groupId, position: r.position });
-      pushAdmin();
-      if (typeof ack === 'function') ack({ ok: true, position: r.position });
+      const pid = personOf(socket, payload);
+      if (!pid) throw new Error('Conexão restabelecida: toque de novo.');
+      const r = engine.groupStep(pid, (payload && payload.dir) || 1, payload ? payload.from : undefined);
+      if (!r.ignored) { for (const id of r.members) io.to('person:' + id).emit('group:update', { groupId: r.groupId, position: r.position }); pushAdmin(); }
+      if (typeof ack === 'function') ack({ ok: true, position: r.position, groupId: r.groupId });
     } catch (e) { if (typeof ack === 'function') ack({ ok: false, error: e.message }); }
   });
   socket.on('ranking:submit', (payload, ack) => {
     try {
-      if (!socket.data.personId) throw new Error('Identifique-se primeiro.');
-      engine.submitRanking(socket.data.personId, (payload && payload.ranks) || {});
+      const pid = personOf(socket, payload);
+      if (!pid) throw new Error('Conexão restabelecida: toque de novo.');
+      engine.submitRanking(pid, (payload && payload.ranks) || {});
       if (typeof ack === 'function') ack({ ok: true });
     } catch (e) { if (typeof ack === 'function') ack({ ok: false, error: e.message }); }
   });

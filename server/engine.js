@@ -41,6 +41,7 @@ function normalizeWl(s) {
   return String(s).trim();
 }
 const normName = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const normText = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 class Engine {
   constructor() {
@@ -114,7 +115,7 @@ class Engine {
     const p = this.personById(id);
     if (!p) throw new Error('Pessoa não encontrada.');
     const fields = [], vals = [];
-    if (f.name !== undefined) { fields.push('name = ?'); vals.push(String(f.name).trim()); }
+    if (f.name !== undefined) { const name = String(f.name).trim(); if (!name) throw new Error('Nome obrigatório.'); fields.push('name = ?'); vals.push(name); }
     if (f.email !== undefined) { fields.push('email = ?'); vals.push(String(f.email).trim().toLowerCase()); }
     if (f.wl !== undefined) { fields.push('wl = ?'); vals.push(normalizeWl(f.wl)); }
     if (f.team !== undefined) { fields.push('team = ?'); vals.push(String(f.team).trim()); }
@@ -128,6 +129,7 @@ class Engine {
     return this.personById(p.id);
   }
   deletePerson(id) {
+    if (this.allGroups().some(g => g.members.includes(Number(id)))) throw new Error('Essa pessoa está em duplas já geradas. Marque como ausente em vez de excluir, ou resete o bloco de conexões.');
     db.prepare('DELETE FROM people WHERE id = ?').run(Number(id));
     db.prepare('DELETE FROM rankings WHERE person_id = ?').run(Number(id));
     db.prepare('DELETE FROM results WHERE person_id = ?').run(Number(id));
@@ -192,34 +194,58 @@ class Engine {
   listQuestions() {
     return db.prepare('SELECT * FROM questions ORDER BY sort_order, id').all().map(q => ({ id: q.id, text: q.text, era: q.era, active: !!q.active, sortOrder: q.sort_order }));
   }
+  guardQuestions() {
+    if (this.state.conn.phase === 'talk') throw new Error('Há uma conversa em andamento. Encerre-a antes de mexer no banco de perguntas.');
+  }
+  afterQuestionsChange() {
+    if (this.state.conn.phase === 'matching') this.assignQueues(this.state.conn.round);
+    this.commit();
+  }
   addQuestion({ text, era }) {
+    this.guardQuestions();
     const t = String(text || '').trim();
     if (!t) throw new Error('Texto da pergunta obrigatório.');
     const max = db.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM questions').get().m;
     db.prepare('INSERT INTO questions (text, era, sort_order) VALUES (?, ?, ?)').run(t, ERAS[era] ? era : 'presente', max + 1);
-    this.commit();
+    this.afterQuestionsChange();
   }
   updateQuestion(id, f) {
+    this.guardQuestions();
     const fields = [], vals = [];
-    if (f.text !== undefined) { fields.push('text = ?'); vals.push(String(f.text).trim()); }
+    if (f.text !== undefined) { const t = String(f.text).trim(); if (!t) throw new Error('Texto da pergunta obrigatório.'); fields.push('text = ?'); vals.push(t); }
     if (f.era !== undefined) { fields.push('era = ?'); vals.push(ERAS[f.era] ? f.era : 'presente'); }
     if (f.active !== undefined) { fields.push('active = ?'); vals.push(bool(f.active)); }
     if (fields.length) { vals.push(Number(id)); db.prepare(`UPDATE questions SET ${fields.join(', ')} WHERE id = ?`).run(...vals); }
-    this.commit();
+    this.afterQuestionsChange();
   }
-  deleteQuestion(id) { db.prepare('DELETE FROM questions WHERE id = ?').run(Number(id)); this.commit(); }
+  deleteQuestion(id) { this.guardQuestions(); db.prepare('DELETE FROM questions WHERE id = ?').run(Number(id)); this.afterQuestionsChange(); }
+  // Substitui o banco preservando o id das perguntas cujo texto não mudou (filas e histórico continuam válidos).
   replaceQuestions(list) {
+    this.guardQuestions();
+    const existing = this.listQuestions();
+    const byText = new Map(existing.map(q => [normText(q.text), q]));
     db.exec('BEGIN');
     try {
-      db.exec('DELETE FROM questions');
-      const ins = db.prepare('INSERT INTO questions (text, era, sort_order) VALUES (?, ?, ?)');
+      const keep = new Set();
+      const upd = db.prepare('UPDATE questions SET text = ?, era = ?, active = ?, sort_order = ? WHERE id = ?');
+      const ins = db.prepare('INSERT INTO questions (text, era, active, sort_order) VALUES (?, ?, ?, ?)');
       let i = 0;
-      for (const q of list) { const t = String(q.text || '').trim(); if (t) ins.run(t, ERAS[q.era] ? q.era : 'presente', ++i); }
+      for (const q of list) {
+        const t = String(q.text || '').trim();
+        if (!t) continue;
+        const era = ERAS[q.era] ? q.era : 'presente';
+        const active = (q.active === false || q.active === 0) ? 0 : 1;
+        const found = byText.get(normText(t));
+        if (found && !keep.has(found.id)) { upd.run(t, era, active, ++i, found.id); keep.add(found.id); }
+        else { const r = ins.run(t, era, active, ++i); keep.add(Number(r.lastInsertRowid)); }
+      }
+      const del = db.prepare('DELETE FROM questions WHERE id = ?');
+      for (const q of existing) if (!keep.has(q.id)) del.run(q.id);
       db.exec('COMMIT');
-    } catch (e) { db.exec('ROLLBACK'); throw e; }
-    this.commit();
+    } catch (err) { db.exec('ROLLBACK'); throw err; }
+    this.afterQuestionsChange();
   }
-  resetQuestions() { resetQuestions(); this.commit(); }
+  resetQuestions() { this.replaceQuestions(require('./seed/questions')); }
 
   /* ---------------- grupos ---------------- */
   rowToGroup(r) { return r ? { id: r.id, round: r.round, idx: r.idx, members: parse(r.members, []), queue: parse(r.queue, []), position: r.position || 0 } : null; }
@@ -229,7 +255,9 @@ class Engine {
 
   generate({ fromRound = 1 } = {}) {
     const c = this.state.conn;
-    fromRound = Math.max(1, Math.min(TOTAL_ROUNDS, Number(fromRound) || 1));
+    fromRound = Number(fromRound) || 1;
+    if (fromRound < 1 || fromRound > TOTAL_ROUNDS) throw new Error('Não há rodadas restantes para recalcular.');
+    if (fromRound <= (c.played || 0)) throw new Error(`A viagem ${fromRound} já aconteceu e não pode ser refeita. Para incluir alguém, recalcule só as rodadas restantes; para recomeçar do zero, resete o bloco de conexões.`);
     const people = this.participants();
     if (people.length < 2) throw new Error('É preciso ter pelo menos 2 viajantes com check-in.');
     const kept = this.allGroups().filter(g => g.round < fromRound);
@@ -380,7 +408,8 @@ class Engine {
   computeResults() {
     const c = this.state.conn;
     if (!(c.played >= 1)) throw new Error('Nenhuma viagem foi realizada ainda.');
-    const groups = this.allGroups().filter(g => g.round <= c.played);
+    const exists = new Set(this.listPeople().map(p => p.id));
+    const groups = this.allGroups().filter(g => g.round <= c.played).map(g => ({ ...g, members: g.members.filter(id => exists.has(id)) })).filter(g => g.members.length >= 2);
     const ids = new Set(); groups.forEach(g => g.members.forEach(id => ids.add(id)));
     const res = computeResults({ groups, rankings: this.rankingsMap(), personIds: [...ids] });
     db.exec('BEGIN');
@@ -402,11 +431,13 @@ class Engine {
     return { match: this.publicPerson(this.personById(r.match_id), true), mutual: !!r.mutual, score: r.score, detail };
   }
 
-  groupStep(personId, dir) {
+  groupStep(personId, dir, from) {
     const c = this.state.conn;
     if (c.phase !== 'talk') throw new Error('A conversa não está em andamento.');
     const g = this.groupOfPerson(personId, c.round);
     if (!g) throw new Error('Você não está em nenhuma dupla nesta viagem.');
+    // se o celular estava vendo outra posição (a dupla já avançou), não avança de novo
+    if (from !== undefined && from !== null && Number(from) !== g.position) return { groupId: g.id, position: g.position, members: g.members, ignored: true };
     const pos = Math.max(0, Math.min(g.queue.length - 1, g.position + (dir < 0 ? -1 : 1)));
     db.prepare('UPDATE groups SET position = ? WHERE id = ?').run(pos, g.id);
     return { groupId: g.id, position: pos, members: g.members };
@@ -471,7 +502,8 @@ class Engine {
     const people = this.listPeople();
     const active = people.filter(p => p.active);
     const checked = active.filter(p => p.checkedInAt);
-    const rankingTotal = c.played ? new Set(this.allGroups().filter(g => g.round <= c.played).flatMap(g => g.members)).size : 0;
+    const exists = new Set(people.map(p => p.id));
+    const rankingTotal = c.played ? new Set(this.allGroups().filter(g => g.round <= c.played).flatMap(g => g.members).filter(id => exists.has(id))).size : 0;
     const rankingDone = db.prepare('SELECT COUNT(DISTINCT person_id) AS n FROM rankings').get().n;
     return {
       event: { name: this.settings.eventName, agenda: this.settings.agenda, welcomeText: this.settings.welcomeText, closingText: this.settings.closingText, standbyText: this.settings.standbyText },

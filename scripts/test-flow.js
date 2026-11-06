@@ -112,6 +112,48 @@ assert.strictEqual(e.publicState().block, 'message');
 e.updateSettings({ roundSeconds: 240, agenda: [{ time: '09:00', title: 'Abertura' }] });
 assert.strictEqual(e.publicState().event.agenda[0].title, 'Abertura');
 
+// guardas da revisão: rodadas já realizadas não podem ser refeitas
+assert.throws(() => e.generate({ fromRound: 4 }), /Não há rodadas restantes/, 'fromRound 4 é recusado');
+assert.throws(() => e.generate({ fromRound: 1 }), /já aconteceu/, 'rodada jogada não é regenerada');
+assert.throws(() => e.deletePerson(1), /duplas já geradas/, 'não exclui quem está em duplas');
+assert.throws(() => e.updatePerson(1, { name: '   ' }), /Nome obrigatório/, 'nome vazio é recusado');
+// avanço com posição esperada (toque simultâneo não pula pergunta)
+e.resetConnections(); e.generate(); e.reveal(1); e.startTalk();
+{
+  const st = e.groupStep(1, 1, 0); assert.strictEqual(st.position, 1);
+  const partnerId = st.members.find(id => id !== 1);
+  const dup = e.groupStep(partnerId, 1, 0); // parceiro ainda via a posição 0
+  assert.strictEqual(dup.ignored, true); assert.strictEqual(dup.position, 1, 'segundo toque simultâneo não avança duas vezes');
+  assert.strictEqual(e.groupStep(partnerId, 1, 1).position, 2, 'toque com posição atual avança');
+}
+// banco de perguntas: recusado durante a conversa, preserva ids ao substituir
+assert.throws(() => e.replaceQuestions([{ era: 'presente', text: 'x' }]), /conversa em andamento/);
+e.endTalk();
+{
+  const before = e.listQuestions();
+  const list = before.map(q => ({ era: q.era, text: q.text, active: q.id !== before[0].id })); // desativa a primeira
+  list.push({ era: 'futuro', text: 'Pergunta nova de teste?' });
+  list.splice(1, 1); // remove a segunda
+  e.replaceQuestions(list);
+  const after = e.listQuestions();
+  assert.strictEqual(after.find(q => q.id === before[0].id).active, false, 'id preservado e inativa respeitada');
+  assert(!after.some(q => q.id === before[1].id), 'pergunta removida some');
+  assert.strictEqual(after.filter(q => q.text === 'Pergunta nova de teste?').length, 1, 'nova pergunta inserida');
+  assert.strictEqual(after.length, before.length, 'tamanho consistente');
+  e.resetQuestions();
+  assert.strictEqual(e.listQuestions().length, 42, 'banco padrão restaurado');
+}
+// ids inexistentes em duplas não quebram resultados
+e.reveal(2); e.startTalk(); e.endTalk(); e.reveal(3); e.startTalk(); e.endTalk();
+db_hack: {
+  const { db } = require('../server/db');
+  const g = e.groupsOfRound(1)[0];
+  db.prepare('UPDATE groups SET members = ? WHERE id = ?').run(JSON.stringify([...g.members, 99999]), g.id);
+  e.openRanking(); e.testRandomRankings(); e.computeResults();
+  for (const id of g.members) { const r = e.meState(id).result; assert(r && r.match && r.match.id !== 99999, 'fantasma não vira conexão'); }
+  assert.strictEqual(e.publicState().conn.rankingTotal, e.participants().length, 'fantasma não conta no total');
+}
+
 // importação de pessoas (mesclar) e de respostas do forms
 const imp = e.importPeople([
   { name: 'Claudia Meira', email: 'claudia.meira@unilever.com', wl: 'wl3', team: 'CDIO BPC', manager: 'Meenakshi Burra', area: 'Diretora' },
