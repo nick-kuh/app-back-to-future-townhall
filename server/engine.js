@@ -24,7 +24,7 @@ const DEFAULT_SETTINGS = {
   ],
 };
 const DEFAULT_MESSAGE = { title: 'Intervalo', body: 'Voltamos em 15 minutos.', emoji: '☕' };
-const defaultConn = () => ({ phase: 'idle', round: 0, played: 0, talk: null, generatedAt: null, worstLevel: null, levels: {}, resultsAt: null });
+const defaultConn = () => ({ phase: 'idle', round: 0, played: 0, talk: null, generatedAt: null, worstLevel: null, levels: {}, resultsAt: null, repeats: false });
 
 const now = () => Date.now();
 const iso = () => new Date().toISOString();
@@ -79,8 +79,8 @@ class Engine {
   }
   personById(id) { return this.rowToPerson(db.prepare('SELECT * FROM people WHERE id = ?').get(Number(id))); }
   personByToken(token) {
-    if (!token) return null;
-    return this.rowToPerson(db.prepare('SELECT * FROM people WHERE token = ?').get(String(token)));
+    if (typeof token !== 'string' || !token || token.length > 128) return null;
+    return this.rowToPerson(db.prepare('SELECT * FROM people WHERE token = ?').get(token));
   }
   participants() { return this.listPeople().filter(p => p.active && p.checkedInAt); }
   publicPerson(p, withHints = false) {
@@ -267,7 +267,7 @@ class Engine {
       if (g.members.length === 3) g.members.forEach(id => trios.add(id));
     }
     const res = generateRounds({ people, totalRounds: TOTAL_ROUNDS, fromRound, usedPairs: used, trioHistory: trios });
-    if (!res) throw new Error('Não foi possível montar as duplas com essas pessoas.');
+    if (!res) throw new Error('Não foi possível montar as duplas com essas pessoas. Confira se há pelo menos 2 viajantes a bordo e tente de novo.');
     db.exec('BEGIN');
     try {
       db.prepare('DELETE FROM groups WHERE round >= ?').run(fromRound);
@@ -280,10 +280,11 @@ class Engine {
     c.levels = levels;
     c.worstLevel = Object.values(levels).reduce((w, l) => (['strict', 'wl', 'area', 'all'].indexOf(l) > ['strict', 'wl', 'area', 'all'].indexOf(w) ? l : w), 'strict');
     c.generatedAt = iso();
+    c.repeats = !!res.repeats;
     if (c.phase === 'idle') c.phase = 'ready';
     if (c.phase === 'matching' && c.round >= fromRound) this.assignQueues(c.round);
     this.commit();
-    return { fromRound, rounds: res.rounds.length, worstLevel: res.worstLevel, worstLabel: res.worstLabel };
+    return { fromRound, rounds: res.rounds.length, worstLevel: res.worstLevel, worstLabel: res.worstLabel, repeats: !!res.repeats, ms: res.ms };
   }
 
   assignQueues(round) {
@@ -571,7 +572,7 @@ class Engine {
     })).filter(r => r.person);
     return {
       state: this.state, settings: this.settings, now: now(),
-      people: people.map(p => ({ id: p.id, name: p.name, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.checkedInAt && Date.parse(p.checkedInAt) > generatedAt && !inRounds.has(p.id)) })),
+      people: people.map(p => ({ id: p.id, name: p.name, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.active && p.checkedInAt && !inRounds.has(p.id)) })),
       rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, points: POINTS,
       counts: this.publicState().counts,
     };

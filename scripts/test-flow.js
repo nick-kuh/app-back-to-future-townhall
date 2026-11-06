@@ -13,6 +13,8 @@ const tokens = {};
 for (const p of people.slice(0, 40)) tokens[p.id] = e.checkin(p.id).token;
 assert.strictEqual(e.publicState().counts.checkedIn, 40);
 assert.strictEqual(e.personByToken(tokens[1]).id, 1, 'token identifica a pessoa');
+assert.strictEqual(e.personByToken({ toString: 1 }), null, 'token malformado não quebra');
+assert.strictEqual(e.personByToken(['x']), null);
 
 // re-check-in no mesmo aparelho mantém o token; outro aparelho troca
 assert.strictEqual(e.checkin(1, tokens[1]).token, tokens[1]);

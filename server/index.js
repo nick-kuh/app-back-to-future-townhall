@@ -9,6 +9,10 @@ const { DB_PATH } = require('./db');
 const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'doc1985';
 
+// Um bug em qualquer handler não pode derrubar o evento inteiro: registra e segue.
+process.on('uncaughtException', err => console.error('[uncaughtException]', err));
+process.on('unhandledRejection', err => console.error('[unhandledRejection]', err));
+
 const engine = new Engine();
 const app = express();
 const server = http.createServer(app);
@@ -84,10 +88,9 @@ function pushAll(notice) {
   const state = engine.publicState();
   io.emit('state', state);
   for (const [, socket] of io.of('/').sockets) {
-    if (!socket.data.personId) continue;
-    const me = engine.meState(socket.data.personId);
-    if (!me) { socket.leave('person:' + socket.data.personId); socket.data.personId = null; }
-    socket.emit('me', me);
+    if (!socket.data.token && !socket.data.personId) continue;
+    const pid = bind(socket); // revalida o token a cada push (check-in desfeito, reset, outro aparelho assumiu o nome)
+    socket.emit('me', pid ? engine.meState(pid) : null);
   }
   if (notice) io.emit('notify', notice);
   pushAdmin();
@@ -99,47 +102,58 @@ function pushAdmin() {
 }
 engine.onChange(pushAll);
 
-// Após uma reconexão, eventos enfileirados chegam antes do 'hello': identifica pelo token do próprio evento.
-function personOf(socket, payload) {
-  if (!socket.data.personId && payload && payload.token) {
-    const p = engine.personByToken(payload.token);
-    if (p) { socket.data.personId = p.id; socket.join('person:' + p.id); }
-  }
-  return socket.data.personId;
+// Liga o socket à pessoa dona do token (do evento ou guardado no socket) e revalida sempre:
+// se o token foi trocado (outro aparelho assumiu o nome) ou o check-in foi desfeito, desliga.
+function unbind(socket) {
+  if (socket.data.personId) socket.leave('person:' + socket.data.personId);
+  socket.data.personId = null; socket.data.token = null;
 }
+function bind(socket, token) {
+  const t = (typeof token === 'string' && token && token.length <= 128) ? token : socket.data.token;
+  const p = t ? engine.personByToken(t) : null;
+  if (!p || !p.checkedInAt || !p.active) { unbind(socket); return null; }
+  if (socket.data.personId !== p.id) { if (socket.data.personId) socket.leave('person:' + socket.data.personId); socket.join('person:' + p.id); }
+  socket.data.personId = p.id; socket.data.token = t;
+  return p.id;
+}
+const safeAck = (ack, value) => { if (typeof ack === 'function') ack(value); };
 io.on('connection', socket => {
   socket.on('hello', (payload, ack) => {
-    const p = engine.personByToken(payload && payload.token);
-    socket.data.personId = p ? p.id : null;
-    if (p) socket.join('person:' + p.id);
-    const res = { ok: !!p, state: engine.publicState(), me: p ? engine.meState(p.id) : null, now: Date.now() };
-    if (typeof ack === 'function') ack(res); else socket.emit('snapshot', res);
+    try {
+      const pid = bind(socket, payload && payload.token);
+      safeAck(ack, { ok: !!pid, state: engine.publicState(), me: pid ? engine.meState(pid) : null, now: Date.now() });
+    } catch (e) { console.error('[hello]', e); safeAck(ack, { ok: false, error: 'Erro no servidor.', state: engine.publicState(), me: null, now: Date.now() }); }
   });
   socket.on('group:step', (payload, ack) => {
     try {
-      const pid = personOf(socket, payload);
-      if (!pid) throw new Error('Conexão restabelecida: toque de novo.');
-      const r = engine.groupStep(pid, (payload && payload.dir) || 1, payload ? payload.from : undefined);
+      const pid = bind(socket, payload && payload.token);
+      if (!pid) throw new Error('Seu check-in não está mais ativo. Escolha seu nome de novo.');
+      const r = engine.groupStep(pid, Number(payload && payload.dir) < 0 ? -1 : 1, payload && Number.isFinite(Number(payload.from)) ? Number(payload.from) : undefined);
       if (!r.ignored) { for (const id of r.members) io.to('person:' + id).emit('group:update', { groupId: r.groupId, position: r.position }); pushAdmin(); }
       if (typeof ack === 'function') ack({ ok: true, position: r.position, groupId: r.groupId });
     } catch (e) { if (typeof ack === 'function') ack({ ok: false, error: e.message }); }
   });
   socket.on('ranking:submit', (payload, ack) => {
     try {
-      const pid = personOf(socket, payload);
-      if (!pid) throw new Error('Conexão restabelecida: toque de novo.');
-      engine.submitRanking(pid, (payload && payload.ranks) || {});
+      const pid = bind(socket, payload && payload.token);
+      if (!pid) throw new Error('Seu check-in não está mais ativo. Escolha seu nome de novo.');
+      const ranks = payload && payload.ranks && typeof payload.ranks === 'object' && !Array.isArray(payload.ranks) ? payload.ranks : {};
+      engine.submitRanking(pid, ranks);
       if (typeof ack === 'function') ack({ ok: true });
     } catch (e) { if (typeof ack === 'function') ack({ ok: false, error: e.message }); }
   });
   socket.on('admin:hello', (payload, ack) => {
-    const ok = payload && payload.key === ADMIN_PASSWORD;
-    if (ok) socket.join('admin');
-    if (typeof ack === 'function') ack(ok ? { ok: true, overview: engine.adminOverview() } : { ok: false, error: 'Senha inválida.' });
+    try {
+      const ok = !!payload && payload.key === ADMIN_PASSWORD;
+      if (ok) socket.join('admin');
+      safeAck(ack, ok ? { ok: true, overview: engine.adminOverview() } : { ok: false, error: 'Senha inválida.' });
+    } catch (e) { console.error('[admin:hello]', e); safeAck(ack, { ok: false, error: 'Erro no servidor.' }); }
   });
-  socket.on('time', (payload, ack) => { if (typeof ack === 'function') ack({ now: Date.now() }); });
+  socket.on('time', (payload, ack) => safeAck(ack, { now: Date.now() }));
+  socket.on('error', err => console.error('[socket error]', err && err.message));
 });
 
+server.on('error', err => { console.error('[listen]', err.message); process.exit(1); });
 server.listen(PORT, () => {
   console.log(`⚡ De Volta ao Futuro · townhall rodando em http://localhost:${PORT}`);
   console.log(`   Painel do Doc: http://localhost:${PORT}/admin.html  (senha: ${ADMIN_PASSWORD === 'doc1985' ? 'doc1985 · defina ADMIN_PASSWORD para trocar' : 'definida via ADMIN_PASSWORD'})`);

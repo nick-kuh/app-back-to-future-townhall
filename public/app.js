@@ -81,8 +81,8 @@
     S.socket.io.on('reconnect_attempt', () => { setOffline(true); });
     S.socket.on('state', st => { S.state = st; S.offset = st.now - Date.now(); maybeRender(); });
     S.socket.on('me', me => {
-      if (me === null && S.token) { // pessoa removida pelo painel
-        localStorage.removeItem('bttf.token'); S.token = null; S.me = null; S.screen = 'splash'; toast('Seu registro foi removido pelo apresentador.', true); maybeRender(true); return;
+      if (me === null && S.token) { // check-in desfeito, evento resetado ou outro aparelho assumiu este nome
+        localStorage.removeItem('bttf.token'); S.token = null; S.me = null; S.screen = 'splash'; toast('Seu check-in foi encerrado pelo apresentador. Escolha seu nome de novo.', true); maybeRender(true); return;
       }
       S.me = me; maybeRender();
     });
@@ -116,7 +116,7 @@
   function viewKey() {
     if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}`;
     const c = S.state.conn, g = S.me && S.me.group;
-    const paused = c.talk ? c.talk.paused : '';
+    const paused = ''; // pausa é atualizada no lugar (tick), sem redesenhar a tela
     // conteúdo que a tela mostra (mensagem, textos, dupla, resultado): se mudar no servidor, a tela redesenha
     const content = JSON.stringify([S.state.message, S.state.event, S.state.settings, S.me && S.me.person, g && g.partners, g && g.flags, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result]);
     let h = 0; for (let i = 0; i < content.length; i++) h = (h * 31 + content.charCodeAt(i)) >>> 0;
@@ -127,6 +127,8 @@
     if (!force && k === S.lastKey) { patch(); return; }
     const prev = S.lastKey; S.lastKey = k;
     const p = prev.split('|'), n = k.split('|');
+    // só volta ao topo quando muda de tela/bloco/fase/rodada (não em pausas, reconexões ou textos editados)
+    S.jump = !prev || p.slice(0, 4).join('|') !== n.slice(0, 4).join('|');
     const enteringPhase = ph => n[0] === 'app' && n[1] === 'connections' && n[2] === ph && !(p[1] === 'connections' && p[2] === ph && p[3] === n[3]);
     if (prev && enteringPhase('matching')) { beep('ok'); buzz([80, 40, 80]); return warp(`VIAGEM ${n[3]} · RUMO A ${roundEra(+n[3]).year}`, render); }
     if (prev && enteringPhase('ranking')) { beep('ok'); return warp('VOLTANDO PARA O PRESENTE...', render); }
@@ -147,7 +149,8 @@
     }
     document.body.classList.toggle('off', S.screen === 'app' && !!S.state && !!S.me && S.state.block === 'standby');
     wakeLock();
-    window.scrollTo(0, 0);
+    if (S.jump !== false) window.scrollTo(0, 0);
+    S.jump = true;
     if (S.screen === 'identify' && !S.pick) { const i = $('#q'); if (i) { i.value = S.q; i.focus(); } }
     tick();
   }
@@ -351,7 +354,7 @@
           <div class="panel center">
             ${gauge()}
             <div class="kicker" style="margin-top:14px">Tempo da viagem · com ${esc(ps)}</div>
-            ${c.talk && c.talk.paused ? '<div class="ptag">⏸ PAUSADO PELO DOC</div>' : ''}
+            <div class="ptag" id="pauseTag" style="display:${c.talk && c.talk.paused ? 'inline-block' : 'none'}">⏸ PAUSADO PELO DOC</div>
           </div>
           <div id="qbox">${questionCard(g, r)}</div>
           <div class="qnav">
@@ -385,7 +388,7 @@
     return `${vHeader()}
       <div><h2>Avalie suas viagens</h2><p class="muted">Toque nas conversas <b style="color:var(--txt)">na ordem da sua preferência</b>: primeiro a melhor, depois a segunda e por último a terceira. Vale pensar em quem você gostaria de continuar conhecendo.</p></div>
       ${convs.map(cv => { const p = pos(cv.round); return `<button class="rank ${p ? 'on' : ''}" data-action="rank" data-round="${cv.round}"><div class="pos">${p ? p + 'º' : '—'}</div>${av(cv.partners[0] || me.person)}<div><div class="nm">${esc(cv.partners.map(x => x.name).join(' & '))}</div><div class="th">Viagem ${cv.round} · ${esc(cv.era.label)} ${esc(cv.era.year)} · ${esc(cv.partners.map(x => x.area).join(' / '))}</div></div></button>`; }).join('')}
-      <div class="row"><button class="btn ghost" data-action="clear">Refazer</button><button class="btn" data-action="submit" ${done ? '' : 'disabled'}>Enviar avaliação ⚡</button></div>
+      <div class="row"><button class="btn ghost" data-action="clear">Refazer</button><button class="btn" data-action="submit" ${done ? '' : 'disabled'}>Enviar ⚡</button></div>
       <p class="small center" id="rankProgress">${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} viajantes já avaliaram</p>`;
   }
   function patchRanking() {
@@ -432,6 +435,7 @@
       const arc = $('#gaugeArc'); if (arc) arc.setAttribute('stroke-dasharray', `${(frac * 100).toFixed(1)} 100`);
       g.classList.toggle('hurry', !t.paused && left <= Math.min(30, t.duration * .25));
       g.classList.toggle('paused', !!t.paused);
+      const pt = $('#pauseTag'); if (pt) pt.style.display = t.paused ? 'inline-block' : 'none';
     }
   }
   setInterval(tick, 500);

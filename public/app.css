@@ -24,7 +24,7 @@ a{color:var(--cyan)}
 @keyframes lightning{0%{opacity:0}10%{opacity:1}20%{opacity:.2}30%{opacity:.8}100%{opacity:0}}
 
 /* ---- layout ---- */
-.app{max-width:520px;margin:0 auto;min-height:100vh;padding:calc(16px + var(--safe-top)) 16px calc(28px + var(--safe-bot));display:flex;flex-direction:column;gap:14px;animation:fadein .45s ease}
+.app{max-width:520px;margin:0 auto;min-height:100vh;min-height:100svh;padding:calc(16px + var(--safe-top)) 16px calc(28px + var(--safe-bot));display:flex;flex-direction:column;gap:14px;animation:fadein .45s ease}
 @keyframes fadein{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .spacer{flex:1}
 .center{text-align:center}
@@ -62,7 +62,8 @@ h3{font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--cyan)}
 .btn.ghost{background:transparent;color:var(--txt);border:1px solid var(--line2);box-shadow:none;font-size:12px;padding:13px}
 .btn.sm{padding:11px;font-size:11px}
 .row{display:flex;gap:10px}
-.row>*{flex:1}
+.row>*{flex:1;min-width:0}
+.row>.ghost{flex:0 0 auto;width:auto;padding-left:18px;padding-right:18px}
 
 /* ---- inputs ---- */
 .input{width:100%;background:#090a14;border:1px solid var(--line2);color:var(--txt);font:600 17px Inter;padding:15px 14px;border-radius:14px;outline:none}
@@ -101,7 +102,7 @@ h3{font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--cyan)}
 .tc.g label{background:#0f6d2a}.tc.g .led{color:var(--green);text-shadow:0 0 9px var(--green)}
 .tc.a label{background:#8a5900}.tc.a .led{color:var(--amber);text-shadow:0 0 9px var(--amber)}
 .trip{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.trip .t{font:900 13px Orbitron;letter-spacing:3px;color:var(--yellow)}
+.trip .t{font:900 13px Orbitron;font-size:clamp(10px,3vw,13px);letter-spacing:1.5px;color:var(--yellow);white-space:nowrap}
 .dots{display:flex;gap:6px}
 .dots i{width:26px;height:5px;border-radius:9px;background:#262a44}
 .dots i.on{background:var(--orange);box-shadow:0 0 8px var(--orange)}
@@ -109,12 +110,12 @@ h3{font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--cyan)}
 
 /* ---- placa / dupla ---- */
 .match{text-align:center}
-.plate{margin:12px auto 0;width:230px;background:linear-gradient(#fdfdf8,#e6e2cf);border:3px solid #2e2a22;border-radius:10px;padding:8px 10px 10px;color:#1d1a14;box-shadow:0 0 0 2px #c9c3ac,0 8px 22px rgba(0,0,0,.5);position:relative}
+.plate{margin:12px auto 0;width:230px;background:linear-gradient(#fdfdf8,#e6e2cf);border:3px solid #2e2a22;border-radius:10px;padding:9px 16px 10px;color:#1d1a14;box-shadow:0 0 0 2px #c9c3ac,0 8px 22px rgba(0,0,0,.5);position:relative}
 .plate .st{font:700 9px 'Share Tech Mono',monospace;letter-spacing:4px;color:#8a1a1a;display:flex;justify-content:space-between}
 .plate .num{font:900 46px Orbitron;letter-spacing:4px;line-height:1.05;color:#1d1a14}
 .plate .sub{font:700 9px 'Share Tech Mono',monospace;letter-spacing:3px;color:#2b4c8c}
-.plate::before,.plate::after{content:"";position:absolute;top:6px;width:7px;height:7px;border-radius:50%;background:#7a7465}
-.plate::before{left:8px}.plate::after{right:8px}
+.plate::before,.plate::after{content:"";position:absolute;top:4px;width:6px;height:6px;border-radius:50%;background:#7a7465}
+.plate::before{left:5px}.plate::after{right:5px}
 .who{display:flex;justify-content:center;gap:16px;margin:14px 0 8px}
 .pname{font:900 22px Orbitron;line-height:1.15}
 .rules{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:12px}
@@ -228,3 +229,12 @@ body.off .sky .horizon{opacity:.25}
 /* ---- sem conexão ---- */
 .offline{position:fixed;left:0;right:0;top:0;z-index:65;padding:calc(8px + var(--safe-top)) 12px 8px;text-align:center;font:700 12px Inter;color:#1a0700;background:var(--amber);transform:translateY(-110%);transition:.3s}
 .offline.on{transform:none}
+
+/* ---- textos longos nunca estouram a tela ---- */
+.msgbox p,.msgbox h2,.question .q,.hints .h,.pname,.muted,.small,.agenda .x,.rank .nm,.ritem .nm{overflow-wrap:anywhere;word-break:break-word}
+/* ---- celulares estreitos (≤389px): circuitos de tempo cabem inteiros ---- */
+@media (max-width:389px){
+  .tc{grid-template-columns:74px 1fr;gap:8px}
+  .tc label{font-size:7px;letter-spacing:1px;padding:5px 4px}
+  .tc .led{font-size:16px;letter-spacing:1px;padding:5px 6px}
+}

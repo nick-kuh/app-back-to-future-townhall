@@ -110,6 +110,7 @@
           <div class="step ${canGenerate ? 'active' : 'done'}"><div class="n">1</div><div class="b">
             <div class="t">Gerar duplas com quem está a bordo (${O.counts.checkedIn} viajantes)</div>
             <div class="small">Regras: área diferente, WL diferente, nunca repetir dupla. Número ímpar forma um trio.${c.generatedAt ? ` · Geradas em ${new Date(c.generatedAt).toLocaleTimeString('pt-BR')} · ${levelTxt[c.worstLevel] || ''}` : ''}</div>
+            ${c.repeats ? '<div class="warn">⚠ Com menos de 6 viajantes não há 3 viagens sem repetir dupla: algumas duplas se repetem (modo ensaio).</div>' : ''}
             ${late.length ? `<div class="warn">⚠ ${late.length} pessoa(s) fizeram check-in depois do cálculo e estão fora das rotas: ${esc(late.map(p => p.name).join(', '))}. Recalcule as rodadas restantes para incluí-las.</div>` : ''}
             <div class="actions">
               ${!(c.played >= 1) ? `<button class="btn" data-act="generate" ${O.counts.checkedIn < 2 ? 'disabled' : ''}>⚡ ${c.generatedAt ? 'Gerar novamente (todas)' : 'Gerar duplas'}</button>` : '<span class="small">Viagens já realizadas não podem ser refeitas. Para recomeçar do zero, use "Resetar bloco de conexões".</span>'}
