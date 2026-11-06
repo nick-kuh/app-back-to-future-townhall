@@ -1,0 +1,22 @@
+# Blueprint do Render (https://render.com) · deploy em um clique.
+# Serviço web Node em Docker, plano gratuito. Para o dia do evento, suba para o
+# plano Starter (sem hibernação) e, se quiser manter o banco entre reinícios,
+# adicione um disco em /app/data pelo painel do Render.
+services:
+  - type: web
+    name: townhall-de-volta-ao-futuro
+    runtime: docker
+    repo: https://github.com/nick-kuh/app-back-to-future-townhall
+    branch: claude/nice-ptolemy-l4hnfq
+    plan: free
+    region: virginia
+    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DATA_DIR
+        value: /app/data
+      - key: NODE_ENV
+        value: production

@@ -34,16 +34,27 @@ Testes (algoritmo de duplas + fluxo completo do evento):
 npm test
 ```
 
-### Hospedagem
+### Colocar no ar (Render, grátis)
 
-Qualquer lugar que rode Node 22+ serve. Opções simples:
+1. Crie uma conta em https://render.com (pode entrar com o GitHub).
+2. No painel: **New → Web Service → Public Git Repository** e cole
+   `https://github.com/nick-kuh/app-back-to-future-townhall`.
+3. Escolha a branch (`claude/nice-ptolemy-l4hnfq` ou `main`), Runtime **Docker**, plano **Free**,
+   região **Virginia** e adicione a variável de ambiente `ADMIN_PASSWORD` com a senha do painel.
+4. **Create Web Service**. Em 2 a 3 minutos o app fica em `https://NOME.onrender.com`
+   (app dos viajantes na raiz, painel em `/admin.html`). Cada novo push na branch republica sozinho.
 
-- **Notebook na sala** (mesma rede Wi-Fi): `npm start` e compartilhe `http://IP-DO-NOTEBOOK:3000`
-  (se o Wi-Fi corporativo bloquear acesso entre dispositivos, exponha com `ngrok http 3000` ou `cloudflared tunnel`).
-- **Railway / Render / Fly.io**: use o `Dockerfile` do repositório e monte um volume/disco em `/app/data`
-  para o banco sobreviver a reinícios. Defina `ADMIN_PASSWORD`.
+Se o arquivo `render.yaml` estiver na branch padrão do repositório, o botão abaixo faz tudo isso em um clique:
 
-O servidor usa WebSocket (Socket.IO) para avisar os celulares em tempo real.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/nick-kuh/app-back-to-future-townhall)
+
+Para o dia do evento: no plano Free o serviço hiberna após 15 min sem acesso (o primeiro acesso demora
+~1 min) e o banco zera quando ele reinicia (todo mundo refaz o check-in). Suba para o plano **Starter**
+e, opcionalmente, adicione um **disco** de 1 GB montado em `/app/data` para o banco persistir.
+
+Outras opções: qualquer host com Node 22+ ou Docker (Railway, Fly.io, Cloud Run, VPS) usando o `Dockerfile`;
+ou um notebook na própria sala (`npm start` + `http://IP-DO-NOTEBOOK:3000`, se o Wi-Fi permitir acesso
+entre dispositivos). O servidor usa WebSocket (Socket.IO) para avisar os celulares em tempo real.
 
 ## Fluxo do evento (Painel do Doc)
 
