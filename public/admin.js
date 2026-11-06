@@ -11,7 +11,8 @@
   const av = p => `<span class="av" style="--c:${color(p.area)}">${esc(ini(p.name))}</span>`;
   const WLS = ['Estag', 'WL1', 'WL2', 'WL3'];
   const PHASE_LABEL = { idle: 'sem duplas', ready: 'duplas prontas', matching: 'duplas reveladas', talk: 'conversa em andamento', roundEnd: 'fim da rodada', ranking: 'avaliação aberta', results: 'resultados publicados' };
-  const BLOCK_LABEL = { welcome: 'Boas-vindas', message: 'Mensagem', connections: 'Conexões', closing: 'Encerramento' };
+  const BLOCK_LABEL = { standby: 'Espera (off)', welcome: 'Boas-vindas', message: 'Mensagem', connections: 'Conexões', closing: 'Encerramento' };
+  const BLOCK_ICON = { standby: '⏻', welcome: '🚪', message: '📣', connections: '⚡', closing: '🏁' };
 
   const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'control', round: 1, offset: 0, socket: null, peopleQ: '', connected: false };
 
@@ -89,8 +90,9 @@
       <div class="card">
         <h2>Tela dos celulares</h2>
         <div class="blocks">
-          ${['welcome', 'message', 'connections', 'closing'].map(b => `<button class="${s.block === b ? 'on' : ''}" data-block="${b}"><span class="e">${{ welcome: '🚪', message: '📣', connections: '⚡', closing: '🏁' }[b]}</span>${BLOCK_LABEL[b]}</button>`).join('')}
+          ${['standby', 'welcome', 'message', 'connections', 'closing'].map(b => `<button class="${s.block === b ? 'on' : ''}" data-block="${b}"><span class="e">${BLOCK_ICON[b]}</span>${BLOCK_LABEL[b]}</button>`).join('')}
         </div>
+        <p class="small" style="margin-top:8px"><b>Espera (off)</b> apaga a tela dos celulares entre um bloco e outro; ao trocar para qualquer outro bloco, os celulares acendem, vibram e avisam.</p>
         ${s.block === 'message' ? `<p class="small" style="margin-top:8px">Mensagem atual: <b>${esc(s.message.emoji)} ${esc(s.message.title)}</b> — ${esc(s.message.body)} · <a href="#" data-go="config">editar na aba Config</a></p>` : ''}
       </div>
 
@@ -133,6 +135,7 @@
             <div class="actions">
               <button class="btn" data-act="computeResults" ${ph === 'ranking' || ph === 'results' ? '' : 'disabled'}>🔮 ${ph === 'results' ? 'Recalcular e reenviar' : 'Calcular conexões'}</button>
               <button class="btn ghost" data-act="setBlock" data-block="closing" ${ph === 'results' ? '' : 'disabled'}>🏁 Ir para o encerramento</button>
+              <button class="btn ghost" data-act="setBlock" data-block="standby" ${ph === 'results' ? '' : 'disabled'}>⏻ Colocar em espera</button>
             </div>
             <div class="small">1º lugar = 3 pts, 2º = 2, 3º = 1. A conexão de cada pessoa é o par com maior soma dos dois lados. Quem não avaliou conta 0.</div>
           </div></div>
@@ -225,6 +228,7 @@
           <label class="sw"><input type="checkbox" id="cfgHints" ${s.showFormHints ? 'checked' : ''}> Mostrar respostas do forms na tela da dupla ("para puxar assunto")</label>
           <label class="f">Texto de boas-vindas<textarea class="input" id="cfgWelcome">${esc(s.welcomeText)}</textarea></label>
           <label class="f">Texto de encerramento<textarea class="input" id="cfgClosing">${esc(s.closingText)}</textarea></label>
+          <label class="f">Texto da tela de espera (off)<textarea class="input" id="cfgStandby">${esc(s.standbyText || '')}</textarea></label>
           <label class="f">Roteiro (uma linha por item: <span class="mono">horário | título</span>)<textarea class="input" id="cfgAgenda">${esc((s.agenda || []).map(a => `${a.time}${a.time ? ' | ' : ''}${a.title}`).join('\n'))}</textarea></label>
           <div class="actions"><button class="btn" data-act="saveSettings">Salvar configurações</button></div>
         </div></div>
@@ -360,7 +364,7 @@
       case 'normalTime': return run(() => act('settings', { settings: { roundSeconds: 240 } }), 'Conversas de 4 min');
       case 'saveSettings': {
         const agenda = $('#cfgAgenda').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [a, b] = l.split('|').map(x => x.trim()); return b !== undefined ? { time: a, title: b } : { time: '', title: a }; });
-        return run(() => act('settings', { settings: { eventName: $('#cfgName').value, roundSeconds: +$('#cfgSeconds').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, agenda } }), 'Configurações salvas');
+        return run(() => act('settings', { settings: { eventName: $('#cfgName').value, roundSeconds: +$('#cfgSeconds').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda } }), 'Configurações salvas');
       }
       case 'saveMessage': case 'showMessage': return run(() => act('setMessage', { message: { emoji: $('#msgEmoji').value, title: $('#msgTitle').value, body: $('#msgBody').value }, show: act_ === 'showMessage' }), act_ === 'showMessage' ? 'Mensagem exibida nos celulares' : 'Mensagem salva');
       case 'logout': localStorage.removeItem('bttf.admin'); location.reload(); return;

@@ -53,11 +53,12 @@ h2{font-size:15px;letter-spacing:2px;text-transform:uppercase;color:var(--cyan);
 .btn.red{background:linear-gradient(135deg,#ff6b6b,#c81e1e);color:#fff;box-shadow:none}
 .btn.sm{padding:7px 10px;font-size:10px}
 .btn.xs{padding:5px 8px;font-size:9px;letter-spacing:.5px}
-.blocks{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.blocks{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
 .blocks button{background:#0b0c16;border:1px solid var(--line2);color:var(--txt);border-radius:12px;padding:12px 8px;cursor:pointer;font-weight:700;font-size:12px;display:flex;flex-direction:column;gap:4px;align-items:center}
 .blocks button .e{font-size:22px}
 .blocks button.on{border-color:var(--yellow);background:linear-gradient(135deg,rgba(255,208,0,.15),rgba(255,122,26,.1));color:var(--yellow)}
-@media (max-width:560px){.blocks{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:700px){.blocks{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:440px){.blocks{grid-template-columns:repeat(2,1fr)}}
 
 /* tabela */
 .tbl{width:100%;border-collapse:collapse;font-size:13px}

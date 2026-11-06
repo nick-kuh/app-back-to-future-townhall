@@ -7,7 +7,7 @@ const { buildQueues, ERAS, eraOfRound } = require('./queues');
 const { computeResults, POINTS } = require('./results');
 
 const TOTAL_ROUNDS = 3;
-const BLOCKS = ['welcome', 'message', 'connections', 'closing'];
+const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing'];
 const PHASES = ['idle', 'ready', 'matching', 'talk', 'roundEnd', 'ranking', 'results'];
 
 const DEFAULT_SETTINGS = {
@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS = {
   showFormHints: true,
   welcomeText: 'Prepare-se: hoje vamos viajar no tempo e conhecer gente de outras áreas.',
   closingText: 'Obrigado por viajar com a gente. Marque aquele café com a sua conexão!',
+  standbyText: 'O próximo bloco começa em instantes. Pode deixar o celular de lado: quando o Doc ligar os circuitos, a tela acende sozinha.',
   agenda: [
     { time: '', title: 'Boas-vindas e check-in' },
     { time: '', title: 'Conexões · 3 viagens no tempo' },
@@ -414,8 +415,15 @@ class Engine {
   /* ---------------- blocos / mensagem / settings ---------------- */
   setBlock(block) {
     if (!BLOCKS.includes(block)) throw new Error('Bloco inválido.');
+    const wasOff = this.state.block === 'standby';
     this.state.block = block;
-    this.commit(block === 'message' ? { title: this.state.message.title, body: this.state.message.body } : null);
+    const notices = {
+      message: { title: this.state.message.title, body: this.state.message.body },
+      welcome: wasOff ? { title: 'Circuitos ligados', body: 'Estamos de volta. Olhe para o seu celular.' } : null,
+      connections: wasOff ? { title: 'Circuitos ligados', body: 'O bloco Conexões está começando.' } : null,
+      closing: { title: 'Fim da viagem', body: this.settings.closingText },
+    };
+    this.commit(notices[block] || null);
   }
   setMessage(m, show = false) {
     this.state.message = { title: String(m.title || '').trim(), body: String(m.body || '').trim(), emoji: String(m.emoji || '📣').trim() };
@@ -426,7 +434,7 @@ class Engine {
     const s = this.settings;
     if (partial.roundSeconds !== undefined) s.roundSeconds = Math.max(10, Math.min(3600, Number(partial.roundSeconds) || 240));
     if (partial.showFormHints !== undefined) s.showFormHints = !!partial.showFormHints;
-    for (const k of ['eventName', 'welcomeText', 'closingText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
+    for (const k of ['eventName', 'welcomeText', 'closingText', 'standbyText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
     if (Array.isArray(partial.agenda)) s.agenda = partial.agenda.map(a => ({ time: String(a.time || ''), title: String(a.title || '') })).filter(a => a.title);
     this.commit();
   }
@@ -466,7 +474,7 @@ class Engine {
     const rankingTotal = c.played ? new Set(this.allGroups().filter(g => g.round <= c.played).flatMap(g => g.members)).size : 0;
     const rankingDone = db.prepare('SELECT COUNT(DISTINCT person_id) AS n FROM rankings').get().n;
     return {
-      event: { name: this.settings.eventName, agenda: this.settings.agenda, welcomeText: this.settings.welcomeText, closingText: this.settings.closingText },
+      event: { name: this.settings.eventName, agenda: this.settings.agenda, welcomeText: this.settings.welcomeText, closingText: this.settings.closingText, standbyText: this.settings.standbyText },
       block: this.state.block,
       message: this.state.message,
       counts: { checkedIn: checked.length, total: active.length },

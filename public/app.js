@@ -45,6 +45,14 @@
     } catch { /* ignora */ }
   }
   const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch { /* ignora */ } };
+  async function wakeLock() {
+    try {
+      if (!('wakeLock' in navigator)) return;
+      const want = S.screen === 'app' && S.state && S.me && S.state.block === 'connections' && ['matching', 'talk'].includes(S.state.conn.phase) && document.visibilityState === 'visible';
+      if (want && !S.lock) { S.lock = await navigator.wakeLock.request('screen'); S.lock.addEventListener('release', () => { S.lock = null; }); }
+      else if (!want && S.lock) { const l = S.lock; S.lock = null; await l.release(); }
+    } catch { S.lock = null; }
+  }
   function flashSky() { const f = $('#skyFlash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); }
   function warp(msg, cb) {
     const w = $('#warp'); $('#warpMsg').textContent = msg || 'ACELERANDO...';
@@ -115,6 +123,7 @@
     if (prev && enteringPhase('matching')) { beep('ok'); buzz([80, 40, 80]); return warp(`VIAGEM ${n[3]} · RUMO A ${roundEra(+n[3]).year}`, render); }
     if (prev && enteringPhase('ranking')) { beep('ok'); return warp('VOLTANDO PARA O PRESENTE...', render); }
     if (prev && enteringPhase('results')) { beep('result'); buzz([120, 60, 120, 60, 240]); return warp('CALCULANDO CONEXÕES...', render); }
+    if (prev && p[1] === 'standby' && n[1] && n[1] !== 'standby') { beep('ok'); buzz([80, 40, 160]); flashSky(); }
     if (prev && enteringPhase('talk')) { beep('ok'); buzz(90); flashSky(); }
     if (prev && enteringPhase('roundEnd')) { beep('end'); buzz([200, 80, 200]); }
     render();
@@ -126,8 +135,10 @@
     else if (!S.state || !S.me) app.innerHTML = vLoading();
     else {
       const b = S.state.block;
-      app.innerHTML = b === 'welcome' ? vWelcome() : b === 'message' ? vMessage() : b === 'closing' ? vClosing() : vConnections();
+      app.innerHTML = b === 'standby' ? vStandby() : b === 'welcome' ? vWelcome() : b === 'message' ? vMessage() : b === 'closing' ? vClosing() : vConnections();
     }
+    document.body.classList.toggle('off', S.screen === 'app' && !!S.state && !!S.me && S.state.block === 'standby');
+    wakeLock();
     window.scrollTo(0, 0);
     if (S.screen === 'identify' && !S.pick) { const i = $('#q'); if (i) { i.value = S.q; i.focus(); } }
     tick();
@@ -204,6 +215,24 @@
       ${canAsk ? '<button class="btn ghost" data-action="alerts">🔔 Ativar alertas neste celular</button>' : ''}
       <div class="spacer"></div>
       <button class="linkbtn" data-action="logout">Não sou ${esc(first(me.name))} · trocar de viajante</button>`;
+  }
+  function vStandby() {
+    const me = S.me.person;
+    return `<div class="spacer"></div>
+      <div class="logo sm dim"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div></div>
+      <div class="circuits off">
+        <div class="tc r"><label>DESTINO</label><div class="led">--- -- ---- --:--</div></div>
+        <div class="tc g"><label>PRESENTE</label><div class="led">--- -- ---- --:--</div></div>
+        <div class="tc a"><label>ÚLTIMA PARTIDA</label><div class="led">--- -- ---- --:--</div></div>
+      </div>
+      <div class="standby">
+        <div class="power">⏻</div>
+        <div class="st-title">MODO DE ESPERA</div>
+        <p class="muted">${esc(S.state.event.standbyText || 'O próximo bloco começa em instantes.')}</p>
+        <div class="st-line">AGUARDANDO O PRÓXIMO BLOCO<span class="blink">_</span></div>
+      </div>
+      <div class="spacer"></div>
+      <p class="small center">a bordo como ${esc(me.name)}</p>`;
   }
   function vMessage() {
     const m = S.state.message;
@@ -444,7 +473,7 @@
   }
   document.addEventListener('click', e => { const el = e.target.closest('[data-action]'); if (el) act(el.dataset.action, el); });
   document.addEventListener('input', e => { if (e.target.id === 'q') { S.q = e.target.value; const l = $('#plist'); if (l) l.innerHTML = vPeopleList(); } });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && S.socket && S.socket.connected) hello(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (S.socket && S.socket.connected) hello(); wakeLock(); } });
   setInterval(() => { if (Math.random() < .08) flashSky(); }, 6000);
 
   render();

@@ -103,6 +103,10 @@ assert(e.groupsOfRound(1).flatMap(g => g.members).includes(45) === false, 'rodad
 assert(e.groupsOfRound(2).flatMap(g => g.members).includes(45), 'rodada 2 inclui a pessoa nova');
 
 // bloco de mensagem e settings
+e.setBlock('standby');
+assert.strictEqual(e.publicState().block, 'standby', 'bloco de espera');
+e.updateSettings({ standbyText: 'Já voltamos' });
+assert.strictEqual(e.publicState().event.standbyText, 'Já voltamos');
 e.setMessage({ title: 'Intervalo', body: '15 min', emoji: '☕' }, true);
 assert.strictEqual(e.publicState().block, 'message');
 e.updateSettings({ roundSeconds: 240, agenda: [{ time: '09:00', title: 'Abertura' }] });
