@@ -92,27 +92,27 @@
     const st = S.state, c = st.conn, sc = (st.screen && st.screen.scene) || 'auto';
     if (sc === 'clock') return ['clock', sceneClock()];
     if (sc === 'logo') return ['logo', `${logo()}${flux()}`];
-    if (sc === 'quote') return ['quote', `${quoteBlock(S.quoteIdx)}${eras()}`];
+
     const b = st.block;
-    if (b === 'welcome') return ['welcome', `<div class="kicker">CHECK-IN ABERTO · ESCANEIE E ESCOLHA O SEU NOME</div>${logo()}${qrBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div><div class="bar"><i id="countBar" style="width:${Math.round(100 * st.counts.checkedIn / Math.max(1, st.counts.total))}%"></i></div>`];
+    if (b === 'welcome') return ['welcome', `${logo()}${qrBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div><div class="bar"><i id="countBar" style="width:${Math.round(100 * st.counts.checkedIn / Math.max(1, st.counts.total))}%"></i></div>`];
     if (b === 'standby') return ['clock', sceneClock()];
     if (b === 'message') { const m = st.message; return ['message', `<div class="msg"><div class="e">${esc(m.emoji || '📣')}</div></div><div class="title">${esc(m.title)}</div><div class="msg"><p>${linkify(m.body)}</p></div>`]; }
     if (b === 'closing') return ['closing', `<div class="title">FIM DA VIAGEM</div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
     // conexões
     const r = c.round, era = roundEra(r), t = c.timer;
-    if (c.phase === 'idle' || c.phase === 'ready') return ['prep', `<div class="kicker">BLOCO CONEXÕES</div><div class="title">ROTAS TEMPORAIS</div>${flux()}<div class="sub">Calculando as duplas das três viagens no tempo. <b>${st.counts.checkedIn}</b> viajantes a bordo.</div>`];
-    if (c.phase === 'matching') return ['matching', `<div class="kicker">VIAGEM ${r}/3 · ${esc(era.label)} · ${esc(era.year)}</div><div class="title">ENCONTRE SUA DUPLA</div>${t && t.kind === 'matching' ? huge('matching', 'amber') : ''}<div class="sub">Olhe o celular: a placa com o número da sua rota. Mostre a placa e encontre quem tem o mesmo número. A conversa começa sozinha.</div>`];
-    if (c.phase === 'talk') return ['talk', `<div class="kicker">VIAGEM ${r}/3 · ${esc(era.label)} · ${esc(era.year)} · CONVERSA EM ANDAMENTO</div><div class="rowx">${gauge()}${huge('talk')}</div><div class="sub">Quando o ponteiro chegar a <b>88 mph</b>, a viagem termina e a próxima dupla aparece no celular.</div>`];
-    if (c.phase === 'roundEnd') return ['roundEnd', `<div class="title">88 MPH!</div><div class="sub">${r >= c.totalRounds ? 'Fim das viagens. A avaliação já vai aparecer no celular.' : 'Tempo esgotado. Agradeça à sua dupla: a próxima rota está chegando.'}</div>${t && t.kind === 'break' ? huge('break', 'amber') : ''}`];
-    if (c.phase === 'ranking') return ['ranking', `<div class="kicker">AVALIAÇÃO</div><div class="title cy">AVALIE NO CELULAR</div><div class="sub">Coloque suas três conversas em ordem: <b>1º, 2º e 3º</b>. Pense em quem você gostaria de continuar conhecendo.</div><div class="count"><span id="rankDone">${c.rankingDone}</span><small> / ${c.rankingTotal} avaliaram</small></div><div class="bar"><i id="rankBar" style="width:${Math.round(100 * c.rankingDone / Math.max(1, c.rankingTotal))}%"></i></div>${t && t.kind === 'ranking' ? huge('ranking', 'green') : ''}`];
-    if (c.phase === 'results') return ['results', `<div class="kicker">CONEXÕES CALCULADAS</div><div class="title">OLHE O CELULAR</div><div class="sub">Cada viajante recebeu a pessoa com quem deve continuar o papo. <b>${c.mutualCount}</b> conexões mútuas na sala.</div>${c.mutualPairs && c.mutualPairs.length ? `<div class="mutual">${c.mutualPairs.map(p => `<span>${esc(p[0].split(' ')[0])} ⚡ ${esc(p[1].split(' ')[0])}</span>`).join('')}</div>` : ''}`];
+    if (c.phase === 'idle' || c.phase === 'ready') return ['prep', `<div class="kicker">BLOCO CONEXÕES</div><div class="title">ROTAS TEMPORAIS</div>${flux()}`];
+    if (c.phase === 'matching') return ['matching', `<div class="kicker">VIAGEM ${r}/3 · ${esc(era.label)} · ${esc(era.year)}</div><div class="title">ENCONTRE SUA DUPLA</div>${t && t.kind === 'matching' ? huge('matching', 'amber') : ''}<div class="sub">Encontre quem tem a mesma placa no celular.</div>`];
+    if (c.phase === 'talk') return ['talk', `<div class="kicker">VIAGEM ${r}/3 · ${esc(era.label)} · ${esc(era.year)}</div><div class="rowx">${gauge()}${huge('talk')}</div>`];
+    if (c.phase === 'roundEnd') return ['roundEnd', `<div class="title">88 MPH!</div>${t && t.kind === 'break' ? huge('break', 'amber') : ''}`];
+    if (c.phase === 'ranking') return ['ranking', `<div class="kicker">AVALIAÇÃO</div><div class="title cy">AVALIE NO CELULAR</div><div class="count"><span id="rankDone">${c.rankingDone}</span><small> / ${c.rankingTotal} avaliaram</small></div><div class="bar"><i id="rankBar" style="width:${Math.round(100 * c.rankingDone / Math.max(1, c.rankingTotal))}%"></i></div>${t && t.kind === 'ranking' ? huge('ranking', 'green') : ''}`];
+    if (c.phase === 'results') return ['results', `<div class="kicker">CONEXÕES CALCULADAS</div><div class="title">OLHE O CELULAR</div><div class="sub"><b>${c.mutualCount}</b> conexões mútuas</div>${c.mutualPairs && c.mutualPairs.length ? `<div class="mutual">${c.mutualPairs.map(p => `<span>${esc(p[0].split(' ')[0])} ⚡ ${esc(p[1].split(' ')[0])}</span>`).join('')}</div>` : ''}`];
     return ['clock', sceneClock()];
   }
   function sceneClock() {
     const c = S.state.conn, r = c.round || 0;
     const dest = r ? roundEra(Math.min(3, r + (c.phase === 'results' ? 0 : 0))).led : 'OUT 26 1985 01:21';
     const last = r > 1 ? roundEra(r - 1).led : '--- -- ---- --:--';
-    return `${circuits(dest, last)}${eras()}`;
+    return `${circuits(dest, last)}`;
   }
   function credits() {
     if (!S.people) { loadPeople().then(render); return ''; }
@@ -154,13 +154,7 @@
   }
   setInterval(tick, 500);
   // letreiro de frases
-  $('#ticker').innerHTML = QUOTES.concat(QUOTES).map(q => `<span>“${esc(q[0])}”<em>${esc(q[1])}</em></span>`).join('');
-  $('#ticker').style.setProperty('--speed', `${QUOTES.length * 11}s`);
-  setInterval(() => {
-    S.eraIdx = (S.eraIdx + 1) % ERAS_FILM.length; S.quoteIdx++;
-    const er = $('#eras'); if (er) [...er.children].forEach((el, i) => el.classList.toggle('on', i === S.eraIdx));
-    const qb = $('#quote'); if (qb) { const q = QUOTES[S.quoteIdx % QUOTES.length]; qb.innerHTML = `“${esc(q[0])}”<small>${esc(q[1])}</small>`; }
-  }, 11000);
+
   setInterval(() => { if (Math.random() < .35) drive(); }, 40000);
   setInterval(() => { if (Math.random() < .2) flash(); }, 9000);
   connect();

@@ -15,31 +15,6 @@
   // escapa o texto e depois transforma URLs em links (o href nasce do texto já escapado)
   const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
 
-  // Frases e referências dos três filmes (trilogia 1985 · 1989 · 1990)
-  const QUOTES = [
-    ['Para onde vamos, não precisamos de estradas.', 'Doc Brown · 1985'],
-    ['Great Scott!', 'Doc Brown · em todos os filmes'],
-    ['Isso é pesado, Doc.', 'Marty McFly · 1985'],
-    ['1,21 gigawatts!', 'Doc Brown · 1985'],
-    ['Se você vai construir uma máquina do tempo num carro, por que não fazer isso com estilo?', 'Doc Brown · 1985'],
-    ['O futuro ainda não está escrito. Ele é o que você fizer dele.', 'Doc Brown · 1990'],
-    ['Ninguém me chama de covarde.', 'Marty McFly · 1989'],
-    ['Hill Valley: um bom lugar para viver.', 'placa da cidade · 1955'],
-    ['Salve a torre do relógio!', 'panfleto · 1985'],
-    ['Hoverboards não funcionam na água!', 'Hill Valley · 2015'],
-    ['Tubarão 19: desta vez é realmente pessoal.', 'cinema de Hill Valley · 2015'],
-    ['O que é um gigawatt?', 'Marty McFly · 1985'],
-    ['Nós precisamos voltar... de volta para o futuro!', 'Doc Brown · 1985'],
-    ['Você não está pensando em quatro dimensões!', 'Doc Brown · 1990'],
-    ['Tênis que amarram sozinhos. Casacos que se secam. 2015.', 'Hill Valley · 2015'],
-    ['Baile do Encantamento Submarino, 12 de novembro de 1955.', 'Hill Valley High · 1955'],
-    ['Capacitor de fluxo... fluxando.', 'Doc Brown · 1985'],
-    ['Quando essa belezinha chega a 88 milhas por hora, você vai ver algo sério.', 'Doc Brown · 1985'],
-    ['Só um raio pode gerar 1,21 gigawatts.', 'Doc Brown · 1955'],
-    ['Clara, você é a mulher mais incrível que já conheci.', 'Doc Brown · 1885'],
-  ];
-  const quote = seed => { const q = QUOTES[Math.abs(seed || Math.floor(Date.now() / 60000)) % QUOTES.length]; return `<div class="quote">“${esc(q[0])}”<small>${esc(q[1])}</small></div>`; };
-
   const S = {
     token: localStorage.getItem('bttf.token') || null,
     screen: localStorage.getItem('bttf.token') ? 'app' : 'splash',
@@ -184,10 +159,8 @@
   const logo = (sm = false) => `<div class="logo ${sm ? 'sm' : ''}"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div>${sm ? '' : '<div class="l3">TOWNHALL · 1985</div>'}</div>`;
 
   function vSplash() {
-    return `${osd('PLAY')}<div class="spacer"></div>${logo()}
-      <div class="wait"><div class="flux"><i></i><i></i><i></i><b></b></div></div>
-      <p class="muted center">Três viagens no tempo, três conversas com gente nova.<br>Seu celular é o capacitor de fluxo.</p>
-      ${quote()}
+    return `<div class="spacer"></div>${logo()}
+      <p class="muted center" style="margin-top:18px">Três viagens no tempo, três conversas.</p>
       <div class="spacer"></div>
       <button class="btn" data-action="start">⚡ Embarcar na DeLorean</button>`;
   }
@@ -196,16 +169,16 @@
     const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const free = S.people.filter(p => !p.checkedIn), taken = S.people.filter(p => p.checkedIn);
     const list = (S.showTaken ? taken : free).filter(p => !q || norm(p.name).includes(q));
-    const items = list.map(p => `<button class="pitem" data-action="pick" data-id="${p.id}">${av(p)}<div><div class="n">${esc(p.name)}</div>${p.checkedIn ? '<div class="m">já escolhido em outro celular · toque se for você</div>' : ''}</div>${p.checkedIn ? '<span class="in">A BORDO</span>' : ''}</button>`).join('');
+    const items = list.map(p => `<button class="pitem" data-action="pick" data-id="${p.id}">${av(p)}<div><div class="n">${esc(p.name)}</div>${p.checkedIn ? '<div class="m">já escolhido · toque se for você</div>' : ''}</div>${p.checkedIn ? '<span class="in">A BORDO</span>' : ''}</button>`).join('');
     const empty = `<p class="muted center" style="padding:20px">${S.showTaken ? 'Ninguém com esse nome embarcou ainda.' : 'Nenhum nome encontrado. Procure o apresentador para ser incluído.'}</p>`;
     const foot = S.showTaken
-      ? `<button class="linkbtn" data-action="showFree">← voltar para os nomes disponíveis</button>`
-      : `<p class="small center" style="padding-top:8px">${taken.length} já embarcaram · ${free.length} ainda não. <button class="linkbtn" data-action="showTaken">Meu nome não aparece</button></p>`;
+      ? `<button class="linkbtn" data-action="showFree">← voltar</button>`
+      : `<p class="small center" style="padding-top:8px"><button class="linkbtn" data-action="showTaken">Meu nome não aparece</button></p>`;
     return (items || empty) + foot;
   }
   function vIdentify() {
     return `${logo(true)}
-      <div><h2>Quem é você, viajante?</h2><p class="muted">Encontre o seu nome na lista para embarcar. Quem já embarcou some da lista.</p></div>
+      <h2>Quem é você?</h2>
       <input class="input" id="q" placeholder="Digite seu nome…" autocomplete="off" autocapitalize="off">
       <div class="plist" id="plist">${vPeopleList()}</div>
       <div class="spacer"></div>
@@ -215,10 +188,9 @@
     const p = S.pick;
     return `${logo(true)}
       <div class="panel glow match">
-        <div class="kicker">Registro do viajante</div>
         <div class="who" style="display:flex;justify-content:center;margin:14px 0 8px">${av(p, 'xl')}</div>
         <div class="pname">${esc(p.name)}</div>
-        ${p.checkedIn ? '<p class="small" style="margin-top:12px;color:var(--amber)">Esse nome já embarcou em outro celular. Se é você mesmo, pode entrar: este aparelho passa a ser o seu.</p>' : '<p class="small" style="margin-top:12px">Se escolher errado, dá para voltar e trocar na tela seguinte.</p>'}
+        ${p.checkedIn ? '<p class="small" style="margin-top:12px;color:var(--amber)">Nome já escolhido em outro celular. Se é você, pode entrar.</p>' : ''}
       </div>
       <button class="btn" data-action="checkin">⚡ Sou eu, embarcar</button>
       <button class="btn ghost" data-action="unpick">Não sou eu</button>`;
@@ -227,27 +199,23 @@
 
   function vHeader() {
     const me = S.me.person;
-    return `<div class="trip">${logo(true)}<div style="text-align:right"><div class="small">a bordo como</div><div style="font-weight:800;font-size:13px">${esc(first(me.name))}</div></div></div>`;
+    return `<div class="trip">${logo(true)}<div class="small">${esc(first(me.name))}</div></div>`;
   }
   function vWelcome() {
     const st = S.state, me = S.me.person, pct = Math.round(100 * st.counts.checkedIn / Math.max(1, st.counts.total));
     return `${vHeader()}
       <div class="panel glow match">
-        <div class="kicker">Check-in confirmado</div>
         <div class="polaroids"><div class="polaroid"><div class="photo">${av(me)}</div><div class="cap">${esc(first(me.name))} · Hill Valley</div></div></div>
-        <div class="pname">Bem-vindo(a) a bordo, ${esc(first(me.name))}!</div>
+        <div class="pname">Bem-vindo(a), ${esc(first(me.name))}!</div>
         <p class="muted" style="margin-top:12px">${esc(st.event.welcomeText)}</p>
       </div>
       <div class="panel center">
-        <div class="kicker">Viajantes a bordo</div>
+        <div class="kicker">A bordo</div>
         <div class="big"><span id="count">${st.counts.checkedIn}</span><span style="font-size:18px;color:var(--muted)"> / ${st.counts.total}</span></div>
         <div class="bar"><i id="countBar" style="width:${pct}%"></i></div>
-        <p class="small" style="margin-top:10px">Fique com o app aberto: as próximas etapas aparecem aqui sozinhas.</p>
       </div>
-      ${st.event.agenda && st.event.agenda.length ? `<div class="panel"><div class="kicker">Roteiro da viagem</div><ul class="agenda">${st.event.agenda.map(a => `<li><span class="t">${esc(a.time || '•')}</span><span class="x">${esc(a.title)}</span></li>`).join('')}</ul></div>` : ''}
-      ${quote()}
       <div class="spacer"></div>
-      <button class="btn ghost" data-action="checkout">Não sou ${esc(first(me.name))} · voltar e escolher outro nome</button>`;
+      <button class="linkbtn" data-action="checkout">Não sou ${esc(first(me.name))} · trocar</button>`;
   }
   function vMessage() {
     const m = S.state.message;
@@ -257,27 +225,18 @@
     const r = S.me.result;
     return `${vHeader()}
       <div class="panel glow msgbox"><div class="e">🕰️</div><h2>Fim da viagem</h2><p>${esc(S.state.event.closingText)}</p></div>
-      ${r && r.match ? `<div class="panel center"><div class="kicker">Sua conexão do futuro</div><div class="polaroids"><div class="polaroid"><div class="photo">${av(r.match)}</div><div class="cap">${esc(first(r.match.name))} · Hill Valley</div></div></div><div class="pname" style="font-size:18px">${esc(r.match.name)}</div></div>` : ''}
-      ${quote(1)}`;
+      ${r && r.match ? `<div class="panel center"><div class="kicker">Sua conexão</div><div class="polaroids"><div class="polaroid"><div class="photo">${av(r.match)}</div><div class="cap">${esc(first(r.match.name))}</div></div></div><div class="pname" style="font-size:18px">${esc(r.match.name)}</div></div>` : ''}`;
   }
   function vStandby() {
     const me = S.me.person;
-    return `${osd('PAUSE')}<div class="spacer"></div>
+    return `<div class="spacer"></div>
       <div class="logo sm dim"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div></div>
-      <div class="circuits off">
-        <div class="tc r"><label>DESTINO</label><div class="led">--- -- ---- --:--</div></div>
-        <div class="tc g"><label>PRESENTE</label><div class="led">--- -- ---- --:--</div></div>
-        <div class="tc a"><label>ÚLTIMA PARTIDA</label><div class="led">--- -- ---- --:--</div></div>
-      </div>
       <div class="standby">
         <div class="power">📺</div>
         <div class="st-title">OLHOS NO TELÃO</div>
-        <p class="muted">${esc(S.state.event.standbyText || 'Neste momento você não precisa do celular.')}</p>
-        <div class="st-line">AGUARDANDO O PRÓXIMO BLOCO<span class="blink">_</span></div>
+        <p class="muted">${esc(S.state.event.standbyText || 'Agora você não precisa do celular.')}</p>
       </div>
-      <div class="spacer"></div>
-      ${quote()}
-      <p class="small center">a bordo como ${esc(me.name)}</p>`;
+      <div class="spacer"></div>`;
   }
 
   function circuits(round) {
@@ -297,11 +256,10 @@
     const ps = g.partners, era = roundEra(round);
     const hints = ps.flatMap(p => (p.hints || []).slice(0, 3).map(h => ({ ...h, who: first(p.name) })));
     return `<div class="panel glow match">
-      <div class="kicker">${ps.length > 1 ? 'Seu trio nesta viagem' : 'Sua dupla nesta viagem'}</div>
       <div class="plate"><div class="st"><span>HILL VALLEY</span><span>${esc(era.year)}</span></div><div class="num">${esc(g.code)}</div><div class="sub">OUTATIME · ROTA ${esc(g.code)}</div></div>
       <div class="polaroids">${ps.map(p => `<div class="polaroid"><div class="photo">${av(p)}</div><div class="cap">${esc(first(p.name))} · ${esc(era.year)}</div></div>`).join('')}</div>
       ${ps.map(p => `<div class="pname">${esc(p.name)}</div>`).join('<div style="height:6px"></div>')}
-      ${hints.length ? `<div class="hints"><div class="kicker">Para puxar assunto</div>${hints.map(h => `<div class="h"><b>${esc(h.who)} · ${esc(h.q)}</b>${esc(h.a)}</div>`).join('')}</div>` : ''}
+      ${hints.length ? `<div class="hints">${hints.map(h => `<div class="h"><b>${esc(h.who)} · ${esc(h.q)}</b>${esc(h.a)}</div>`).join('')}</div>` : ''}
     </div>`;
   }
   function gauge() {
@@ -360,44 +318,41 @@
     const c = S.state.conn, g = S.me.group, r = c.round, t = c.timer;
     const head = vHeader();
     if (c.phase === 'idle' || c.phase === 'ready') {
-      return `${head}${circuits(1)}
+      return `${head}
         <div class="panel"><div class="wait"><div class="flux"><i></i><i></i><i></i><b></b></div>
-          <h2>Calculando rotas temporais</h2>
-          <p class="muted">O Doc está preparando as duplas. Três viagens, três pessoas novas, quatro minutos cada.</p>
-          <div class="small">Viajantes a bordo: <b id="count" style="color:var(--yellow)">${S.state.counts.checkedIn}</b></div>
-        </div></div>${quote()}`;
+          <h2>Preparando as viagens</h2>
+        </div></div>`;
     }
     if (c.phase === 'matching' || c.phase === 'talk' || c.phase === 'roundEnd') {
       if (!g || g.missing) {
-        return `${head}${circuits(r)}${tripBar(r)}
-          <div class="panel glow msgbox"><div class="e">🧭</div><h2>Fora da rota</h2><p>Você não está nas duplas desta viagem (provavelmente entrou depois do cálculo). Procure o Doc, o apresentador, para entrar na próxima rota.</p></div>`;
+        return `${head}${tripBar(r)}
+          <div class="panel glow msgbox"><div class="e">🧭</div><h2>Fora da rota</h2><p>Você entrou depois do sorteio. Fale com o apresentador.</p></div>`;
       }
       if (c.phase === 'matching') {
-        return `${head}${circuits(r)}${tripBar(r)}${partnerCard(g, r)}
+        return `${head}${tripBar(r)}${partnerCard(g, r)}
           <div class="panel cyan center">
-            ${t && t.kind === 'matching' ? countdown('matching', 'a conversa começa em') : '<div class="sync"><i></i> aguardando o Doc iniciar a conversa</div>'}
-            <p class="muted" style="margin-top:12px">Encontre ${esc(g.partners.map(p => first(p.name)).join(' e '))} na sala: mostrem a placa <b style="color:var(--txt)">${esc(g.code)}</b>. As perguntas vão aparecer aqui, iguais nos dois celulares. Vocês têm ${human(S.state.settings.roundSeconds)}.</p>
+            ${t && t.kind === 'matching' ? countdown('matching', 'a conversa começa em') : '<div class="sync"><i></i> aguardando</div>'}
+            <p class="muted" style="margin-top:12px">Encontre ${esc(g.partners.map(p => first(p.name)).join(' e '))} pela placa <b style="color:var(--txt)">${esc(g.code)}</b>.</p>
           </div>`;
       }
       if (c.phase === 'talk') {
         const ps = g.partners.map(p => first(p.name)).join(' e ');
-        return `${head}${circuits(r)}${tripBar(r)}
+        return `${head}${tripBar(r)}
           <div class="panel center">
             ${gauge()}
-            <div class="kicker" style="margin-top:14px">Tempo da viagem · com ${esc(ps)}</div>
-            <div class="ptag" id="pauseTag" style="display:none">❚❚ PAUSADO PELO DOC</div>
+            <div class="kicker" style="margin-top:10px">com ${esc(ps)}</div>
+            <div class="ptag" id="pauseTag" style="display:none">❚❚ PAUSADO</div>
           </div>
           <div id="qbox">${questionCard(g, r)}</div>
           <div class="qnav">
             <button class="btn ghost prev" id="qprev" data-action="prev" ${g.position <= 0 ? 'disabled' : ''}>←</button>
             <button class="btn" id="qnext" data-action="next" ${g.position >= g.queue.length - 1 ? 'disabled' : ''}>${g.position >= g.queue.length - 1 ? 'Última pergunta' : 'Próxima →'}</button>
-          </div>
-          <div class="sync"><i></i> sincronizado com o celular de ${esc(ps)}</div>`;
+          </div>`;
       }
       const last = r >= c.totalRounds;
-      return `${head}${circuits(r)}${tripBar(r)}
-        <div class="panel glow msgbox"><div class="e">⚡</div><h2>88 MPH atingidos!</h2><p>Tempo esgotado na viagem ${r}. ${last ? 'Foi a última viagem: a avaliação já vai aparecer.' : 'Agradeça à sua dupla e prepare-se: a próxima rota já vai aparecer.'}</p>
-          ${t && t.kind === 'break' ? `<div style="margin-top:14px">${countdown('break', last ? 'avaliação em' : 'próxima viagem em')}</div>` : '<div class="sync" style="margin-top:12px"><i></i> aguardando o Doc</div>'}
+      return `${head}${tripBar(r)}
+        <div class="panel glow msgbox"><div class="e">⚡</div><h2>88 MPH atingidos!</h2>
+          ${t && t.kind === 'break' ? `<div style="margin-top:14px">${countdown('break', last ? 'avaliação em' : 'próxima viagem em')}</div>` : '<div class="sync" style="margin-top:12px"><i></i> aguardando</div>'}
         </div>`;
     }
     if (c.phase === 'ranking') return vRanking();
@@ -411,24 +366,23 @@
     if (sent) {
       const order = convs.slice().sort((a, b) => me.ranking[a.round] - me.ranking[b.round]);
       return `${vHeader()}
-        <div class="panel glow msgbox"><div class="e">📡</div><h2>Avaliação enviada!</h2><p>Aguardando as conexões. <span id="rankProgress">${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} viajantes já avaliaram</span>.</p>
-          ${t && t.kind === 'ranking' ? `<div style="margin-top:14px">${countdown('ranking', 'resultado em no máximo')}</div>` : ''}</div>
-        <div class="panel"><div class="kicker">Sua ordem</div>${order.map(cv => `<div class="ritem">${av(cv.partners[0] || me.person)}<div class="grow"><div class="nm">${me.ranking[cv.round]}º · ${esc(cv.partners.map(p => p.name).join(' & '))}</div><div class="small">Viagem ${cv.round} · ${esc(cv.era.label)} ${esc(cv.era.year)}</div></div></div>`).join('')}</div>
+        <div class="panel glow msgbox"><div class="e">📡</div><h2>Avaliação enviada!</h2><p class="small" id="rankProgress">${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} já avaliaram</p>
+          ${t && t.kind === 'ranking' ? `<div style="margin-top:14px">${countdown('ranking', 'resultado em')}</div>` : ''}</div>
+        <div class="panel">${order.map(cv => `<div class="ritem">${av(cv.partners[0] || me.person)}<div class="grow"><div class="nm">${me.ranking[cv.round]}º · ${esc(cv.partners.map(p => p.name).join(' & '))}</div></div></div>`).join('')}</div>
         <button class="btn ghost" data-action="edit">Alterar ordem</button>`;
     }
     const pos = round => { const i = S.draft.indexOf(round); return i < 0 ? null : i + 1; };
     const done = S.draft.length === convs.length;
     return `${vHeader()}
-      <div><h2>Avalie suas viagens</h2><p class="muted">Toque nas conversas <b style="color:var(--txt)">na ordem da sua preferência</b>: primeiro a melhor, depois a segunda e por último a terceira. Pense em quem você gostaria de continuar conhecendo.</p></div>
+      <div><h2>Avalie as conversas</h2><p class="muted">Toque na ordem: primeiro a melhor.</p></div>
       ${t && t.kind === 'ranking' ? countdown('ranking', 'a avaliação fecha em') : ''}
       ${convs.map(cv => { const p = pos(cv.round); return `<button class="rank ${p ? 'on' : ''}" data-action="rank" data-round="${cv.round}"><div class="pos">${p ? p + 'º' : '—'}</div>${av(cv.partners[0] || me.person)}<div><div class="nm">${esc(cv.partners.map(x => x.name).join(' & '))}</div><div class="th">Viagem ${cv.round} · ${esc(cv.era.label)} ${esc(cv.era.year)}</div></div></button>`; }).join('')}
       <div class="row"><button class="btn ghost" data-action="clear">Refazer</button><button class="btn" data-action="submit" ${done ? '' : 'disabled'}>Enviar ⚡</button></div>
-      <p class="small center" id="rankProgress">${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} viajantes já avaliaram</p>`;
+      <p class="small center" id="rankProgress">${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} já avaliaram</p>`;
   }
   function vResults() {
     const r = S.me.result;
-    if (!r || !r.match) return `${vHeader()}<div class="panel glow msgbox"><div class="e">🛸</div><h2>Sem conexão calculada</h2><p>Não encontramos conversas suas nas rodadas. Fale com o Doc.</p></div>`;
-    const bolts = n => '⚡'.repeat(Math.max(0, n)) || '·';
+    if (!r || !r.match) return `${vHeader()}<div class="panel glow msgbox"><div class="e">🛸</div><h2>Sem conexão</h2><p>Fale com o apresentador.</p></div>`;
     const top = r.detail[0];
     const era = top ? roundEra(top.round) : null;
     return `${vHeader()}
@@ -437,13 +391,8 @@
         <div class="polaroids"><div class="polaroid"><div class="photo">${av(r.match)}</div><div class="cap">${esc(first(r.match.name))} · ${era ? esc(era.year) : 'Hill Valley'}</div></div></div>
         <div class="pname">${esc(r.match.name)}</div>
         ${r.mutual ? '<div class="mutual">⚡ CONEXÃO MÚTUA</div>' : ''}
-        <div class="score">${r.score} pts</div>
-        <div class="small">você ${bolts(top ? top.mine : 0)} · ${esc(first(r.match.name))} ${bolts(top ? top.theirs : 0)}</div>
-        <p class="muted" style="margin-top:12px">Próximo passo: marque um café de 15 minutos com ${esc(first(r.match.name))} na próxima semana para continuar o papo${era ? ` que começou em ${esc(era.year)}` : ''}. ☕</p>
-      </div>
-      <div class="panel"><div class="kicker">Todas as suas viagens</div><div class="rlist">${r.detail.map((d, i) => `<div class="ritem">${av(d.partner)}<div class="grow"><div class="nm">${i + 1}. ${esc(d.partner.name)}</div><div class="small">Viagem ${d.round} · ${esc(roundEra(d.round).label)} · você ${bolts(d.mine)} · ${esc(first(d.partner.name))} ${bolts(d.theirs)}</div></div><div class="pts">${d.score}</div></div>`).join('')}</div></div>
-      <p class="small center">1º lugar vale 3 pontos, 2º vale 2 e 3º vale 1. A pontuação soma os dois lados da conversa.</p>
-      ${quote(5)}`;
+        <p class="muted" style="margin-top:14px">Marque um café com ${esc(first(r.match.name))}. ☕</p>
+      </div>`;
   }
 
   /* ---------------- timer ---------------- */

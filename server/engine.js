@@ -19,9 +19,9 @@ const DEFAULT_SETTINGS = {
   autoFlow: true,         // viagens e avaliação avançam sozinhas
   showMutualOnScreen: false,
   showFormHints: true,
-  welcomeText: 'Prepare-se: hoje vamos viajar no tempo e conhecer gente de outras áreas.',
+  welcomeText: 'Aguarde: a viagem começa em breve.',
   closingText: 'Obrigado por viajar com a gente. Marque aquele café com a sua conexão!',
-  standbyText: 'O próximo bloco começa em instantes. Pode deixar o celular de lado: quando o Doc ligar os circuitos, a tela acende sozinha.',
+  standbyText: 'Agora você não precisa do celular.',
   agenda: [
     { time: '', title: 'Boas-vindas e check-in' },
     { time: '', title: 'Conexões · 3 viagens no tempo' },

@@ -156,12 +156,12 @@
     const screenUrl = `${location.origin}/telao.html`;
     const scene = (s.screen && s.screen.scene) || 'auto';
     const telao = `<div class="card"><h2>📽 Telão</h2>
-      <p class="small">Abra em outra janela e projete: <a href="${esc(screenUrl)}" target="_blank">${esc(screenUrl)}</a>. No modo automático ele segue o bloco (QR do check-in, cronômetros, avaliação, resultados). Os outros modos servem de fundo enquanto você fala ou mostra o PPT.</p>
-      <div class="actions" style="margin-top:10px">${[['auto', '🔁 Automático'], ['clock', '🕰 Circuitos de tempo (relógio)'], ['logo', '⚡ Logo'], ['quote', '💬 Frases dos filmes']].map(([k, l]) => `<button class="btn sm ${scene === k ? '' : 'ghost'}" data-act="setScene" data-scene="${k}">${l}</button>`).join('')}</div>
+      <p class="small"><a href="${esc(screenUrl)}" target="_blank">${esc(screenUrl)}</a> · automático segue o bloco; relógio e logo servem de fundo.</p>
+      <div class="actions" style="margin-top:10px">${[['auto', '🔁 Automático'], ['clock', '🕰 Relógio'], ['logo', '⚡ Logo']].map(([k, l]) => `<button class="btn sm ${scene === k ? '' : 'ghost'}" data-act="setScene" data-scene="${k}">${l}</button>`).join('')}</div>
       <label class="sw" style="margin-top:10px"><input type="checkbox" data-act="toggleMutual" ${S.showMutualOnScreen ? 'checked' : ''}> Mostrar os nomes das conexões mútuas no telão (só primeiros nomes)</label></div>`;
 
     return `
-      <div class="card"><h2>Blocos do townhall</h2><p class="small" style="margin-bottom:12px">Cada bloco é uma tela dos celulares. Clique em "Exibir" para trocar na hora. O bloco Conexões tem a dinâmica das três viagens.</p>
+      <div class="card"><h2>Blocos do townhall</h2>
         ${blockCard('welcome', welcome)}
         ${blockCard('standby', standby)}
         ${blockCard('message', message)}
