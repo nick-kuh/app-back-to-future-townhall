@@ -5,16 +5,17 @@
   const ini = n => String(n || '?').trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const pad = n => String(n).padStart(2, '0');
   const fmt = s => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
-  const PALETTE = ['#ff7a1a', '#ff2d95', '#35d6ff', '#3dff7a', '#ffd000', '#b980ff', '#ff5c5c', '#5cffd6', '#ffa94d', '#7fb2ff', '#f58cff', '#a8ff5c'];
-  const FIXED = { Consumer: '#ffd000', 'Customer Development': '#3dff7a', 'Focus Market': '#ff2d95', Strategy: '#35d6ff', 'Make (Business Ops)': '#ff7a1a', 'Tax Reform': '#b980ff', Cybersecurity: '#5cffd6', Architecture: '#ffa94d', Diretora: '#ff5c5c' };
+  const PALETTE = ['#ff6a00', '#ff2d95', '#2ee6d6', '#39ff6a', '#ffd21f', '#b980ff', '#ff5c5c', '#5cffd6', '#ffa94d', '#7fb2ff', '#f58cff', '#a8ff5c'];
+  const FIXED = { Consumer: '#ffd21f', 'Customer Development': '#39ff6a', 'Focus Market': '#ff2d95', Strategy: '#2ee6d6', 'Make (Business Ops)': '#ff6a00', 'Tax Reform': '#b980ff', Cybersecurity: '#5cffd6', Architecture: '#ffa94d', Diretora: '#ff5c5c' };
   const color = area => FIXED[area] || PALETTE[[...String(area || '')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
   const av = p => `<span class="av" style="--c:${color(p.area)}">${esc(ini(p.name))}</span>`;
   const WLS = ['Estag', 'WL1', 'WL2', 'WL3'];
-  const PHASE_LABEL = { idle: 'sem duplas', ready: 'duplas prontas', matching: 'duplas reveladas', talk: 'conversa em andamento', roundEnd: 'fim da rodada', ranking: 'avaliação aberta', results: 'resultados publicados' };
-  const BLOCK_LABEL = { standby: 'Espera (off)', welcome: 'Boas-vindas', message: 'Mensagem', connections: 'Conexões', closing: 'Encerramento' };
-  const BLOCK_ICON = { standby: '⏻', welcome: '🚪', message: '📣', connections: '⚡', closing: '🏁' };
+  const PHASE_LABEL = { idle: 'sem duplas', ready: 'duplas prontas', matching: 'duplas se encontrando', talk: 'conversa em andamento', roundEnd: '88 MPH (intervalo)', ranking: 'avaliação aberta', results: 'resultados publicados' };
+  const TIMER_LABEL = { matching: 'encontro', talk: 'conversa', break: 'intervalo', ranking: 'avaliação' };
+  const BLOCK_LABEL = { standby: 'Olhos no telão', welcome: 'Check-in', message: 'Mensagem', connections: 'Conexões', closing: 'Encerramento' };
+  const BLOCK_ICON = { standby: '📺', welcome: '🚪', message: '📣', connections: '⚡', closing: '🏁' };
 
-  const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'control', round: 1, offset: 0, socket: null, peopleQ: '', connected: false };
+  const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'control', round: 1, offset: 0, socket: null, peopleQ: '', connected: false, lastHtml: '', pressing: false };
 
   function toast(msg, err) {
     const t = $('#toast'); t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 3500);
@@ -42,7 +43,7 @@
   });
   function connect() {
     if (A.socket) { A.socket.emit('admin:hello', { key: A.key }, onHello); return; }
-    A.socket = io({ transports: ['websocket', 'polling'] });
+    A.socket = io({ transports: ['websocket', 'polling'], tryAllTransports: true });
     A.socket.on('connect', () => A.socket.emit('admin:hello', { key: A.key }, onHello));
     A.socket.on('disconnect', () => { A.connected = false; renderStatus(); });
     A.socket.on('admin:overview', o => { A.O = o; A.offset = o.now - Date.now(); render(); });
@@ -70,97 +71,113 @@
     window.scrollTo(0, y);
     if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); if (caret !== null && el.setSelectionRange) el.setSelectionRange(caret, caret); } }
   }
+  function timerLeft(t) { return t ? (t.paused ? t.remaining : Math.max(0, Math.round((t.endsAt - (Date.now() + A.offset)) / 1000))) : null; }
   function renderStatus() {
     const O = A.O; if (!O) return;
-    const c = O.state.conn;
-    const t = c.talk;
-    const left = t ? (t.paused ? t.remaining : Math.max(0, Math.round((t.endsAt - (Date.now() + A.offset)) / 1000))) : null;
+    const c = O.state.conn, t = c.timer, left = timerLeft(t);
     $('#status').innerHTML = `
       <span class="pill ${A.connected ? 'on' : 'off'}">${A.connected ? '● conectado' : '○ desconectado'}</span>
-      <span class="pill hot">Bloco: ${BLOCK_LABEL[O.state.block]}</span>
+      <span class="pill hot">Celulares: ${BLOCK_LABEL[O.state.block]}</span>
       <span class="pill">Conexões: ${PHASE_LABEL[c.phase] || c.phase}${c.round ? ` · viagem ${c.round}/3` : ''}</span>
-      ${t ? `<span class="pill led ${t.paused ? 'paused' : ''}">${fmt(left)}${t.paused ? ' ⏸' : ''}</span>` : ''}
+      ${t ? `<span class="pill led ${t.paused ? 'paused' : ''}">${TIMER_LABEL[t.kind] || t.kind} ${fmt(left)}${t.paused ? ' ⏸' : ''}</span>` : ''}
       <span class="pill">A bordo: ${O.counts.checkedIn}/${O.counts.total}</span>`;
   }
   setInterval(renderStatus, 500);
 
+  function blockCard(key, body, extra = '') {
+    const on = A.O.state.block === key;
+    return `<div class="block ${on ? 'active' : ''}" id="blk-${key}">
+      <div class="bh"><span class="bi">${BLOCK_ICON[key]}</span><div class="bt">${BLOCK_LABEL[key]}<div class="small">${on ? '● na tela dos celulares agora' : 'pronto para exibir'}</div></div>
+        ${extra}<button class="btn sm ${on ? 'ghost' : 'cyan'}" data-act="setBlock" data-block="${key}" ${on ? 'disabled' : ''}>${on ? 'Exibindo' : '▶ Exibir nos celulares'}</button></div>
+      <div class="bb">${body}</div></div>`;
+  }
   function vControl() {
-    const O = A.O, s = O.state, c = s.conn, ph = c.phase;
-    const canGenerate = ['idle', 'ready'].includes(ph);
-    const nextRound = ph === 'ready' ? 1 : ph === 'roundEnd' ? c.round + 1 : null;
-    const lastDone = ph === 'roundEnd' && c.round >= 3;
+    const O = A.O, s = O.state, c = s.conn, ph = c.phase, t = c.timer, S = O.settings;
     const late = O.people.filter(p => p.late);
     const notRanked = O.people.filter(p => p.active && p.checkedInAt && p.inRounds && !p.ranked);
     const round = O.rounds[A.round - 1];
     const regenFrom = ph === 'matching' ? c.round : c.round + 1;
     const levelTxt = { strict: 'área ≠ e WL ≠ em todas as duplas', wl: 'precisou liberar WL igual em algumas duplas', area: 'precisou liberar área igual em algumas duplas', all: 'sem restrição em algumas duplas' };
+    const ranked = O.people.filter(p => p.ranked).length, rankTotal = O.people.filter(p => p.inRounds && p.active && p.checkedInAt).length;
+    const inProgress = ['matching', 'talk', 'roundEnd', 'ranking'].includes(ph);
+
+    const welcome = `<div class="small">Os viajantes escolhem o próprio nome na lista; quem já escolheu some da lista. Quem errou tem o botão "voltar e escolher outro nome".</div>
+      <div class="stats" style="margin-top:10px"><div class="stat"><b>${O.counts.checkedIn}</b><span class="small">a bordo</span></div><div class="stat"><b>${O.counts.total - O.counts.checkedIn}</b><span class="small">ainda não entraram</span></div></div>
+      <div class="bar"><i style="width:${Math.round(100 * O.counts.checkedIn / Math.max(1, O.counts.total))}%"></i></div>
+      <div class="small">No telão: QR code + link para o check-in. Lista de quem falta na aba <a href="#" data-go="people">Pessoas</a>.</div>`;
+    const standby = `<div class="small">Tela "apagada" nos celulares: <i>"${esc(S.standbyText || '')}"</i>. Use quando a atenção deve estar no telão (PPT, fala do Doc). Texto editável na aba <a href="#" data-go="config">Config</a>.</div>`;
+    const message = `<div class="form two">
+        <label class="f">Emoji<input class="input" id="msgEmoji" value="${esc(s.message.emoji)}"></label>
+        <label class="f">Título<input class="input" id="msgTitle" value="${esc(s.message.title)}"></label>
+        <label class="f" style="grid-column:1/-1">Texto (URLs viram links)<textarea class="input" id="msgBody">${esc(s.message.body)}</textarea></label>
+      </div><div class="actions" style="margin-top:8px"><button class="btn ghost sm" data-act="saveMessage">Salvar</button><button class="btn sm" data-act="showMessage">📣 Salvar e exibir nos celulares</button></div>`;
+    const closing = `<div class="small">Agradecimento + lembrete da conexão de cada pessoa. No telão: créditos com o nome de todos. Texto editável na aba <a href="#" data-go="config">Config</a>.</div>`;
+
+    const connections = `
+      <div class="steps">
+        <div class="step ${!c.generatedAt ? 'active' : 'done'}"><div class="n">1</div><div class="b">
+          <div class="t">Duplas (${O.counts.checkedIn} viajantes a bordo)</div>
+          <div class="small">Área diferente, WL diferente, sem repetir dupla; ímpar forma trio.${c.generatedAt ? ` · Geradas às ${new Date(c.generatedAt).toLocaleTimeString('pt-BR')} · ${levelTxt[c.worstLevel] || ''}` : ''}</div>
+          ${c.repeats ? '<div class="warn">⚠ Com menos de 6 viajantes algumas duplas se repetem (modo ensaio).</div>' : ''}
+          ${late.length ? `<div class="warn">⚠ ${late.length} pessoa(s) entraram depois do sorteio e estão fora das rotas: ${esc(late.map(p => p.name).join(', '))}.${regenFrom <= 3 && inProgress ? ' Recalcule as viagens restantes.' : ''}</div>` : ''}
+          <div class="actions">
+            ${!(c.played >= 1) ? `<button class="btn ghost sm" data-act="generate" ${O.counts.checkedIn < 2 ? 'disabled' : ''}>⚡ ${c.generatedAt ? 'Sortear de novo' : 'Sortear duplas'}</button>` : ''}
+            ${c.generatedAt && inProgress && ph !== 'ranking' && regenFrom <= 3 ? `<button class="btn ghost sm" data-act="regenRest">↻ Recalcular ${ph === 'matching' ? `a partir da viagem ${regenFrom}` : `viagens ${regenFrom}–3`}</button>` : ''}
+          </div>
+        </div></div>
+
+        <div class="step ${['ready'].includes(ph) || (ph === 'idle' && O.counts.checkedIn >= 2) ? 'active' : inProgress || ph === 'results' ? 'done' : ''}"><div class="n">2</div><div class="b">
+          <div class="t">Iniciar as viagens</div>
+          <div class="small">${S.autoFlow ? `Automático: ${fmt(S.findSeconds)} para se encontrar → ${fmt(S.roundSeconds)} de conversa → ${S.breakSeconds}s de "88 MPH" → próxima dupla. Depois da 3ª, a avaliação abre sozinha e fecha em ${fmt(S.rankingSeconds)} ou quando todos avaliarem.` : 'Modo manual: você revela cada viagem, inicia e encerra cada conversa pelos botões abaixo.'} <a href="#" data-go="config">Ajustar tempos</a></div>
+          <div class="actions"><button class="btn" data-act="startJourney" ${O.counts.checkedIn >= 2 && !inProgress && ph !== 'results' ? '' : 'disabled'}>▶ Iniciar viagens${c.generatedAt ? '' : ' (sorteia e começa)'}</button></div>
+        </div></div>
+
+        <div class="step ${inProgress ? 'active' : ''}"><div class="n">3</div><div class="b">
+          <div class="t">Ao vivo · ${PHASE_LABEL[ph]}${c.round ? ` · viagem ${c.round}/3` : ''}${t ? ` · ${TIMER_LABEL[t.kind]} <span class="mono" id="liveTimer">${fmt(timerLeft(t))}</span>${t.paused ? ' ⏸' : ''}` : ''}</div>
+          <div class="actions">
+            ${t ? (t.paused ? '<button class="btn cyan sm" data-act="resume">▶ Retomar</button>' : '<button class="btn ghost sm" data-act="pause">⏸ Pausar</button>') : ''}
+            <button class="btn ghost sm" data-act="addTime" ${t ? '' : 'disabled'}>+30s</button>
+            <button class="btn ghost sm" data-act="skip" ${inProgress ? '' : 'disabled'}>⏭ Pular etapa</button>
+            ${ph === 'ranking' ? `<button class="btn sm" data-act="computeResults">🔮 Calcular conexões agora</button>` : ''}
+            ${ph === 'results' ? `<button class="btn ghost sm" data-act="computeResults">🔮 Recalcular e reenviar</button><button class="btn sm" data-act="setBlock" data-block="closing">🏁 Ir para o encerramento</button>` : ''}
+          </div>
+          ${ph === 'ranking' || ph === 'results' ? `<div class="small">${ranked} de ${rankTotal} avaliaram</div><div class="bar"><i style="width:${Math.round(100 * ranked / Math.max(1, rankTotal))}%"></i></div>${notRanked.length ? `<div class="small">Faltam: ${esc(notRanked.map(p => p.name).join(', '))}</div>` : '<div class="ok">✔ Todos avaliaram</div>'}` : ''}
+          <details class="manual"><summary>Controle manual (se precisar interferir)</summary><div class="actions" style="margin-top:8px">
+            <button class="btn ghost sm" data-act="reveal" data-round="${ph === 'ready' ? 1 : c.round + 1}" ${(ph === 'ready' || ph === 'roundEnd') && (ph === 'ready' ? 1 : c.round + 1) <= 3 ? '' : 'disabled'}>👥 Revelar viagem ${ph === 'ready' ? 1 : Math.min(3, c.round + 1)}</button>
+            <button class="btn ghost sm" data-act="startTalk" ${ph === 'matching' ? '' : 'disabled'}>▶ Iniciar conversa</button>
+            <button class="btn ghost sm" data-act="endTalk" ${ph === 'talk' ? '' : 'disabled'}>⏹ Encerrar conversa</button>
+            <button class="btn ghost sm" data-act="openRanking" ${c.played >= 1 && ph !== 'ranking' && ph !== 'results' ? '' : 'disabled'}>📋 Abrir avaliação</button>
+            ${ph === 'matching' ? `<button class="btn ghost sm" data-act="reveal" data-round="${c.round}">↻ Re-revelar viagem ${c.round}</button>` : ''}
+            <button class="btn red sm" data-act="resetConnections">Resetar bloco</button>
+          </div></details>
+        </div></div>
+      </div>`;
+
+    const screenUrl = `${location.origin}/telao.html`;
+    const scene = (s.screen && s.screen.scene) || 'auto';
+    const telao = `<div class="card"><h2>📽 Telão</h2>
+      <p class="small">Abra em outra janela e projete: <a href="${esc(screenUrl)}" target="_blank">${esc(screenUrl)}</a>. No modo automático ele segue o bloco (QR do check-in, cronômetros, avaliação, resultados). Os outros modos servem de fundo enquanto você fala ou mostra o PPT.</p>
+      <div class="actions" style="margin-top:10px">${[['auto', '🔁 Automático'], ['clock', '🕰 Circuitos de tempo (relógio)'], ['logo', '⚡ Logo'], ['quote', '💬 Frases dos filmes']].map(([k, l]) => `<button class="btn sm ${scene === k ? '' : 'ghost'}" data-act="setScene" data-scene="${k}">${l}</button>`).join('')}</div>
+      <label class="sw" style="margin-top:10px"><input type="checkbox" data-act="toggleMutual" ${S.showMutualOnScreen ? 'checked' : ''}> Mostrar os nomes das conexões mútuas no telão (só primeiros nomes)</label></div>`;
+
     return `
-      <div class="card">
-        <h2>Tela dos celulares</h2>
-        <div class="blocks">
-          ${['standby', 'welcome', 'message', 'connections', 'closing'].map(b => `<button class="${s.block === b ? 'on' : ''}" data-block="${b}"><span class="e">${BLOCK_ICON[b]}</span>${BLOCK_LABEL[b]}</button>`).join('')}
-        </div>
-        <p class="small" style="margin-top:8px"><b>Espera (off)</b> apaga a tela dos celulares entre um bloco e outro; ao trocar para qualquer outro bloco, os celulares acendem, vibram e avisam.</p>
-        ${s.block === 'message' ? `<p class="small" style="margin-top:8px">Mensagem atual: <b>${esc(s.message.emoji)} ${esc(s.message.title)}</b> — ${esc(s.message.body)} · <a href="#" data-go="config">editar na aba Config</a></p>` : ''}
+      <div class="card"><h2>Blocos do townhall</h2><p class="small" style="margin-bottom:12px">Cada bloco é uma tela dos celulares. Clique em "Exibir" para trocar na hora. O bloco Conexões tem a dinâmica das três viagens.</p>
+        ${blockCard('welcome', welcome)}
+        ${blockCard('standby', standby)}
+        ${blockCard('message', message)}
+        ${blockCard('connections', connections)}
+        ${blockCard('closing', closing)}
       </div>
-
-      <div class="card hot">
-        <h2>Bloco Conexões · 3 viagens no tempo</h2>
-        <div class="steps">
-          <div class="step ${canGenerate ? 'active' : 'done'}"><div class="n">1</div><div class="b">
-            <div class="t">Gerar duplas com quem está a bordo (${O.counts.checkedIn} viajantes)</div>
-            <div class="small">Regras: área diferente, WL diferente, nunca repetir dupla. Número ímpar forma um trio.${c.generatedAt ? ` · Geradas em ${new Date(c.generatedAt).toLocaleTimeString('pt-BR')} · ${levelTxt[c.worstLevel] || ''}` : ''}</div>
-            ${c.repeats ? '<div class="warn">⚠ Com menos de 6 viajantes não há 3 viagens sem repetir dupla: algumas duplas se repetem (modo ensaio).</div>' : ''}
-            ${late.length ? `<div class="warn">⚠ ${late.length} pessoa(s) fizeram check-in depois do cálculo e estão fora das rotas: ${esc(late.map(p => p.name).join(', '))}. Recalcule as rodadas restantes para incluí-las.</div>` : ''}
-            <div class="actions">
-              ${!(c.played >= 1) ? `<button class="btn" data-act="generate" ${O.counts.checkedIn < 2 ? 'disabled' : ''}>⚡ ${c.generatedAt ? 'Gerar novamente (todas)' : 'Gerar duplas'}</button>` : '<span class="small">Viagens já realizadas não podem ser refeitas. Para recomeçar do zero, use "Resetar bloco de conexões".</span>'}
-              ${c.generatedAt && !canGenerate && ph !== 'ranking' && ph !== 'results' && regenFrom <= 3 ? `<button class="btn ghost" data-act="regenRest">↻ Recalcular ${ph === 'matching' ? `a partir desta viagem (${regenFrom})` : `viagens ${regenFrom}–3`}</button>` : ''}
-            </div>
-          </div></div>
-
-          <div class="step ${['ready', 'matching', 'talk', 'roundEnd'].includes(ph) && !lastDone ? 'active' : (ph === 'ranking' || ph === 'results' || lastDone) ? 'done' : ''}"><div class="n">2</div><div class="b">
-            <div class="t">Viagens (${c.round}/3) · tempo por conversa: ${fmt(O.settings.roundSeconds)}</div>
-            <div class="actions">
-              <button class="btn cyan" data-act="reveal" data-round="${nextRound || ''}" ${nextRound && nextRound <= 3 ? '' : 'disabled'}>👥 Revelar duplas da viagem ${nextRound && nextRound <= 3 ? nextRound : '—'}</button>
-              <button class="btn" data-act="startTalk" ${ph === 'matching' ? '' : 'disabled'}>▶ Iniciar conversa</button>
-              ${ph === 'talk' ? (c.talk.paused ? '<button class="btn ghost" data-act="resume">▶ Retomar</button>' : '<button class="btn ghost" data-act="pause">⏸ Pausar</button>') : ''}
-              <button class="btn ghost" data-act="addTime" ${ph === 'talk' ? '' : 'disabled'}>+30s</button>
-              <button class="btn ghost" data-act="endTalk" ${ph === 'talk' ? '' : 'disabled'}>⏭ Encerrar conversa</button>
-              ${ph === 'matching' ? `<button class="btn ghost" data-act="reveal" data-round="${c.round}">↻ Re-revelar viagem ${c.round}</button>` : ''}
-            </div>
-            <div class="small">${ph === 'matching' ? `As duplas da viagem ${c.round} estão nos celulares. Quando todos se encontrarem, inicie a conversa.` : ph === 'talk' ? 'Conversa em andamento. O timer encerra sozinho e os celulares avisam.' : ph === 'roundEnd' ? (lastDone ? 'Última viagem concluída. Abra a avaliação.' : `Viagem ${c.round} encerrada. Revele as duplas da próxima.`) : ph === 'ready' ? 'Duplas prontas. Revele a viagem 1 quando quiser.' : ''}</div>
-          </div></div>
-
-          <div class="step ${ph === 'ranking' ? 'active' : ph === 'results' ? 'done' : ''}"><div class="n">3</div><div class="b">
-            <div class="t">Avaliação · cada viajante ordena as conversas (1º, 2º, 3º)</div>
-            <div class="actions">
-              <button class="btn cyan" data-act="openRanking" ${c.played >= 1 && ph !== 'ranking' && ph !== 'results' ? '' : 'disabled'}>📋 Abrir avaliação</button>
-            </div>
-            ${ph === 'ranking' || ph === 'results' ? `<div class="small">${O.people.filter(p => p.ranked).length} de ${O.people.filter(p => p.inRounds && p.active && p.checkedInAt).length} avaliaram</div><div class="bar"><i style="width:${Math.round(100 * O.people.filter(p => p.ranked).length / Math.max(1, O.people.filter(p => p.inRounds && p.active && p.checkedInAt).length))}%"></i></div>${notRanked.length ? `<div class="small">Faltam: ${esc(notRanked.map(p => p.name).join(', '))}</div>` : '<div class="ok">✔ Todos avaliaram</div>'}` : ''}
-          </div></div>
-
-          <div class="step ${ph === 'results' ? 'done' : ph === 'ranking' ? 'active' : ''}"><div class="n">4</div><div class="b">
-            <div class="t">Calcular conexões e notificar os celulares</div>
-            <div class="actions">
-              <button class="btn" data-act="computeResults" ${ph === 'ranking' || ph === 'results' ? '' : 'disabled'}>🔮 ${ph === 'results' ? 'Recalcular e reenviar' : 'Calcular conexões'}</button>
-              <button class="btn ghost" data-act="setBlock" data-block="closing" ${ph === 'results' ? '' : 'disabled'}>🏁 Ir para o encerramento</button>
-              <button class="btn ghost" data-act="setBlock" data-block="standby" ${ph === 'results' ? '' : 'disabled'}>⏻ Colocar em espera</button>
-            </div>
-            <div class="small">1º lugar = 3 pts, 2º = 2, 3º = 1. A conexão de cada pessoa é o par com maior soma dos dois lados. Quem não avaliou conta 0.</div>
-          </div></div>
-        </div>
-        <div class="actions" style="margin-top:12px"><button class="btn red sm" data-act="resetConnections">Resetar bloco de conexões</button></div>
-      </div>
-
+      ${telao}
       ${O.results.length ? `<div class="card ok"><h2>Conexões calculadas (${O.results.length})</h2><div class="tblwrap"><table class="tbl"><tr><th>Viajante</th><th>Conexão sugerida</th><th>Pts</th><th>Mútua</th></tr>
         ${O.results.slice().sort((a, b) => (b.mutual - a.mutual) || (b.score - a.score)).map(r => `<tr><td>${av(r.person)}${esc(r.person.name)}</td><td>${r.match ? av(r.match) + esc(r.match.name) : '<span class="x">—</span>'}</td><td class="mono">${r.score}</td><td>${r.mutual ? '<span class="ok">⚡ sim</span>' : '<span class="x">não</span>'}</td></tr>`).join('')}</table></div></div>` : ''}
-
       ${c.generatedAt ? `<div class="card"><h2>Duplas por viagem</h2>
         <div class="subtabs">${O.rounds.map(r => `<button class="${A.round === r.round ? 'on' : ''}" data-roundtab="${r.round}">Viagem ${r.round} · ${esc(r.era.year)} ${r.round === c.round ? '●' : ''}</button>`).join('')}</div>
         ${round && round.groups.length ? `<div class="small" style="margin-bottom:6px">${round.groups.length} grupos · ${round.check.ok}/${round.check.total} pares com área ≠ e WL ≠ · nível: ${esc(levelTxt[round.level] || round.level || '')}</div>
           ${round.groups.map(g => `<div class="grp"><span class="code">${esc(g.code)}</span>${g.members.map((m, i) => `${i ? '<span class="x">⇄</span>' : ''}<span class="m">${av(m)}<b>${esc(m.name)}</b><span class="meta">(${esc(m.area)} · ${esc(m.wl)})</span></span>`).join('')}<span class="${g.flags.area && g.flags.wl ? 'ok' : 'warn'}" style="margin-left:auto">${g.flags.area ? '✔ área' : '! área'} ${g.flags.wl ? '✔ WL' : '! WL'}</span>${round.round === c.round && ph === 'talk' && g.currentQuestion ? `<div class="q">pergunta ${g.position + 1}/${g.queueLen}: ${esc(g.currentQuestion)}</div>` : ''}</div>`).join('')}` : '<p class="muted">Rodada ainda não gerada.</p>'}
       </div>` : ''}`;
   }
+  setInterval(() => { const el = $('#liveTimer'); const t = A.O && A.O.state.conn.timer; if (el && t) el.textContent = fmt(timerLeft(t)); }, 500);
 
   function vPeople() {
     const O = A.O, q = A.peopleQ.trim().toLowerCase();
@@ -183,6 +200,7 @@
             <button class="btn sm ghost" data-act="exportCsv">⬇ Exportar CSV</button>
           </div>
         </div>
+        <p class="small" style="margin-top:6px">Área e WL ficam só aqui no painel (para o sorteio): os viajantes não veem esses dados uns dos outros.</p>
         <input class="input search" id="peopleQ" placeholder="Buscar nome, área, WL…" value="${esc(A.peopleQ)}" style="margin:10px 0">
         <div class="tblwrap"><table class="tbl">
           <tr><th>Nome</th><th>WL</th><th>Área</th><th>Time</th><th>Gestor</th><th>Status</th><th>Forms</th><th class="r">Ações</th></tr>
@@ -228,26 +246,27 @@
   }
 
   function vConfig() {
-    const O = A.O, s = O.settings, m = O.state.message;
+    const O = A.O, s = O.settings;
     return `
       <div class="grid">
-        <div class="card"><h2>Evento</h2><div class="form">
+        <div class="card"><h2>Tempos das viagens</h2><div class="form">
+          <label class="sw"><input type="checkbox" id="cfgAuto" ${s.autoFlow ? 'checked' : ''}> Fluxo automático (encontro → conversa → próxima dupla → avaliação, sem precisar liberar)</label>
+          <label class="f">Conversa de cada viagem (segundos)<input class="input" id="cfgSeconds" type="number" min="10" max="3600" value="${s.roundSeconds}"><span class="small">240 = 4 minutos</span></label>
+          <label class="f">Tempo para a dupla se encontrar (segundos)<input class="input" id="cfgFind" type="number" min="0" max="600" value="${s.findSeconds}"><span class="small">0 = a conversa começa na hora em que a dupla aparece</span></label>
+          <label class="f">Intervalo "88 MPH" entre viagens (segundos)<input class="input" id="cfgBreak" type="number" min="0" max="120" value="${s.breakSeconds}"></label>
+          <label class="f">Avaliação fecha em (segundos)<input class="input" id="cfgRanking" type="number" min="0" max="1800" value="${s.rankingSeconds}"><span class="small">Fecha antes se todos avaliarem. 0 = só quando você clicar em "Calcular".</span></label>
+          <div class="actions"><button class="btn" data-act="saveSettings">Salvar</button></div>
+        </div></div>
+        <div class="card"><h2>Textos</h2><div class="form">
           <label class="f">Nome do evento<input class="input" id="cfgName" value="${esc(s.eventName)}"></label>
-          <label class="f">Tempo de cada conversa (segundos)<input class="input" id="cfgSeconds" type="number" min="10" max="3600" value="${s.roundSeconds}"><span class="small">240 = 4 minutos</span></label>
-          <label class="sw"><input type="checkbox" id="cfgHints" ${s.showFormHints ? 'checked' : ''}> Mostrar respostas do forms na tela da dupla ("para puxar assunto")</label>
-          <label class="f">Texto de boas-vindas<textarea class="input" id="cfgWelcome">${esc(s.welcomeText)}</textarea></label>
-          <label class="f">Texto de encerramento<textarea class="input" id="cfgClosing">${esc(s.closingText)}</textarea></label>
-          <label class="f">Texto da tela de espera (off)<textarea class="input" id="cfgStandby">${esc(s.standbyText || '')}</textarea></label>
+          <label class="f">Boas-vindas (check-in)<textarea class="input" id="cfgWelcome">${esc(s.welcomeText)}</textarea></label>
+          <label class="f">Olhos no telão<textarea class="input" id="cfgStandby">${esc(s.standbyText || '')}</textarea></label>
+          <label class="f">Encerramento<textarea class="input" id="cfgClosing">${esc(s.closingText)}</textarea></label>
           <label class="f">Roteiro (uma linha por item: <span class="mono">horário | título</span>)<textarea class="input" id="cfgAgenda">${esc((s.agenda || []).map(a => `${a.time}${a.time ? ' | ' : ''}${a.title}`).join('\n'))}</textarea></label>
-          <div class="actions"><button class="btn" data-act="saveSettings">Salvar configurações</button></div>
+          <label class="sw"><input type="checkbox" id="cfgHints" ${s.showFormHints ? 'checked' : ''}> Mostrar respostas do forms na tela da dupla ("para puxar assunto")</label>
+          <div class="actions"><button class="btn" data-act="saveSettings">Salvar</button></div>
         </div></div>
-        <div class="card"><h2>Bloco "Mensagem"</h2><p class="small" style="margin-bottom:10px">Use para intervalos, avisos ou qualquer recado na tela de todos.</p><div class="form">
-          <label class="f">Emoji<input class="input" id="msgEmoji" value="${esc(m.emoji)}"></label>
-          <label class="f">Título<input class="input" id="msgTitle" value="${esc(m.title)}"></label>
-          <label class="f">Texto<textarea class="input" id="msgBody">${esc(m.body)}</textarea></label>
-          <div class="actions"><button class="btn ghost" data-act="saveMessage">Salvar</button><button class="btn" data-act="showMessage">📣 Salvar e exibir nos celulares</button></div>
-        </div></div>
-        <div class="card"><h2>Acesso</h2><p class="small">A senha do painel é definida pela variável de ambiente <span class="mono">ADMIN_PASSWORD</span> no servidor (padrão: <span class="mono">doc1985</span>). Link do app para os viajantes: <span class="mono">${esc(location.origin)}/</span></p>
+        <div class="card"><h2>Acesso</h2><p class="small">A senha do painel é definida pela variável de ambiente <span class="mono">ADMIN_PASSWORD</span> no servidor. Link do app para os viajantes: <span class="mono">${esc(location.origin)}/</span> · Telão: <span class="mono">${esc(location.origin)}/telao.html</span></p>
           <div class="actions" style="margin-top:10px"><button class="btn ghost sm" data-act="logout">Sair do painel</button></div></div>
       </div>`;
   }
@@ -257,8 +276,8 @@
       <div class="card"><h2>Modo teste / ensaio</h2><p class="small" style="margin-bottom:12px">Para ensaiar a dinâmica sem 47 pessoas na sala. Nada disso é necessário no dia.</p>
         <div class="actions">
           <button class="btn cyan" data-act="testCheckinAll">✔ Check-in de todos</button>
-          <button class="btn cyan" data-act="demoTime">⏱ Conversas de 30s (modo demo)</button>
-          <button class="btn ghost" data-act="normalTime">⏱ Voltar para 4 min</button>
+          <button class="btn cyan" data-act="demoTime">⏱ Modo demo (10s encontro · 30s conversa · 3s intervalo · 30s avaliação)</button>
+          <button class="btn ghost" data-act="normalTime">⏱ Tempos normais (60s · 4 min · 6s · 2 min)</button>
           <button class="btn cyan" data-act="testRandomRankings">🎲 Avaliações aleatórias (na fase de avaliação)</button>
         </div></div>
       <div class="card"><h2>Zona de perigo</h2>
@@ -354,28 +373,33 @@
   async function onAction(el) {
     const act_ = el.dataset.act, id = el.dataset.id, O = A.O;
     switch (act_) {
-      case 'generate': return confirmRun(O.state.conn.generatedAt ? 'Gerar novamente TODAS as duplas? As rodadas atuais serão descartadas.' : `Gerar as duplas com ${O.counts.checkedIn} viajantes a bordo?`, async () => { const r = await act('generate', { fromRound: 1 }); toast(`Duplas geradas · ${r.worstLabel}`); });
+      case 'generate': return confirmRun(O.state.conn.generatedAt ? 'Sortear de novo TODAS as duplas? As atuais serão descartadas.' : `Sortear as duplas com ${O.counts.checkedIn} viajantes a bordo?`, async () => { const r = await act('generate', { fromRound: 1 }); toast(`Duplas sorteadas · ${r.worstLabel}`); });
+      case 'startJourney': return confirmRun(`Iniciar as viagens agora com ${O.counts.checkedIn} viajantes a bordo?${O.state.conn.generatedAt ? '' : ' As duplas serão sorteadas.'}`, () => act('startJourney'), 'Viagem 1 começou ⚡');
       case 'regenRest': { const from = O.state.conn.phase === 'matching' ? O.state.conn.round : O.state.conn.round + 1; if (from > 3) return toast('Não há viagens restantes para recalcular.', true); return confirmRun(`Recalcular as duplas da${from < 3 ? 's viagens' : ' viagem'} ${from < 3 ? `${from} a 3` : '3'} com quem está a bordo agora? As viagens já realizadas não mudam.`, async () => { const r = await act('generate', { fromRound: from }); toast(`Viagens ${from}–3 recalculadas · ${r.worstLabel}`); }); }
       case 'reveal': return run(() => act('reveal', { round: +el.dataset.round }), `Duplas da viagem ${el.dataset.round} reveladas`);
       case 'startTalk': return run(() => act('startTalk'), 'Conversa iniciada');
       case 'pause': return run(() => act('pause'));
       case 'resume': return run(() => act('resume'));
       case 'addTime': return run(() => act('addTime', { seconds: 30 }), '+30 segundos');
+      case 'skip': return confirmRun('Pular a etapa atual agora?', () => act('skip'));
       case 'endTalk': return confirmRun('Encerrar a conversa agora?', () => act('endTalk'));
       case 'openRanking': return confirmRun('Abrir a avaliação em todos os celulares?', () => act('openRanking'), 'Avaliação aberta');
       case 'computeResults': return confirmRun('Calcular as conexões e notificar todos os celulares agora?', () => act('computeResults'), 'Conexões enviadas ⚡');
       case 'setBlock': return run(() => act('setBlock', { block: el.dataset.block }));
+      case 'setScene': return run(() => act('setScene', { scene: el.dataset.scene }));
+      case 'toggleMutual': return run(() => act('settings', { settings: { showMutualOnScreen: el.checked } }));
       case 'resetConnections': return confirmRun('Resetar o bloco de conexões? Apaga duplas, avaliações e resultados.', () => act('resetConnections'), 'Bloco resetado');
       case 'resetEvent': return confirmRun('Resetar o EVENTO inteiro? Desfaz check-ins, duplas, avaliações e resultados.', () => act('resetEvent'), 'Evento resetado');
       case 'testCheckinAll': return run(() => act('testCheckinAll'), 'Check-in de todos feito');
       case 'testRandomRankings': return run(() => act('testRandomRankings'), 'Avaliações aleatórias enviadas');
-      case 'demoTime': return run(() => act('settings', { settings: { roundSeconds: 30 } }), 'Conversas de 30s');
-      case 'normalTime': return run(() => act('settings', { settings: { roundSeconds: 240 } }), 'Conversas de 4 min');
+      case 'demoTime': return run(() => act('settings', { settings: { roundSeconds: 30, findSeconds: 10, breakSeconds: 3, rankingSeconds: 30 } }), 'Modo demo: tempos curtos');
+      case 'normalTime': return run(() => act('settings', { settings: { roundSeconds: 240, findSeconds: 60, breakSeconds: 6, rankingSeconds: 120 } }), 'Tempos normais');
       case 'saveSettings': {
+        const num = (id, min, max) => { const v = +$(id).value; return Number.isFinite(v) && v >= min && v <= max ? v : null; };
+        const secs = num('#cfgSeconds', 10, 3600), find = num('#cfgFind', 0, 600), brk = num('#cfgBreak', 0, 120), rk = num('#cfgRanking', 0, 1800);
+        if ([secs, find, brk, rk].some(v => v === null)) return toast('Confira os tempos: conversa 10–3600 s, encontro 0–600 s, intervalo 0–120 s, avaliação 0–1800 s.', true);
         const agenda = $('#cfgAgenda').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const i = l.indexOf('|'); return i >= 0 ? { time: l.slice(0, i).trim(), title: l.slice(i + 1).trim() } : { time: '', title: l }; });
-        const secs = +$('#cfgSeconds').value;
-        if (!(secs >= 10 && secs <= 3600)) return toast('O tempo de cada conversa deve ficar entre 10 e 3600 segundos.', true);
-        return run(async () => { await act('settings', { settings: { eventName: $('#cfgName').value, roundSeconds: secs, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda } }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
+        return run(async () => { await act('settings', { settings: { autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda } }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
       }
       case 'saveMessage': case 'showMessage': return run(() => act('setMessage', { message: { emoji: $('#msgEmoji').value, title: $('#msgTitle').value, body: $('#msgBody').value }, show: act_ === 'showMessage' }), act_ === 'showMessage' ? 'Mensagem exibida nos celulares' : 'Mensagem salva');
       case 'logout': localStorage.removeItem('bttf.admin'); location.reload(); return;
@@ -383,7 +407,7 @@
       case 'editPerson': { const p = O.people.find(x => x.id === +id); return dialog(personForm(p), () => { $('#fSave').onclick = () => run(async () => { await api('PUT', `/api/admin/people/${id}`, personFromForm()); closeDialog(); }, 'Salvo'); }); }
       case 'toggleCheckin': return run(() => api('PUT', `/api/admin/people/${id}`, { checkedIn: el.dataset.v === '1' }));
       case 'toggleActive': return run(() => api('PUT', `/api/admin/people/${id}`, { active: el.dataset.v === '1' }));
-      case 'deletePerson': { const p = O.people.find(x => x.id === +id); return confirmRun(`Excluir ${p.name} da lista?${p.inRounds ? ' Essa pessoa está em duplas já geradas: recalcule as rodadas depois.' : ''}`, () => api('DELETE', `/api/admin/people/${id}`), 'Excluída'); }
+      case 'deletePerson': { const p = O.people.find(x => x.id === +id); return confirmRun(`Excluir ${p.name} da lista?${p.inRounds ? ' Essa pessoa está em duplas já geradas: marque como ausente em vez de excluir.' : ''}`, () => api('DELETE', `/api/admin/people/${id}`), 'Excluída'); }
       case 'viewForm': { const p = O.people.find(x => x.id === +id); return dialog(`<h3>${esc(p.name)} · respostas do forms</h3>${Object.entries(p.form || {}).map(([q, a]) => `<p style="margin:8px 0"><b class="small" style="display:block;color:var(--cyan)">${esc(q)}</b>${esc(a)}</p>`).join('') || '<p class="muted">Sem respostas.</p>'}<div class="actions" style="margin-top:12px"><button class="btn ghost" data-close>Fechar</button></div>`); }
       case 'importPeople': return importPeopleDialog();
       case 'importForm': return importFormDialog();
@@ -422,9 +446,9 @@
     const tab = e.target.closest('#tabs [data-tab]'); if (tab) { A.tab = tab.dataset.tab; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b === tab)); render(true); return; }
     const go = e.target.closest('[data-go]'); if (go) { e.preventDefault(); A.tab = go.dataset.go; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === A.tab)); render(true); return; }
     const rt = e.target.closest('[data-roundtab]'); if (rt) { A.round = +rt.dataset.roundtab; render(true); return; }
-    const bl = e.target.closest('[data-block]'); if (bl && !bl.dataset.act) { run(() => act('setBlock', { block: bl.dataset.block })); return; }
-    const el = e.target.closest('[data-act]'); if (el) onAction(el);
+    const el = e.target.closest('[data-act]'); if (el && el.tagName !== 'INPUT') onAction(el);
   });
+  document.addEventListener('change', e => { const el = e.target.closest('input[data-act]'); if (el) onAction(el); });
   document.addEventListener('input', e => { if (e.target.id === 'peopleQ') { A.peopleQ = e.target.value; render(true); } });
   document.addEventListener('pointerdown', () => { A.pressing = true; }, true);
   document.addEventListener('pointerup', () => { A.pressing = false; }, true);

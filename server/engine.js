@@ -12,7 +12,12 @@ const PHASES = ['idle', 'ready', 'matching', 'talk', 'roundEnd', 'ranking', 'res
 
 const DEFAULT_SETTINGS = {
   eventName: 'Townhall · De Volta ao Futuro',
-  roundSeconds: 240,
+  roundSeconds: 240,      // conversa
+  findSeconds: 60,        // tempo para a dupla se encontrar antes da conversa
+  breakSeconds: 6,        // "88 MPH!" entre uma viagem e a próxima
+  rankingSeconds: 120,    // avaliação fecha sozinha depois disso (ou quando todos avaliarem)
+  autoFlow: true,         // viagens e avaliação avançam sozinhas
+  showMutualOnScreen: false,
   showFormHints: true,
   welcomeText: 'Prepare-se: hoje vamos viajar no tempo e conhecer gente de outras áreas.',
   closingText: 'Obrigado por viajar com a gente. Marque aquele café com a sua conexão!',
@@ -24,7 +29,8 @@ const DEFAULT_SETTINGS = {
   ],
 };
 const DEFAULT_MESSAGE = { title: 'Intervalo', body: 'Voltamos em 15 minutos.', emoji: '☕' };
-const defaultConn = () => ({ phase: 'idle', round: 0, played: 0, talk: null, generatedAt: null, worstLevel: null, levels: {}, resultsAt: null, repeats: false });
+const defaultConn = () => ({ phase: 'idle', round: 0, played: 0, timer: null, generatedAt: null, worstLevel: null, levels: {}, resultsAt: null, repeats: false });
+const DEFAULT_SCREEN = { scene: 'auto' }; // telão: auto (segue o bloco) | clock | logo | quote
 
 const now = () => Date.now();
 const iso = () => new Date().toISOString();
@@ -51,7 +57,9 @@ class Engine {
       block: BLOCKS.includes(saved.block) ? saved.block : 'welcome',
       message: Object.assign({}, DEFAULT_MESSAGE, saved.message || {}),
       conn: Object.assign(defaultConn(), saved.conn || {}),
+      screen: Object.assign({}, DEFAULT_SCREEN, saved.screen || {}),
     };
+    delete this.state.conn.talk; // modelo antigo
     this.settings = Object.assign({}, DEFAULT_SETTINGS, kvGet('settings', {}));
     this.listeners = [];
     this.timer = null;
@@ -83,9 +91,10 @@ class Engine {
     return this.rowToPerson(db.prepare('SELECT * FROM people WHERE token = ?').get(token));
   }
   participants() { return this.listPeople().filter(p => p.active && p.checkedInAt); }
-  publicPerson(p, withHints = false) {
+  // full=true só para o painel do admin: os viajantes não veem área, WL nem time uns dos outros.
+  publicPerson(p, withHints = false, full = false) {
     if (!p) return null;
-    const out = { id: p.id, name: p.name, area: p.area, wl: p.wl, team: p.team };
+    const out = full ? { id: p.id, name: p.name, area: p.area, wl: p.wl, team: p.team } : { id: p.id, name: p.name };
     if (withHints && this.settings.showFormHints && p.form) {
       out.hints = Object.entries(p.form).filter(([, v]) => String(v || '').trim()).map(([q, a]) => ({ q, a: String(a) }));
     }
@@ -100,6 +109,16 @@ class Engine {
     db.prepare('UPDATE people SET checked_in_at = COALESCE(checked_in_at, ?), token = ? WHERE id = ?').run(iso(), token, p.id);
     this.commit();
     return { token, person: this.publicPerson(this.personById(p.id)) };
+  }
+
+  // Desfaz o próprio check-in (nome errado). Só antes das duplas existirem.
+  checkout(token) {
+    const p = this.personByToken(token);
+    if (!p) return { ok: true };
+    if (this.allGroups().some(g => g.members.includes(p.id))) throw new Error('As duplas já foram sorteadas com você. Fale com o Doc para trocar.');
+    db.prepare('UPDATE people SET checked_in_at = NULL, token = NULL WHERE id = ?').run(p.id);
+    this.commit();
+    return { ok: true };
   }
 
   addPerson(f) {
@@ -298,17 +317,55 @@ class Engine {
   }
 
   /* ---------------- fases do bloco de conexões ---------------- */
+  // Timer genérico (uma etapa por vez): kind = matching | talk | break | ranking
+  startTimer(kind, seconds) {
+    const s = Math.max(1, Number(seconds) || 1);
+    this.state.conn.timer = { kind, startedAt: now(), endsAt: now() + s * 1000, duration: s, paused: false, remaining: null };
+    this.rearmTimer();
+  }
+  stopTimer() { this.clearTimer(); this.state.conn.timer = null; }
+  rearmTimer() {
+    this.clearTimer();
+    const t = this.state.conn.timer;
+    if (!t || t.paused) return;
+    const ms = t.endsAt - now();
+    if (ms <= 0) { this.expireTimer(); return; }
+    this.timer = setTimeout(() => this.expireTimer(), ms + 30);
+  }
+  clearTimer() { if (this.timer) { clearTimeout(this.timer); this.timer = null; } }
+  // O que acontece quando a etapa acaba (também usado por "Pular etapa" no painel)
+  expireTimer() {
+    const c = this.state.conn, t = c.timer;
+    this.clearTimer();
+    if (!t) return;
+    c.timer = null;
+    if (t.kind === 'matching' && c.phase === 'matching') return this.startTalk();
+    if (t.kind === 'talk' && c.phase === 'talk') return this.endTalk();
+    if (t.kind === 'break' && c.phase === 'roundEnd') return this.afterBreak();
+    if (t.kind === 'ranking' && c.phase === 'ranking') return this.computeResults();
+    this.commit();
+  }
+  auto() { return !!this.settings.autoFlow; }
+
   reveal(round) {
     const c = this.state.conn;
     round = Number(round) || (c.round + 1);
     if (round < 1 || round > TOTAL_ROUNDS) throw new Error('Rodada inválida.');
     if (!this.groupsOfRound(round).length) throw new Error(`As duplas da viagem ${round} ainda não foram geradas.`);
     if (c.phase === 'talk') this.finishTalk();
-    this.clearTimer();
-    c.phase = 'matching'; c.round = round; c.talk = null;
+    this.stopTimer();
+    c.phase = 'matching'; c.round = round;
     this.state.block = 'connections';
     this.assignQueues(round);
+    if (this.auto() && Number(this.settings.findSeconds) > 0) this.startTimer('matching', this.settings.findSeconds);
     this.commit({ title: `Viagem ${round} · ${eraOfRound(round).year}`, body: 'Sua dupla foi revelada. Encontre essa pessoa na sala!' });
+  }
+  // Botão único do painel: sorteia (se preciso) e começa a viagem 1.
+  startJourney() {
+    const c = this.state.conn;
+    if (c.played >= 1 || !['idle', 'ready'].includes(c.phase)) throw new Error('As viagens já começaram. Use os controles da viagem em andamento ou resete o bloco.');
+    if (!c.generatedAt || c.phase === 'idle') this.generate({ fromRound: 1 });
+    this.reveal(1);
   }
   startTalk() {
     const c = this.state.conn;
@@ -316,29 +373,37 @@ class Engine {
     const dur = Math.max(10, Number(this.settings.roundSeconds) || 240);
     c.phase = 'talk';
     c.played = Math.max(c.played || 0, c.round);
-    c.talk = { startedAt: now(), endsAt: now() + dur * 1000, duration: dur, paused: false, remaining: null };
-    this.rearmTimer();
+    this.startTimer('talk', dur);
     this.commit({ title: 'Conversa liberada!', body: `Vocês têm ${human(dur)}. Boa viagem!` });
   }
   pause() {
-    const t = this.state.conn.talk;
-    if (this.state.conn.phase !== 'talk' || !t || t.paused) return;
+    const t = this.state.conn.timer;
+    if (!t || t.paused) return;
     t.paused = true; t.remaining = Math.max(0, Math.round((t.endsAt - now()) / 1000));
     this.clearTimer(); this.commit();
   }
   resume() {
-    const t = this.state.conn.talk;
-    if (this.state.conn.phase !== 'talk' || !t || !t.paused) return;
+    const t = this.state.conn.timer;
+    if (!t || !t.paused) return;
     t.paused = false; t.endsAt = now() + t.remaining * 1000; t.remaining = null;
     this.rearmTimer(); this.commit();
   }
   addTime(seconds) {
-    const t = this.state.conn.talk;
-    if (this.state.conn.phase !== 'talk' || !t) return;
+    const t = this.state.conn.timer;
+    if (!t) return;
     const s = Number(seconds) || 30;
     if (t.paused) t.remaining = Math.max(0, t.remaining + s); else t.endsAt = Math.max(now(), t.endsAt + s * 1000);
     t.duration = Math.max(1, t.duration + s);
     this.rearmTimer(); this.commit();
+  }
+  skip() { // encerra a etapa atual agora (ou avança quando não há timer)
+    const c = this.state.conn;
+    if (c.timer) return this.expireTimer();
+    if (c.phase === 'matching') return this.startTalk();
+    if (c.phase === 'talk') return this.endTalk();
+    if (c.phase === 'roundEnd') return this.afterBreak();
+    if (c.phase === 'ranking') return this.computeResults();
+    throw new Error('Nada para pular nesta fase.');
   }
   finishTalk() {
     // marca as perguntas vistas por cada pessoa (até a posição alcançada)
@@ -348,8 +413,7 @@ class Engine {
       const upto = Math.min(g.position, g.queue.length - 1);
       for (let i = 0; i <= upto; i++) for (const m of g.members) ins.run(m, g.queue[i], c.round);
     }
-    this.clearTimer();
-    c.talk = null;
+    this.stopTimer();
   }
   endTalk() {
     const c = this.state.conn;
@@ -357,26 +421,37 @@ class Engine {
     this.finishTalk();
     c.phase = 'roundEnd';
     const last = c.round >= TOTAL_ROUNDS;
-    this.commit({ title: 'Tempo esgotado!', body: last ? 'Fim das viagens. Em instantes você avalia as conversas.' : 'Prepare-se para a próxima viagem.' });
+    if (this.auto()) {
+      const brk = Number(this.settings.breakSeconds);
+      if (brk > 0) this.startTimer('break', brk); else { this.commit(); return this.afterBreak(); }
+    }
+    this.commit({ title: '88 MPH!', body: last ? 'Fim das viagens. Avalie as conversas no celular.' : 'Tempo esgotado. Próxima viagem chegando!' });
   }
-  rearmTimer() {
-    this.clearTimer();
+  afterBreak() {
     const c = this.state.conn;
-    if (c.phase !== 'talk' || !c.talk || c.talk.paused) return;
-    const ms = c.talk.endsAt - now();
-    if (ms <= 0) { this.endTalk(); return; }
-    this.timer = setTimeout(() => this.endTalk(), ms + 30);
+    if (c.phase !== 'roundEnd') return;
+    this.stopTimer();
+    if (c.round < TOTAL_ROUNDS) return this.reveal(c.round + 1);
+    return this.openRanking();
   }
-  clearTimer() { if (this.timer) { clearTimeout(this.timer); this.timer = null; } }
 
   openRanking() {
     const c = this.state.conn;
     if (c.phase === 'talk') { this.finishTalk(); }
     if (!(c.played >= 1)) throw new Error('Nenhuma viagem foi realizada ainda.');
-    this.clearTimer();
-    c.phase = 'ranking'; c.talk = null;
+    this.stopTimer();
+    c.phase = 'ranking';
     this.state.block = 'connections';
+    if (this.auto() && Number(this.settings.rankingSeconds) > 0) this.startTimer('ranking', this.settings.rankingSeconds);
     this.commit({ title: 'Hora de avaliar', body: 'Coloque suas conversas em ordem: 1º, 2º e 3º lugar.' });
+  }
+  everyoneRanked() {
+    const c = this.state.conn;
+    if (!c.played) return false;
+    const exists = new Set(this.participants().map(p => p.id));
+    const ids = new Set(this.allGroups().filter(g => g.round <= c.played).flatMap(g => g.members).filter(id => exists.has(id)));
+    const ranked = new Set(db.prepare('SELECT DISTINCT person_id FROM rankings').all().map(r => r.person_id));
+    return ids.size > 0 && [...ids].every(id => ranked.has(id));
   }
   roundsOfPerson(personId) {
     const c = this.state.conn;
@@ -399,6 +474,7 @@ class Engine {
       rounds.forEach((r, i) => ins.run(Number(personId), r, given[i], iso()));
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
+    if (this.auto() && this.everyoneRanked()) return this.computeResults();
     this.commit();
   }
   rankingsMap() {
@@ -420,8 +496,8 @@ class Engine {
       for (const [pid, r] of Object.entries(res)) ins.run(Number(pid), r.match, r.mutual, r.score, JSON.stringify(r.detail));
       db.exec('COMMIT');
     } catch (e) { db.exec('ROLLBACK'); throw e; }
-    this.clearTimer();
-    c.phase = 'results'; c.talk = null; c.resultsAt = iso();
+    this.stopTimer();
+    c.phase = 'results'; c.resultsAt = iso();
     this.state.block = 'connections';
     this.commit({ title: 'Sua conexão do futuro chegou!', body: 'Abra o app para descobrir com quem você deve continuar o papo.' });
   }
@@ -465,6 +541,11 @@ class Engine {
   updateSettings(partial) {
     const s = this.settings;
     if (partial.roundSeconds !== undefined) s.roundSeconds = Math.max(10, Math.min(3600, Number(partial.roundSeconds) || 240));
+    if (partial.findSeconds !== undefined) s.findSeconds = Math.max(0, Math.min(600, Number(partial.findSeconds) || 0));
+    if (partial.breakSeconds !== undefined) s.breakSeconds = Math.max(0, Math.min(120, Number(partial.breakSeconds) || 0));
+    if (partial.rankingSeconds !== undefined) s.rankingSeconds = Math.max(0, Math.min(1800, Number(partial.rankingSeconds) || 0));
+    if (partial.autoFlow !== undefined) s.autoFlow = !!partial.autoFlow;
+    if (partial.showMutualOnScreen !== undefined) s.showMutualOnScreen = !!partial.showMutualOnScreen;
     if (partial.showFormHints !== undefined) s.showFormHints = !!partial.showFormHints;
     for (const k of ['eventName', 'welcomeText', 'closingText', 'standbyText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
     if (Array.isArray(partial.agenda)) s.agenda = partial.agenda.map(a => ({ time: String(a.time || ''), title: String(a.title || '') })).filter(a => a.title);
@@ -474,6 +555,11 @@ class Engine {
     db.exec('DELETE FROM groups; DELETE FROM seen; DELETE FROM rankings; DELETE FROM results;');
     this.clearTimer();
     this.state.conn = defaultConn();
+    this.commit();
+  }
+  setScene(scene) {
+    const ok = ['auto', 'clock', 'logo', 'quote', 'countdown'];
+    this.state.screen = { scene: ok.includes(scene) ? scene : 'auto' };
     this.commit();
   }
   resetEvent() {
@@ -513,12 +599,26 @@ class Engine {
       counts: { checkedIn: checked.length, total: active.length },
       conn: {
         phase: c.phase, round: c.round, totalRounds: TOTAL_ROUNDS, played: c.played || 0,
-        era: eraOfRound(Math.max(1, c.round || 1)), eras: ERAS, talk: c.talk, worstLevel: c.worstLevel,
+        era: eraOfRound(Math.max(1, c.round || 1)), eras: ERAS, timer: c.timer, worstLevel: c.worstLevel,
         generatedAt: c.generatedAt, resultsAt: c.resultsAt, rankingDone, rankingTotal,
+        mutualPairs: (c.phase === 'results' && this.settings.showMutualOnScreen) ? this.mutualPairs() : [],
+        mutualCount: c.phase === 'results' ? this.mutualPairs().length : 0,
       },
-      settings: { roundSeconds: this.settings.roundSeconds, showFormHints: this.settings.showFormHints },
+      screen: this.state.screen,
+      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints },
       now: now(),
     };
+  }
+  mutualPairs() {
+    const rows = db.prepare('SELECT person_id, match_id FROM results WHERE mutual = 1').all();
+    const seen = new Set(), out = [];
+    for (const r of rows) {
+      const k = [r.person_id, r.match_id].sort((a, b) => a - b).join('|');
+      if (seen.has(k)) continue; seen.add(k);
+      const a = this.personById(r.person_id), b = this.personById(r.match_id);
+      if (a && b) out.push([a.name, b.name]);
+    }
+    return out;
   }
   meState(personId) {
     const p = this.personById(personId);
@@ -563,12 +663,12 @@ class Engine {
         groups: groups.map((g, i) => ({
           id: g.id, code: String(g.idx + 1).padStart(2, '0'), position: g.position, queueLen: g.queue.length,
           currentQuestion: g.queue.length ? (db.prepare('SELECT text FROM questions WHERE id = ?').get(g.queue[Math.min(g.position, g.queue.length - 1)]) || {}).text : null,
-          flags: chk.detail[i], members: g.members.map(id => this.publicPerson(byId[id]) || { id, name: '(removido)', area: '', wl: '' }),
+          flags: chk.detail[i], members: g.members.map(id => this.publicPerson(byId[id], false, true) || { id, name: '(removido)', area: '', wl: '' }),
         })),
       });
     }
     const results = db.prepare('SELECT * FROM results').all().map(r => ({
-      person: this.publicPerson(byId[r.person_id]), match: this.publicPerson(byId[r.match_id]), mutual: !!r.mutual, score: r.score,
+      person: this.publicPerson(byId[r.person_id], false, true), match: this.publicPerson(byId[r.match_id], false, true), mutual: !!r.mutual, score: r.score,
     })).filter(r => r.person);
     return {
       state: this.state, settings: this.settings, now: now(),

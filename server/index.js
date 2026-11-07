@@ -30,8 +30,9 @@ const isAdmin = req => (req.get('x-admin-key') || req.query.key) === ADMIN_PASSW
 const adminOnly = (req, res, next) => (isAdmin(req) ? next() : res.status(401).json({ error: 'Senha de admin inválida.' }));
 
 /* ---------- participante ---------- */
-app.get('/api/people', wrap(() => engine.listPeople().filter(p => p.active).map(p => ({ id: p.id, name: p.name, area: p.area, wl: p.wl, team: p.team, checkedIn: !!p.checkedInAt }))));
+app.get('/api/people', wrap(() => engine.listPeople().filter(p => p.active).map(p => ({ id: p.id, name: p.name, checkedIn: !!p.checkedInAt }))));
 app.post('/api/checkin', wrap(req => engine.checkin(req.body.personId, req.body.token)));
+app.post('/api/checkout', wrap(req => engine.checkout(req.body.token)));
 app.get('/api/me', wrap(req => {
   const p = engine.personByToken(req.query.token);
   if (!p) return { ok: false };
@@ -58,6 +59,9 @@ app.post('/api/admin/action', wrap(req => {
     case 'resume': engine.resume(); break;
     case 'addTime': engine.addTime(a.seconds || 30); break;
     case 'endTalk': engine.endTalk(); break;
+    case 'skip': engine.skip(); break;
+    case 'startJourney': engine.startJourney(); break;
+    case 'setScene': engine.setScene(a.scene); break;
     case 'openRanking': engine.openRanking(); break;
     case 'computeResults': engine.computeResults(); break;
     case 'resetConnections': engine.resetConnections(); break;

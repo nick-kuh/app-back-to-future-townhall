@@ -56,27 +56,41 @@ Outras opções: qualquer host com Node 22+ ou Docker (Railway, Fly.io, Cloud Ru
 ou um notebook na própria sala (`npm start` + `http://IP-DO-NOTEBOOK:3000`, se o Wi-Fi permitir acesso
 entre dispositivos). O servidor usa WebSocket (Socket.IO) para avisar os celulares em tempo real.
 
+## Páginas
+
+| Página | Para quem | O que mostra |
+|---|---|---|
+| `/` | viajantes (celular) | check-in pelo nome, blocos, viagens, avaliação, resultado |
+| `/telao.html` | projetor | QR do check-in, circuitos de tempo, cronômetros gigantes, 88 MPH, avaliação, conexões, créditos; modos "relógio", "logo" e "frases" para servir de fundo durante PPT ou fala |
+| `/admin.html` | apresentador (notebook) | Painel do Doc |
+
+Os viajantes nunca veem área, WL ou time uns dos outros: esses dados ficam só no painel, para o sorteio.
+
 ## Fluxo do evento (Painel do Doc)
 
 1. **Pessoas** · a lista do townhall já vem carregada (47 pessoas). Dá para editar WL/área, adicionar,
    marcar ausente, fazer check-in manual, importar outra lista (colar do Excel) e **importar as respostas do
    forms** (CSV/planilha): as respostas aparecem na tela da dupla como "para puxar assunto".
 2. **Perguntas** · banco inicial com 42 perguntas em três eras (presente · 1985, passado · 1955, futuro · 2015).
-   Edite, desative ou substitua em massa (uma por linha, com prefixo `[presente]`, `[passado]` ou `[futuro]`).
-3. **Controle** · escolha o bloco que aparece nos celulares (Boas-vindas, Mensagem, Conexões, Encerramento) e
-   conduza o bloco Conexões:
-   1. **Gerar duplas** com quem fez check-in.
-   2. **Revelar duplas da viagem N** → os celulares mostram a dupla e uma placa com número para se acharem na sala.
-   3. **Iniciar conversa** → timer (4 min por padrão; pausar, +30s, encerrar). As perguntas aparecem iguais nos
-      dois celulares; quando um toca em "Próxima", o outro avança junto. O timer encerra sozinho.
-   4. Repita para as viagens 2 e 3.
-   5. **Abrir avaliação** → cada pessoa ordena as conversas (1º, 2º, 3º). O painel mostra quem falta.
-   6. **Calcular conexões** → todos recebem no celular a pessoa com quem devem continuar o papo.
-4. **Config** · tempo da conversa, textos, roteiro e a mensagem do bloco "Mensagem" (intervalo, avisos).
-5. **Testes** · check-in de todos, conversas de 30 s e avaliações aleatórias para ensaiar a dinâmica sozinho.
+   Edite, desative ou substitua em massa (uma por linha, com prefixo `[presente]`, `[passado]` ou `[futuro]`;
+   `[off]` marca uma desativada).
+3. **Controle** · organizado por blocos; cada um tem o botão **Exibir nos celulares**:
+   - **Check-in**: cada pessoa escolhe o próprio nome; quem já escolheu some da lista. Quem errou usa
+     "voltar e escolher outro nome". Se alguém pegou o seu nome, "Meu nome não aparece" permite assumir.
+   - **Olhos no telão**: tela apagada ("neste momento você não precisa do celular").
+   - **Mensagem**: aviso livre (intervalo, link de fotos etc.).
+   - **Conexões**: `▶ Iniciar viagens` sorteia as duplas (se ainda não sorteou) e dispara o fluxo
+     automático: tempo para a dupla se encontrar → 4 min de conversa → "88 MPH" → próxima dupla, três vezes.
+     Depois da 3ª viagem a avaliação abre sozinha nos celulares e fecha quando todos avaliarem (ou no tempo
+     limite); os resultados vão para os celulares automaticamente. Ao vivo: pausar, +30 s, pular etapa e
+     controle manual.
+   - **Encerramento**: agradecimento + lembrete da conexão; no telão, créditos com todos os nomes.
+   - **Telão**: escolhe o modo da tela projetada (automático, relógio, logo, frases).
+4. **Config** · tempos (encontro, conversa, intervalo, avaliação), fluxo automático ligado/desligado, textos.
+5. **Testes** · check-in de todos, modo demo com tempos curtos e avaliações aleatórias para ensaiar sozinho.
 
-Quem chegar depois do cálculo aparece como "fora das rotas" no painel; use **Recalcular rodadas restantes**
-para incluir a pessoa nas próximas viagens sem mexer nas que já aconteceram.
+Quem chegar depois do sorteio aparece como "fora das rotas" no painel; use **Recalcular** para incluir a
+pessoa nas próximas viagens sem mexer nas que já aconteceram.
 
 ## Regras da dinâmica
 
@@ -100,6 +114,6 @@ server/queues.js     filas de perguntas por dupla (eras, sem repetir, rotação)
 server/results.js    ranking → conexões
 server/db.js         SQLite (node:sqlite) e esquema
 server/seed/         lista de pessoas e banco de perguntas iniciais
-public/              app do viajante (index.html, app.js, app.css) e Painel do Doc (admin.*)
+public/              app do viajante (index.html, app.*), telão (telao.*) e Painel do Doc (admin.*)
 scripts/             testes
 ```

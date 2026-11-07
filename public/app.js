@@ -8,24 +8,50 @@
   const fmt = s => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
   const human = s => (s >= 60 ? `${Math.floor(s / 60)} min${s % 60 ? ` e ${s % 60} s` : ''}` : `${s} s`);
   const MONTHS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
-  const PALETTE = ['#ff7a1a', '#ff2d95', '#35d6ff', '#3dff7a', '#ffd000', '#b980ff', '#ff5c5c', '#5cffd6', '#ffa94d', '#7fb2ff', '#f58cff', '#a8ff5c'];
-  const FIXED = { Consumer: '#ffd000', 'Customer Development': '#3dff7a', 'Focus Market': '#ff2d95', Strategy: '#35d6ff', 'Make (Business Ops)': '#ff7a1a', 'Tax Reform': '#b980ff', Cybersecurity: '#5cffd6', Architecture: '#ffa94d', Diretora: '#ff5c5c' };
-  const color = area => FIXED[area] || PALETTE[[...String(area || '')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
-  const av = (p, cls = '') => `<div class="av ${cls}" style="--c:${color(p.area)}">${esc(ini(p.name))}</div>`;
-  const tags = p => `<span class="tag area" style="--c:${color(p.area)}">${esc(p.area || '—')}</span> <span class="tag">${esc(p.wl || '—')}</span>`;
+  const PALETTE = ['#ff6a00', '#ff2d95', '#2ee6d6', '#39ff6a', '#ffd21f', '#b980ff', '#ff5c5c', '#5cffd6', '#ffa94d', '#7fb2ff', '#f58cff', '#a8ff5c'];
+  const color = name => PALETTE[[...String(name || '')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
+  const av = (p, cls = '') => `<div class="av ${cls}" style="--c:${color(p.name)}">${esc(ini(p.name))}</div>`;
   const ERA_KEYS = ['presente', 'passado', 'futuro'];
+  // escapa o texto e depois transforma URLs em links (o href nasce do texto já escapado)
+  const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+
+  // Frases e referências dos três filmes (trilogia 1985 · 1989 · 1990)
+  const QUOTES = [
+    ['Para onde vamos, não precisamos de estradas.', 'Doc Brown · 1985'],
+    ['Great Scott!', 'Doc Brown · em todos os filmes'],
+    ['Isso é pesado, Doc.', 'Marty McFly · 1985'],
+    ['1,21 gigawatts!', 'Doc Brown · 1985'],
+    ['Se você vai construir uma máquina do tempo num carro, por que não fazer isso com estilo?', 'Doc Brown · 1985'],
+    ['O futuro ainda não está escrito. Ele é o que você fizer dele.', 'Doc Brown · 1990'],
+    ['Ninguém me chama de covarde.', 'Marty McFly · 1989'],
+    ['Hill Valley: um bom lugar para viver.', 'placa da cidade · 1955'],
+    ['Salve a torre do relógio!', 'panfleto · 1985'],
+    ['Hoverboards não funcionam na água!', 'Hill Valley · 2015'],
+    ['Tubarão 19: desta vez é realmente pessoal.', 'cinema de Hill Valley · 2015'],
+    ['O que é um gigawatt?', 'Marty McFly · 1985'],
+    ['Nós precisamos voltar... de volta para o futuro!', 'Doc Brown · 1985'],
+    ['Você não está pensando em quatro dimensões!', 'Doc Brown · 1990'],
+    ['Tênis que amarram sozinhos. Casacos que se secam. 2015.', 'Hill Valley · 2015'],
+    ['Baile do Encantamento Submarino, 12 de novembro de 1955.', 'Hill Valley High · 1955'],
+    ['Capacitor de fluxo... fluxando.', 'Doc Brown · 1985'],
+    ['Quando essa belezinha chega a 88 milhas por hora, você vai ver algo sério.', 'Doc Brown · 1985'],
+    ['Só um raio pode gerar 1,21 gigawatts.', 'Doc Brown · 1955'],
+    ['Clara, você é a mulher mais incrível que já conheci.', 'Doc Brown · 1885'],
+  ];
+  const quote = seed => { const q = QUOTES[Math.abs(seed || Math.floor(Date.now() / 60000)) % QUOTES.length]; return `<div class="quote">“${esc(q[0])}”<small>${esc(q[1])}</small></div>`; };
 
   const S = {
     token: localStorage.getItem('bttf.token') || null,
     screen: localStorage.getItem('bttf.token') ? 'app' : 'splash',
-    state: null, me: null, people: [], pick: null, q: '', offset: 0, socket: null,
-    draft: [], editing: false, lastKey: '', audio: null, offline: false,
+    state: null, me: null, people: [], pick: null, q: '', offset: 0, socket: null, showTaken: false,
+    draft: [], editing: false, lastKey: '', audio: null, offline: false, lock: null, jump: true,
   };
 
   /* ---------------- util ---------------- */
   const serverNow = () => Date.now() + S.offset;
   const ledNow = () => { const d = new Date(serverNow()); return `${MONTHS[d.getMonth()]} ${pad(d.getDate())} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
   const roundEra = r => (S.state && S.state.conn.eras[ERA_KEYS[(Math.max(1, r) - 1) % 3]]) || { label: '', year: '', led: '' };
+  const osd = (mode = 'PLAY') => `<div class="osd"><span class="${mode === 'REC' ? 'rec' : ''}">${mode === 'REC' ? 'REC' : mode === 'PAUSE' ? '❚❚ PAUSE' : '▶ PLAY'}</span><span id="osdNow">${ledNow()}</span></div>`;
   function toast(msg, err) {
     const t = $('#toast'); t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('on');
     clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 3200);
@@ -67,14 +93,10 @@
       }
     }, 42);
   }
-  function setOffline(off) {
-    S.offline = off;
-    const b = $('#offline'); if (b) b.classList.toggle('on', !!off);
-  }
+  function setOffline(off) { S.offline = off; const b = $('#offline'); if (b) b.classList.toggle('on', !!off); }
 
   /* ---------------- rede ---------------- */
   function connect() {
-    // websocket primeiro; se a rede bloquear o upgrade, cai para polling (tryAllTransports)
     S.socket = io({ transports: ['websocket', 'polling'], tryAllTransports: true });
     S.socket.on('connect', () => { setOffline(false); hello(); });
     S.socket.on('disconnect', () => { setOffline(true); });
@@ -114,26 +136,23 @@
 
   /* ---------------- render ---------------- */
   function viewKey() {
-    if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}`;
-    const c = S.state.conn, g = S.me && S.me.group;
-    const paused = ''; // pausa é atualizada no lugar (tick), sem redesenhar a tela
-    // conteúdo que a tela mostra (mensagem, textos, dupla, resultado): se mudar no servidor, a tela redesenha
-    const content = JSON.stringify([S.state.message, S.state.event, S.state.settings, S.me && S.me.person, g && g.partners, g && g.flags, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result]);
+    if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}|${S.showTaken ? 'taken' : ''}`;
+    const c = S.state.conn, g = S.me && S.me.group, t = c.timer;
+    const content = JSON.stringify([S.state.message, S.state.event, S.state.settings, S.me && S.me.person, g && g.partners, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result, t ? t.kind : '']);
     let h = 0; for (let i = 0; i < content.length; i++) h = (h * 31 + content.charCodeAt(i)) >>> 0;
-    return ['app', S.state.block, c.phase, c.round, paused, g ? g.id : '', g && g.missing ? 'miss' : '', S.me && S.me.ranking ? 'ranked' : '', S.editing ? 'edit' : '', S.me && S.me.result ? 'res' : '', h].join('|');
+    return ['app', S.state.block, c.phase, c.round, '', g ? g.id : '', g && g.missing ? 'miss' : '', S.me && S.me.ranking ? 'ranked' : '', S.editing ? 'edit' : '', S.me && S.me.result ? 'res' : '', h].join('|');
   }
   function maybeRender(force) {
     const k = viewKey();
     if (!force && k === S.lastKey) { patch(); return; }
     const prev = S.lastKey; S.lastKey = k;
     const p = prev.split('|'), n = k.split('|');
-    // só volta ao topo quando muda de tela/bloco/fase/rodada (não em pausas, reconexões ou textos editados)
     S.jump = !prev || p.slice(0, 4).join('|') !== n.slice(0, 4).join('|');
     const enteringPhase = ph => n[0] === 'app' && n[1] === 'connections' && n[2] === ph && !(p[1] === 'connections' && p[2] === ph && p[3] === n[3]);
+    if (prev && p[1] === 'standby' && n[1] && n[1] !== 'standby') { beep('ok'); buzz([80, 40, 160]); flashSky(); }
     if (prev && enteringPhase('matching')) { beep('ok'); buzz([80, 40, 80]); return warp(`VIAGEM ${n[3]} · RUMO A ${roundEra(+n[3]).year}`, render); }
     if (prev && enteringPhase('ranking')) { beep('ok'); return warp('VOLTANDO PARA O PRESENTE...', render); }
     if (prev && enteringPhase('results')) { beep('result'); buzz([120, 60, 120, 60, 240]); return warp('CALCULANDO CONEXÕES...', render); }
-    if (prev && p[1] === 'standby' && n[1] && n[1] !== 'standby') { beep('ok'); buzz([80, 40, 160]); flashSky(); }
     if (prev && enteringPhase('talk')) { beep('ok'); buzz(90); flashSky(); }
     if (prev && enteringPhase('roundEnd')) { beep('end'); buzz([200, 80, 200]); }
     render();
@@ -162,25 +181,31 @@
     if (S.me && S.me.group && S.state.conn.phase === 'talk') patchQuestion(false);
   }
 
-  const logo = (sm = false) => `<div class="logo ${sm ? 'sm' : ''}"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div>${sm ? '' : '<div class="l3">EDIÇÃO TOWNHALL</div>'}</div>`;
+  const logo = (sm = false) => `<div class="logo ${sm ? 'sm' : ''}"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div>${sm ? '' : '<div class="l3">TOWNHALL · 1985</div>'}</div>`;
 
   function vSplash() {
-    return `${'<div class="spacer"></div>'}${logo()}
+    return `${osd('PLAY')}<div class="spacer"></div>${logo()}
       <div class="wait"><div class="flux"><i></i><i></i><i></i><b></b></div></div>
-      <p class="muted center">Três viagens no tempo, três conversas com gente de outras áreas.<br>Pegue o seu celular: ele é o seu capacitor de fluxo.</p>
+      <p class="muted center">Três viagens no tempo, três conversas com gente nova.<br>Seu celular é o capacitor de fluxo.</p>
+      ${quote()}
       <div class="spacer"></div>
       <button class="btn" data-action="start">⚡ Embarcar na DeLorean</button>`;
   }
   function vPeopleList() {
     const q = S.q.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    const list = S.people.filter(p => !q || norm(p.name).includes(q) || norm(p.area).includes(q));
-    if (!list.length) return `<p class="muted center" style="padding:20px">Nenhum nome encontrado. Procure o apresentador para ser incluído.</p>`;
-    return list.map(p => `<button class="pitem" data-action="pick" data-id="${p.id}">${av(p)}<div><div class="n">${esc(p.name)}</div><div class="m">${esc(p.area)} · ${esc(p.wl)}</div></div>${p.checkedIn ? '<span class="in">A BORDO</span>' : ''}</button>`).join('');
+    const free = S.people.filter(p => !p.checkedIn), taken = S.people.filter(p => p.checkedIn);
+    const list = (S.showTaken ? taken : free).filter(p => !q || norm(p.name).includes(q));
+    const items = list.map(p => `<button class="pitem" data-action="pick" data-id="${p.id}">${av(p)}<div><div class="n">${esc(p.name)}</div>${p.checkedIn ? '<div class="m">já escolhido em outro celular · toque se for você</div>' : ''}</div>${p.checkedIn ? '<span class="in">A BORDO</span>' : ''}</button>`).join('');
+    const empty = `<p class="muted center" style="padding:20px">${S.showTaken ? 'Ninguém com esse nome embarcou ainda.' : 'Nenhum nome encontrado. Procure o apresentador para ser incluído.'}</p>`;
+    const foot = S.showTaken
+      ? `<button class="linkbtn" data-action="showFree">← voltar para os nomes disponíveis</button>`
+      : `<p class="small center" style="padding-top:8px">${taken.length} já embarcaram · ${free.length} ainda não. <button class="linkbtn" data-action="showTaken">Meu nome não aparece</button></p>`;
+    return (items || empty) + foot;
   }
   function vIdentify() {
     return `${logo(true)}
-      <div><h2>Quem é você, viajante?</h2><p class="muted">Encontre o seu nome na lista para embarcar.</p></div>
+      <div><h2>Quem é você, viajante?</h2><p class="muted">Encontre o seu nome na lista para embarcar. Quem já embarcou some da lista.</p></div>
       <input class="input" id="q" placeholder="Digite seu nome…" autocomplete="off" autocapitalize="off">
       <div class="plist" id="plist">${vPeopleList()}</div>
       <div class="spacer"></div>
@@ -191,10 +216,9 @@
     return `${logo(true)}
       <div class="panel glow match">
         <div class="kicker">Registro do viajante</div>
-        <div class="who">${av(p, 'xl')}</div>
+        <div class="who" style="display:flex;justify-content:center;margin:14px 0 8px">${av(p, 'xl')}</div>
         <div class="pname">${esc(p.name)}</div>
-        <div style="margin-top:8px">${tags(p)}</div>
-        ${p.checkedIn ? '<p class="small" style="margin-top:12px;color:var(--amber)">Esse nome já embarcou em outro celular. Se é você mesmo, pode entrar: este aparelho passa a ser o seu.</p>' : ''}
+        ${p.checkedIn ? '<p class="small" style="margin-top:12px;color:var(--amber)">Esse nome já embarcou em outro celular. Se é você mesmo, pode entrar: este aparelho passa a ser o seu.</p>' : '<p class="small" style="margin-top:12px">Se escolher errado, dá para voltar e trocar na tela seguinte.</p>'}
       </div>
       <button class="btn" data-action="checkin">⚡ Sou eu, embarcar</button>
       <button class="btn ghost" data-action="unpick">Não sou eu</button>`;
@@ -210,41 +234,21 @@
     return `${vHeader()}
       <div class="panel glow match">
         <div class="kicker">Check-in confirmado</div>
-        <div class="who">${av(me, 'xl')}</div>
+        <div class="polaroids"><div class="polaroid"><div class="photo">${av(me)}</div><div class="cap">${esc(first(me.name))} · Hill Valley</div></div></div>
         <div class="pname">Bem-vindo(a) a bordo, ${esc(first(me.name))}!</div>
-        <div style="margin-top:8px">${tags(me)}</div>
         <p class="muted" style="margin-top:12px">${esc(st.event.welcomeText)}</p>
       </div>
       <div class="panel center">
         <div class="kicker">Viajantes a bordo</div>
         <div class="big"><span id="count">${st.counts.checkedIn}</span><span style="font-size:18px;color:var(--muted)"> / ${st.counts.total}</span></div>
         <div class="bar"><i id="countBar" style="width:${pct}%"></i></div>
-        <p class="small" style="margin-top:10px">Fique com o app aberto: as próximas etapas aparecem aqui automaticamente.</p>
+        <p class="small" style="margin-top:10px">Fique com o app aberto: as próximas etapas aparecem aqui sozinhas.</p>
       </div>
       ${st.event.agenda && st.event.agenda.length ? `<div class="panel"><div class="kicker">Roteiro da viagem</div><ul class="agenda">${st.event.agenda.map(a => `<li><span class="t">${esc(a.time || '•')}</span><span class="x">${esc(a.title)}</span></li>`).join('')}</ul></div>` : ''}
+      ${quote()}
       <div class="spacer"></div>
-      <button class="linkbtn" data-action="logout">Não sou ${esc(first(me.name))} · trocar de viajante</button>`;
+      <button class="btn ghost" data-action="checkout">Não sou ${esc(first(me.name))} · voltar e escolher outro nome</button>`;
   }
-  function vStandby() {
-    const me = S.me.person;
-    return `<div class="spacer"></div>
-      <div class="logo sm dim"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div></div>
-      <div class="circuits off">
-        <div class="tc r"><label>DESTINO</label><div class="led">--- -- ---- --:--</div></div>
-        <div class="tc g"><label>PRESENTE</label><div class="led">--- -- ---- --:--</div></div>
-        <div class="tc a"><label>ÚLTIMA PARTIDA</label><div class="led">--- -- ---- --:--</div></div>
-      </div>
-      <div class="standby">
-        <div class="power">⏻</div>
-        <div class="st-title">MODO DE ESPERA</div>
-        <p class="muted">${esc(S.state.event.standbyText || 'O próximo bloco começa em instantes.')}</p>
-        <div class="st-line">AGUARDANDO O PRÓXIMO BLOCO<span class="blink">_</span></div>
-      </div>
-      <div class="spacer"></div>
-      <p class="small center">a bordo como ${esc(me.name)}</p>`;
-  }
-  // escapa o texto e depois transforma URLs em links (o href nasce do texto já escapado)
-  const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
   function vMessage() {
     const m = S.state.message;
     return `${vHeader()}<div class="panel glow msgbox"><div class="e">${esc(m.emoji || '📣')}</div><h2>${esc(m.title)}</h2><p>${linkify(m.body)}</p></div>`;
@@ -253,7 +257,27 @@
     const r = S.me.result;
     return `${vHeader()}
       <div class="panel glow msgbox"><div class="e">🕰️</div><h2>Fim da viagem</h2><p>${esc(S.state.event.closingText)}</p></div>
-      ${r && r.match ? `<div class="panel center"><div class="kicker">Sua conexão do futuro</div><div class="who">${av(r.match, 'md')}</div><div class="pname" style="font-size:18px">${esc(r.match.name)}</div><div style="margin-top:6px">${tags(r.match)}</div></div>` : ''}`;
+      ${r && r.match ? `<div class="panel center"><div class="kicker">Sua conexão do futuro</div><div class="polaroids"><div class="polaroid"><div class="photo">${av(r.match)}</div><div class="cap">${esc(first(r.match.name))} · Hill Valley</div></div></div><div class="pname" style="font-size:18px">${esc(r.match.name)}</div></div>` : ''}
+      ${quote(1)}`;
+  }
+  function vStandby() {
+    const me = S.me.person;
+    return `${osd('PAUSE')}<div class="spacer"></div>
+      <div class="logo sm dim"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div></div>
+      <div class="circuits off">
+        <div class="tc r"><label>DESTINO</label><div class="led">--- -- ---- --:--</div></div>
+        <div class="tc g"><label>PRESENTE</label><div class="led">--- -- ---- --:--</div></div>
+        <div class="tc a"><label>ÚLTIMA PARTIDA</label><div class="led">--- -- ---- --:--</div></div>
+      </div>
+      <div class="standby">
+        <div class="power">📺</div>
+        <div class="st-title">OLHOS NO TELÃO</div>
+        <p class="muted">${esc(S.state.event.standbyText || 'Neste momento você não precisa do celular.')}</p>
+        <div class="st-line">AGUARDANDO O PRÓXIMO BLOCO<span class="blink">_</span></div>
+      </div>
+      <div class="spacer"></div>
+      ${quote()}
+      <p class="small center">a bordo como ${esc(me.name)}</p>`;
   }
 
   function circuits(round) {
@@ -268,18 +292,15 @@
     const era = roundEra(round);
     return `<div class="trip"><div class="t">VIAGEM ${round}/3 · ${esc(era.label)} ${esc(era.year)}</div><div class="dots">${[1, 2, 3].map(i => `<i class="${i < round ? 'done' : i === round ? 'on' : ''}"></i>`).join('')}</div></div>`;
   }
+  const countdown = (kind, label) => `<div class="cdbox" id="cdbox" data-kind="${kind}"><div class="countdown ${kind === 'matching' ? 'amber' : kind === 'ranking' ? 'green' : ''}" id="cd">--:--</div><div class="kicker" style="margin-top:8px">${esc(label)}</div><div class="ptag" id="pauseTag" style="display:none">❚❚ PAUSADO PELO DOC</div></div>`;
   function partnerCard(g, round) {
     const ps = g.partners, era = roundEra(round);
     const hints = ps.flatMap(p => (p.hints || []).slice(0, 3).map(h => ({ ...h, who: first(p.name) })));
     return `<div class="panel glow match">
       <div class="kicker">${ps.length > 1 ? 'Seu trio nesta viagem' : 'Sua dupla nesta viagem'}</div>
       <div class="plate"><div class="st"><span>HILL VALLEY</span><span>${esc(era.year)}</span></div><div class="num">${esc(g.code)}</div><div class="sub">OUTATIME · ROTA ${esc(g.code)}</div></div>
-      <div class="who">${ps.map(p => av(p, 'xl')).join('')}</div>
-      ${ps.map(p => `<div class="pname">${esc(p.name)}</div><div style="margin:6px 0 10px">${tags(p)}</div>`).join('')}
-      <div class="rules">
-        <span class="ok ${g.flags && g.flags.area ? '' : 'warn'}">${g.flags && g.flags.area ? '✔' : '!'} Área diferente</span>
-        <span class="ok ${g.flags && g.flags.wl ? '' : 'warn'}">${g.flags && g.flags.wl ? '✔' : '!'} WL diferente</span>
-      </div>
+      <div class="polaroids">${ps.map(p => `<div class="polaroid"><div class="photo">${av(p)}</div><div class="cap">${esc(first(p.name))} · ${esc(era.year)}</div></div>`).join('')}</div>
+      ${ps.map(p => `<div class="pname">${esc(p.name)}</div>`).join('<div style="height:6px"></div>')}
       ${hints.length ? `<div class="hints"><div class="kicker">Para puxar assunto</div>${hints.map(h => `<div class="h"><b>${esc(h.who)} · ${esc(h.q)}</b>${esc(h.a)}</div>`).join('')}</div>` : ''}
     </div>`;
   }
@@ -292,17 +313,17 @@
     for (let v = 0; v <= 88; v += 8) {
       const major = v % 16 === 0 || v === 88;
       const p1 = pt(v, R), p2 = pt(v, R - (major ? 12 : 7));
-      ticks += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${v === 88 ? '#ffd000' : '#9aa0bd'}" stroke-width="${v === 88 ? 3 : 2}" stroke-linecap="round"/>`;
-      if (v % 32 === 0 || v === 88) { const pl = pt(v, R - 26); ticks += `<text x="${pl.x}" y="${pl.y + 4}" text-anchor="middle" font-family="Orbitron" font-size="${v === 88 ? 13 : 10}" font-weight="900" fill="${v === 88 ? '#ffd000' : '#9aa0bd'}">${v}</text>`; }
+      ticks += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${v === 88 ? '#ffd21f' : '#bcaee0'}" stroke-width="${v === 88 ? 3 : 2}" stroke-linecap="round"/>`;
+      if (v % 32 === 0 || v === 88) { const pl = pt(v, R - 26); ticks += `<text x="${pl.x}" y="${pl.y + 4}" text-anchor="middle" font-family="Orbitron" font-size="${v === 88 ? 13 : 10}" font-weight="900" fill="${v === 88 ? '#ffd21f' : '#bcaee0'}">${v}</text>`; }
     }
     const arc = `M ${a0.x} ${a0.y} A ${R} ${R} 0 0 1 ${a1.x} ${a1.y}`;
     return `<div class="gauge" id="gauge"><svg viewBox="0 0 250 162">
-      <defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stop-color="#35d6ff"/><stop offset=".55" stop-color="#ffd000"/><stop offset="1" stop-color="#ff3c00"/></linearGradient></defs>
-      <path d="${arc}" fill="none" stroke="#262a44" stroke-width="10" stroke-linecap="round"/>
+      <defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stop-color="#2ee6d6"/><stop offset=".55" stop-color="#ffd21f"/><stop offset="1" stop-color="#ff2a00"/></linearGradient></defs>
+      <path d="${arc}" fill="none" stroke="#2a1d55" stroke-width="10" stroke-linecap="round"/>
       <path id="gaugeArc" d="${arc}" fill="none" stroke="url(#gg)" stroke-width="10" stroke-linecap="round" pathLength="100" stroke-dasharray="0 100"/>
       ${ticks}
-      <text x="125" y="96" text-anchor="middle" font-family="Orbitron" font-size="8" font-weight="700" fill="#9aa0bd" letter-spacing="3">MPH</text>
-      <g id="needle" class="needle"><line x1="125" y1="112" x2="125" y2="32" stroke="#ff3b30" stroke-width="4" stroke-linecap="round"/><circle cx="125" cy="112" r="8" fill="#1b1f36" stroke="#9aa0bd" stroke-width="2"/></g>
+      <text x="125" y="96" text-anchor="middle" font-family="Orbitron" font-size="8" font-weight="700" fill="#bcaee0" letter-spacing="3">MPH</text>
+      <g id="needle" class="needle"><line x1="125" y1="112" x2="125" y2="32" stroke="#ff3b30" stroke-width="4" stroke-linecap="round"/><circle cx="125" cy="112" r="8" fill="#1d1142" stroke="#bcaee0" stroke-width="2"/></g>
       <text id="clock" class="clocktext" x="125" y="154" text-anchor="middle">--:--</text>
     </svg></div>`;
   }
@@ -327,16 +348,24 @@
       if (animate) buzz(25);
     }
   }
+  function patchRanking() {
+    document.querySelectorAll('.rank').forEach(card => {
+      const i = S.draft.indexOf(+card.dataset.round);
+      card.classList.toggle('on', i >= 0);
+      const pos = card.querySelector('.pos'); if (pos) pos.textContent = i >= 0 ? `${i + 1}º` : '—';
+    });
+    const btn = $('[data-action=submit]'); if (btn && S.me) btn.disabled = S.draft.length !== (S.me.conversations || []).length;
+  }
   function vConnections() {
-    const c = S.state.conn, g = S.me.group, r = c.round;
+    const c = S.state.conn, g = S.me.group, r = c.round, t = c.timer;
     const head = vHeader();
     if (c.phase === 'idle' || c.phase === 'ready') {
       return `${head}${circuits(1)}
         <div class="panel"><div class="wait"><div class="flux"><i></i><i></i><i></i><b></b></div>
           <h2>Calculando rotas temporais</h2>
-          <p class="muted">O Doc está preparando as duplas. Regras da viagem: <b style="color:var(--txt)">área diferente</b>, <b style="color:var(--txt)">WL diferente</b> e nunca repetir a mesma dupla.</p>
-          <div class="small">Viajantes a bordo: <b id="count" style="color:var(--yellow)">${c ? S.state.counts.checkedIn : 0}</b></div>
-        </div></div>`;
+          <p class="muted">O Doc está preparando as duplas. Três viagens, três pessoas novas, quatro minutos cada.</p>
+          <div class="small">Viajantes a bordo: <b id="count" style="color:var(--yellow)">${S.state.counts.checkedIn}</b></div>
+        </div></div>${quote()}`;
     }
     if (c.phase === 'matching' || c.phase === 'talk' || c.phase === 'roundEnd') {
       if (!g || g.missing) {
@@ -345,9 +374,9 @@
       }
       if (c.phase === 'matching') {
         return `${head}${circuits(r)}${tripBar(r)}${partnerCard(g, r)}
-          <div class="panel cyan center"><div class="kicker">Como funciona</div>
-            <p class="muted">1. Encontre ${esc(g.partners.map(p => first(p.name)).join(' e '))} na sala: mostrem a placa <b style="color:var(--txt)">${esc(g.code)}</b>.<br>2. Quando o Doc liberar, as perguntas aparecem aqui, iguais nos dois celulares.<br>3. Vocês têm ${human(S.state.settings.roundSeconds)}. Responderam? Toque em <b style="color:var(--txt)">Próxima</b>.</p>
-            <div class="sync" style="margin-top:8px"><i></i> aguardando o Doc iniciar a conversa</div>
+          <div class="panel cyan center">
+            ${t && t.kind === 'matching' ? countdown('matching', 'a conversa começa em') : '<div class="sync"><i></i> aguardando o Doc iniciar a conversa</div>'}
+            <p class="muted" style="margin-top:12px">Encontre ${esc(g.partners.map(p => first(p.name)).join(' e '))} na sala: mostrem a placa <b style="color:var(--txt)">${esc(g.code)}</b>. As perguntas vão aparecer aqui, iguais nos dois celulares. Vocês têm ${human(S.state.settings.roundSeconds)}.</p>
           </div>`;
       }
       if (c.phase === 'talk') {
@@ -356,7 +385,7 @@
           <div class="panel center">
             ${gauge()}
             <div class="kicker" style="margin-top:14px">Tempo da viagem · com ${esc(ps)}</div>
-            <div class="ptag" id="pauseTag" style="display:${c.talk && c.talk.paused ? 'inline-block' : 'none'}">⏸ PAUSADO PELO DOC</div>
+            <div class="ptag" id="pauseTag" style="display:none">❚❚ PAUSADO PELO DOC</div>
           </div>
           <div id="qbox">${questionCard(g, r)}</div>
           <div class="qnav">
@@ -367,39 +396,34 @@
       }
       const last = r >= c.totalRounds;
       return `${head}${circuits(r)}${tripBar(r)}
-        <div class="panel glow msgbox"><div class="e">⚡</div><h2>88 MPH atingidos!</h2><p>Tempo esgotado na viagem ${r}. ${last ? 'Foi a última viagem: em instantes você avalia as conversas.' : 'Agradeça à sua dupla e prepare-se: a próxima rota já vai aparecer.'}</p></div>
-        <div class="sync"><i></i> aguardando o Doc</div>`;
+        <div class="panel glow msgbox"><div class="e">⚡</div><h2>88 MPH atingidos!</h2><p>Tempo esgotado na viagem ${r}. ${last ? 'Foi a última viagem: a avaliação já vai aparecer.' : 'Agradeça à sua dupla e prepare-se: a próxima rota já vai aparecer.'}</p>
+          ${t && t.kind === 'break' ? `<div style="margin-top:14px">${countdown('break', last ? 'avaliação em' : 'próxima viagem em')}</div>` : '<div class="sync" style="margin-top:12px"><i></i> aguardando o Doc</div>'}
+        </div>`;
     }
     if (c.phase === 'ranking') return vRanking();
     if (c.phase === 'results') return vResults();
     return `${head}<div class="panel"><p class="muted">Estado desconhecido: ${esc(c.phase)}</p></div>`;
   }
   function vRanking() {
-    const me = S.me, convs = me.conversations || [];
+    const me = S.me, convs = me.conversations || [], t = S.state.conn.timer;
     const sent = me.ranking && !S.editing;
     if (!convs.length) return `${vHeader()}<div class="panel glow msgbox"><div class="e">🧭</div><h2>Sem viagens registradas</h2><p>Você não participou das rodadas, então não há conversas para avaliar.</p></div>`;
     if (sent) {
       const order = convs.slice().sort((a, b) => me.ranking[a.round] - me.ranking[b.round]);
       return `${vHeader()}
-        <div class="panel glow msgbox"><div class="e">📡</div><h2>Avaliação enviada!</h2><p>Aguardando o Doc calcular as conexões. <span id="rankProgress">${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} viajantes já avaliaram</span>.</p></div>
+        <div class="panel glow msgbox"><div class="e">📡</div><h2>Avaliação enviada!</h2><p>Aguardando as conexões. <span id="rankProgress">${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} viajantes já avaliaram</span>.</p>
+          ${t && t.kind === 'ranking' ? `<div style="margin-top:14px">${countdown('ranking', 'resultado em no máximo')}</div>` : ''}</div>
         <div class="panel"><div class="kicker">Sua ordem</div>${order.map(cv => `<div class="ritem">${av(cv.partners[0] || me.person)}<div class="grow"><div class="nm">${me.ranking[cv.round]}º · ${esc(cv.partners.map(p => p.name).join(' & '))}</div><div class="small">Viagem ${cv.round} · ${esc(cv.era.label)} ${esc(cv.era.year)}</div></div></div>`).join('')}</div>
         <button class="btn ghost" data-action="edit">Alterar ordem</button>`;
     }
     const pos = round => { const i = S.draft.indexOf(round); return i < 0 ? null : i + 1; };
     const done = S.draft.length === convs.length;
     return `${vHeader()}
-      <div><h2>Avalie suas viagens</h2><p class="muted">Toque nas conversas <b style="color:var(--txt)">na ordem da sua preferência</b>: primeiro a melhor, depois a segunda e por último a terceira. Vale pensar em quem você gostaria de continuar conhecendo.</p></div>
-      ${convs.map(cv => { const p = pos(cv.round); return `<button class="rank ${p ? 'on' : ''}" data-action="rank" data-round="${cv.round}"><div class="pos">${p ? p + 'º' : '—'}</div>${av(cv.partners[0] || me.person)}<div><div class="nm">${esc(cv.partners.map(x => x.name).join(' & '))}</div><div class="th">Viagem ${cv.round} · ${esc(cv.era.label)} ${esc(cv.era.year)} · ${esc(cv.partners.map(x => x.area).join(' / '))}</div></div></button>`; }).join('')}
+      <div><h2>Avalie suas viagens</h2><p class="muted">Toque nas conversas <b style="color:var(--txt)">na ordem da sua preferência</b>: primeiro a melhor, depois a segunda e por último a terceira. Pense em quem você gostaria de continuar conhecendo.</p></div>
+      ${t && t.kind === 'ranking' ? countdown('ranking', 'a avaliação fecha em') : ''}
+      ${convs.map(cv => { const p = pos(cv.round); return `<button class="rank ${p ? 'on' : ''}" data-action="rank" data-round="${cv.round}"><div class="pos">${p ? p + 'º' : '—'}</div>${av(cv.partners[0] || me.person)}<div><div class="nm">${esc(cv.partners.map(x => x.name).join(' & '))}</div><div class="th">Viagem ${cv.round} · ${esc(cv.era.label)} ${esc(cv.era.year)}</div></div></button>`; }).join('')}
       <div class="row"><button class="btn ghost" data-action="clear">Refazer</button><button class="btn" data-action="submit" ${done ? '' : 'disabled'}>Enviar ⚡</button></div>
       <p class="small center" id="rankProgress">${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} viajantes já avaliaram</p>`;
-  }
-  function patchRanking() {
-    document.querySelectorAll('.rank').forEach(card => {
-      const i = S.draft.indexOf(+card.dataset.round);
-      card.classList.toggle('on', i >= 0);
-      const pos = card.querySelector('.pos'); if (pos) pos.textContent = i >= 0 ? `${i + 1}º` : '—';
-    });
-    const btn = $('[data-action=submit]'); if (btn && S.me) btn.disabled = S.draft.length !== (S.me.conversations || []).length;
   }
   function vResults() {
     const r = S.me.result;
@@ -410,34 +434,43 @@
     return `${vHeader()}
       <div class="panel dest">
         <div class="kicker">Sua conexão do futuro</div>
-        <div class="who">${av(r.match, 'xl')}</div>
+        <div class="polaroids"><div class="polaroid"><div class="photo">${av(r.match)}</div><div class="cap">${esc(first(r.match.name))} · ${era ? esc(era.year) : 'Hill Valley'}</div></div></div>
         <div class="pname">${esc(r.match.name)}</div>
-        <div style="margin-top:8px">${tags(r.match)}</div>
         ${r.mutual ? '<div class="mutual">⚡ CONEXÃO MÚTUA</div>' : ''}
         <div class="score">${r.score} pts</div>
         <div class="small">você ${bolts(top ? top.mine : 0)} · ${esc(first(r.match.name))} ${bolts(top ? top.theirs : 0)}</div>
         <p class="muted" style="margin-top:12px">Próximo passo: marque um café de 15 minutos com ${esc(first(r.match.name))} na próxima semana para continuar o papo${era ? ` que começou em ${esc(era.year)}` : ''}. ☕</p>
       </div>
       <div class="panel"><div class="kicker">Todas as suas viagens</div><div class="rlist">${r.detail.map((d, i) => `<div class="ritem">${av(d.partner)}<div class="grow"><div class="nm">${i + 1}. ${esc(d.partner.name)}</div><div class="small">Viagem ${d.round} · ${esc(roundEra(d.round).label)} · você ${bolts(d.mine)} · ${esc(first(d.partner.name))} ${bolts(d.theirs)}</div></div><div class="pts">${d.score}</div></div>`).join('')}</div></div>
-      <p class="small center">1º lugar vale 3 pontos, 2º vale 2 e 3º vale 1. A pontuação soma os dois lados da conversa.</p>`;
+      <p class="small center">1º lugar vale 3 pontos, 2º vale 2 e 3º vale 1. A pontuação soma os dois lados da conversa.</p>
+      ${quote(5)}`;
   }
 
   /* ---------------- timer ---------------- */
   function tick() {
     if (!S.state) return;
     const led = $('#ledNow'); if (led) led.textContent = ledNow();
-    const c = S.state.conn; if (c.phase !== 'talk' || !c.talk) return;
-    const t = c.talk;
+    const osdNow = $('#osdNow'); if (osdNow) osdNow.textContent = ledNow();
+    const c = S.state.conn, t = c.timer; if (!t) return;
     const left = t.paused ? t.remaining : Math.max(0, Math.round((t.endsAt - serverNow()) / 1000));
-    const clock = $('#clock'); if (clock) clock.textContent = fmt(left);
-    const g = $('#gauge');
-    if (g) {
-      const frac = Math.min(1, Math.max(0, 1 - left / Math.max(1, t.duration)));
-      const needle = $('#needle'); if (needle) needle.style.transform = `rotate(${-90 + frac * 180}deg)`;
-      const arc = $('#gaugeArc'); if (arc) arc.setAttribute('stroke-dasharray', `${(frac * 100).toFixed(1)} 100`);
-      g.classList.toggle('hurry', !t.paused && left <= Math.min(30, t.duration * .25));
-      g.classList.toggle('paused', !!t.paused);
-      const pt = $('#pauseTag'); if (pt) pt.style.display = t.paused ? 'inline-block' : 'none';
+    const pt = $('#pauseTag'); if (pt) pt.style.display = t.paused ? 'inline-block' : 'none';
+    if (t.kind === 'talk') {
+      const clock = $('#clock'); if (clock) clock.textContent = fmt(left);
+      const g = $('#gauge');
+      if (g) {
+        const frac = Math.min(1, Math.max(0, 1 - left / Math.max(1, t.duration)));
+        const needle = $('#needle'); if (needle) needle.style.transform = `rotate(${-90 + frac * 180}deg)`;
+        const arc = $('#gaugeArc'); if (arc) arc.setAttribute('stroke-dasharray', `${(frac * 100).toFixed(1)} 100`);
+        g.classList.toggle('hurry', !t.paused && left <= Math.min(30, t.duration * .25));
+        g.classList.toggle('paused', !!t.paused);
+      }
+      return;
+    }
+    const cd = $('#cd'), box = $('#cdbox');
+    if (cd && box && box.dataset.kind === t.kind) {
+      cd.textContent = fmt(left);
+      box.classList.toggle('hurry', !t.paused && left <= 10);
+      box.classList.toggle('paused', !!t.paused);
     }
   }
   setInterval(tick, 500);
@@ -446,8 +479,10 @@
   async function act(action, el) {
     try {
       switch (action) {
-        case 'start': unlockAudio(); S.screen = 'identify'; await loadPeople(); maybeRender(true); break;
+        case 'start': unlockAudio(); S.screen = 'identify'; S.showTaken = false; await loadPeople(); maybeRender(true); break;
         case 'back': S.screen = 'splash'; maybeRender(true); break;
+        case 'showTaken': S.showTaken = true; maybeRender(true); break;
+        case 'showFree': S.showTaken = false; maybeRender(true); break;
         case 'pick': S.pick = S.people.find(p => p.id === +el.dataset.id) || null; maybeRender(true); break;
         case 'unpick': S.pick = null; maybeRender(true); break;
         case 'checkin': {
@@ -457,7 +492,14 @@
           maybeRender(true); hello(); toast(`Bem-vindo(a) a bordo, ${first(r.person.name)}! ⚡`); buzz(60);
           break;
         }
-        case 'logout': if (confirm('Sair deste viajante neste celular?')) { localStorage.removeItem('bttf.token'); S.token = null; S.me = null; S.screen = 'splash'; hello(); } break;
+        case 'checkout': {
+          if (!confirm('Voltar para a lista e escolher outro nome?')) break;
+          el.disabled = true;
+          await api('/api/checkout', { token: S.token });
+          localStorage.removeItem('bttf.token'); S.token = null; S.me = null; S.screen = 'identify'; S.showTaken = false; S.pick = null;
+          await loadPeople(); maybeRender(true); hello(); toast('Check-in desfeito. Escolha o seu nome.');
+          break;
+        }
         case 'next': case 'prev': {
           el.disabled = true;
           const g = S.me && S.me.group;
