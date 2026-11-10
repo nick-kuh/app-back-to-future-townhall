@@ -265,3 +265,31 @@ body.off .sky .horizon,body.off .sky .sun{opacity:.2}
   .plate{width:200px}.plate .num{font-size:38px}
   .polaroid{width:150px}
 }
+
+/* ===== fundo e carro 3D (mesmo motor do painel "De Volta para o Sucesso") ===== */
+.sky .bg3d{position:absolute;inset:0;width:100%;height:100%;display:block}
+.sky .bg3d~.stars,.sky .bg3d~.sun,.sky .bg3d~.horizon,.sky .bg3d~.grid{display:none}
+body.off .sky .bg3d{opacity:.3}
+.carbox{position:relative;margin-top:12px;aspect-ratio:16/9;border:1px solid #3a3560;border-radius:12px;overflow:hidden;background:#050409;box-shadow:inset 0 0 30px #000}
+.carbox .car3d{position:absolute;inset:0;width:100%;height:100%;display:block}
+.carbox .energy{position:absolute;left:10px;right:10px;bottom:9px;z-index:2}
+.carbox .energy .lbl{display:flex;justify-content:space-between;gap:8px;font:700 10px var(--led,'Share Tech Mono',monospace);color:var(--yellow);margin-bottom:4px;letter-spacing:1px;text-shadow:0 0 8px rgba(255,210,31,.5)}
+.fluxi{display:inline-block;width:1.3em;height:1.3em;vertical-align:-.3em;margin-right:4px}
+.fluxi line{stroke:var(--yellow);stroke-width:3;stroke-linecap:round}
+.ebar{height:9px;background:#050409;border:1px solid var(--yellow);overflow:hidden}
+.ebar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#22d3ee,var(--yellow),#ff6b1a);box-shadow:0 0 12px var(--yellow);transition:width .5s}
+.gwplus{position:absolute;left:50%;top:30%;z-index:3;font:900 16px 'Share Tech Mono',monospace;color:var(--yellow);text-shadow:0 0 10px #ff6b1a;pointer-events:none;white-space:nowrap;animation:gwup 1.2s ease-out forwards}
+@keyframes gwup{from{transform:translate(-50%,0) scale(.7);opacity:1}to{transform:translate(-50%,-50px) scale(1.15);opacity:0}}
+
+/* ===== De Volta para o Sucesso (dinâmica liberada pelo Doc) ===== */
+.tcrow{display:flex;gap:10px;justify-content:center}
+.tcbox{display:inline-flex;flex-direction:column;background:#050409;border:2px solid #3a3560;min-width:120px;color:var(--c,var(--cyan))}
+.tcbox b{font:700 28px 'Share Tech Mono',monospace;letter-spacing:4px;text-align:center;padding:2px 10px;text-shadow:0 0 12px currentColor}
+.tcbox span{font:800 8px Inter;letter-spacing:1.5px;text-align:center;color:#050409;background:var(--c,var(--cyan));padding:3px}
+.presentation-card{text-align:center;padding:24px 18px}
+.presentation-card .kicker{color:var(--c);font-size:9px}
+.presentation-card h1{margin:12px 0 10px;font:900 italic 30px var(--display);color:var(--c);text-shadow:0 0 14px var(--c);overflow-wrap:anywhere}
+.presentation-card .pq{font:700 18px/1.35 Inter;color:var(--txt);border-left:4px solid var(--c);text-align:left;padding:8px 12px;background:rgba(23,20,46,.7)}
+.presentation-card .app-switch{display:block;margin-top:20px;text-decoration:none;text-align:center}
+.app-switch:focus-visible{outline:3px solid var(--cyan);outline-offset:4px}
+@media (prefers-reduced-motion:reduce){.gwplus{animation:none;opacity:0}}

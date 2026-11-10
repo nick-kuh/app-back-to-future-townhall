@@ -50,6 +50,11 @@
   }
   function onHello(res) {
     if (!res || !res.ok) { localStorage.removeItem('bttf.admin'); A.key = ''; $('#login').classList.remove('hidden'); $('#loginMsg').textContent = 'Senha inválida.'; return; }
+    // mesmo login libera o painel 3D do Sucesso (/painel): o servidor grava um cookie
+    if (!A.cookie) { A.cookie = true; api('POST', '/api/admin/login', { password: A.key }).then(() => {
+      const next = new URLSearchParams(location.search).get('next');
+      if (next && next.startsWith('/') && !next.startsWith('//')) location.assign(next);
+    }).catch(() => { A.cookie = false; }); }
     A.connected = true; A.O = res.overview; A.offset = res.overview.now - Date.now(); render(true);
   }
 
@@ -58,9 +63,10 @@
     if (!A.O) return;
     renderStatus();
     if (A.pressing) { clearTimeout(A.renderLater); A.renderLater = setTimeout(() => render(force), 250); return; }
-    const live = ['control', 'people', 'questions'].includes(A.tab);
+    const live = ['control', 'people', 'questions', 'sucesso'].includes(A.tab);
+    if (A.tab === 'sucesso') sucStart(); else sucStop();
     if (!force && !live && $('#main').dataset.view === A.tab) return;
-    const html = ({ control: vControl, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.tab]();
+    const html = ({ control: vControl, sucesso: vSucesso, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.tab]();
     if (!force && $('#main').dataset.view === A.tab && html === A.lastHtml) return;
     A.lastHtml = html;
     const y = window.scrollY;
@@ -77,7 +83,7 @@
     const c = O.state.conn, t = c.timer, left = timerLeft(t);
     $('#status').innerHTML = `
       <span class="pill ${A.connected ? 'on' : 'off'}">${A.connected ? '● conectado' : '○ desconectado'}</span>
-      <span class="pill hot">Celulares: ${BLOCK_LABEL[O.state.block]}</span>
+      <span class="pill hot ${O.state.presentation ? 'suc' : ''}">Celulares: ${O.state.presentation ? '🚀 Sucesso · ' + esc(O.state.presentation.title) : BLOCK_LABEL[O.state.block]}</span>
       <span class="pill">Conexões: ${PHASE_LABEL[c.phase] || c.phase}${c.round ? ` · viagem ${c.round}/3` : ''}</span>
       ${t ? `<span class="pill led ${t.paused ? 'paused' : ''}">${TIMER_LABEL[t.kind] || t.kind} ${fmt(left)}${t.paused ? ' ⏸' : ''}</span>` : ''}
       <span class="pill">A bordo: ${O.counts.checkedIn}/${O.counts.total}</span>`;
@@ -85,12 +91,96 @@
   setInterval(renderStatus, 500);
 
   function blockCard(key, body, extra = '') {
-    const on = A.O.state.block === key;
+    const on = !A.O.state.presentation && A.O.state.block === key;
     return `<div class="block ${on ? 'active' : ''}" id="blk-${key}">
       <div class="bh"><span class="bi">${BLOCK_ICON[key]}</span><div class="bt">${BLOCK_LABEL[key]}<div class="small">${on ? '● na tela dos celulares agora' : 'pronto para exibir'}</div></div>
-        ${extra}<button class="btn sm ${on ? 'ghost' : 'cyan'}" data-act="setBlock" data-block="${key}" ${on ? 'disabled' : ''}>${on ? 'Exibindo' : '▶ Exibir nos celulares'}</button></div>
+        ${extra}<button class="btn sm ${on ? 'ghost' : 'cyan'}" data-act="setBlock" data-block="${key}" ${on || A.O.state.presentation ? 'disabled' : ''}>${on ? 'Exibindo' : '▶ Exibir nos celulares'}</button></div>
       <div class="bb">${body}</div></div>`;
   }
+  /* ---------- De Volta para o Sucesso ---------- */
+  // As quatro dinâmicas do painel do Lucas (/painel). Aqui o Doc escolhe a sala, libera a dinâmica
+  // no telão e nos celulares e controla o recebimento; o carro, a nuvem e o sorteio ficam no painel 3D.
+  const SUC = { rooms: null, roomId: localStorage.getItem('bttf.sucessoRoom') || '', states: {}, resp: new Map(), cursor: 0, offset: 0, timer: null, error: '', loading: false };
+  const DYN = {
+    d1: { n: '01', c: 'var(--cyan)', hint: 'Abre recebendo · nuvem de palavras ao vivo' },
+    d2: { n: '02', c: 'var(--yellow)', hint: '2 min · carro carrega 1,21 GW · sorteio + 2 min de fala' },
+    d3: { n: '03', c: 'var(--magenta)', hint: '2 min · carro · sorteio + 3 min de fala (desafio → IA → impacto)' },
+    d4: { n: '04', c: 'var(--orange)', hint: '2 min · carro · nome opcional · baixar .txt / Word' },
+  };
+  const SUC_PHASE = { idle: 'aguardando abertura', run: 'recebendo respostas', paused: 'recebimento pausado', done: 'recebimento encerrado' };
+  function sucStart() { if (!SUC.timer && !SUC.loading) sucPoll(); }
+  function sucStop() { clearTimeout(SUC.timer); SUC.timer = null; }
+  async function sucPoll() {
+    clearTimeout(SUC.timer); SUC.timer = null; SUC.loading = true;
+    try {
+      if (!SUC.rooms) {
+        const r = await api('GET', '/api/rooms'); SUC.rooms = r.rooms || [];
+        if (!SUC.rooms.some(x => x.id === SUC.roomId)) { SUC.roomId = SUC.rooms[0] ? SUC.rooms[0].id : ''; SUC.cursor = 0; SUC.resp.clear(); }
+      }
+      if (SUC.roomId) {
+        const d = await api('GET', `/api/rooms/${SUC.roomId}/snapshot?after=${SUC.cursor}`);
+        SUC.offset = d.serverNow - Date.now();
+        for (const a of d.activities) SUC.states[a.id] = a;
+        for (const x of d.responses || []) SUC.resp.set(x.id, { a: x.activityId, r: x.roundId });
+        SUC.cursor = d.cursor || SUC.cursor;
+      }
+      SUC.error = '';
+    } catch (e) { SUC.error = e.message; SUC.rooms = SUC.rooms && SUC.rooms.length ? SUC.rooms : null; }
+    SUC.loading = false;
+    if (A.tab === 'sucesso') { SUC.timer = setTimeout(sucPoll, document.hidden ? 6000 : 2000); render(); }
+  }
+  const sucCount = k => { const st = SUC.states[k]; let n = 0; if (st) for (const v of SUC.resp.values()) if (v.a === k && v.r === st.roundId) n++; return n; };
+  function sucLeft(st) {
+    if (!st) return null;
+    if (st.phase === 'run' && st.endsAt) return Math.max(0, Math.ceil((st.endsAt - Date.now() - SUC.offset) / 1000));
+    return st.id === 'd1' ? null : st.remainingSeconds;
+  }
+  function sucBanner() {
+    const p = A.O && A.O.state.presentation;
+    if (!p) return '';
+    const d = DYN[p.activityId] || DYN.d1;
+    return `<div class="card suc-live" style="--c:${d.c}"><div class="suc-live-row"><div><div class="kicker">🚀 No telão e nos celulares agora</div>
+      <h2 style="margin:4px 0 2px">De Volta para o Sucesso · Dinâmica ${d.n} · ${esc(p.title)}</h2>
+      <p class="small">${esc(p.question)} · A viagem do bloco Conexões fica pausada e volta sozinha quando você voltar ao Townhall.</p></div>
+      <div class="actions"><a class="btn ghost sm" href="/painel?sala=${encodeURIComponent(p.roomId)}&d=${encodeURIComponent(p.activityId)}" target="_blank">Painel 3D ↗</a><button class="btn sm" data-act="sucStop">⏮ Voltar ao Townhall</button></div></div></div>`;
+  }
+  function vSucesso() {
+    const pres = A.O.state.presentation, room = (SUC.rooms || []).find(r => r.id === SUC.roomId);
+    const clock = new Date(Date.now() + A.offset).toTimeString().slice(0, 5);
+    const rooms = SUC.rooms || [];
+    const cards = Object.keys(DYN).map(k => {
+      const d = DYN[k], st = SUC.states[k], live = pres && pres.roomId === SUC.roomId && pres.activityId === k;
+      const n = sucCount(k), left = sucLeft(st), ph = st ? st.phase : null;
+      return `<div class="suc-card ${live ? 'live' : ''}" style="--c:${d.c}">
+        <div class="suc-head"><span class="n">${d.n}</span><div><div class="t">Dinâmica ${+d.n}: ${esc(st ? st.title : '')}</div><div class="small">${esc(d.hint)}</div></div>${live ? '<span class="pill hot">● no telão</span>' : ''}</div>
+        <p class="q">${esc(st ? st.question : 'Carregando…')}</p>
+        <div class="suc-stats"><div class="tcx"><b>${String(n).padStart(3, '0')}</b><span>RESPOSTAS</span></div>${left !== null && left !== undefined ? `<div class="tcx ${ph === 'run' && left <= 30 ? 'alert' : ''}" style="--c:var(--yellow)"><b class="suc-left" data-k="${k}">${fmt(left)}</b><span>RECEBIMENTO</span></div>` : ''}<span class="suc-ph" data-phase="${ph || ''}">${ph ? SUC_PHASE[ph] : '—'}</span></div>
+        <div class="actions">
+          ${live ? `<button class="btn sm ghost" data-act="sucStop">⏮ Voltar ao Townhall</button>` : `<button class="btn sm cyan" data-act="sucShow" data-k="${k}" ${SUC.roomId ? '' : 'disabled'}>📺 Liberar no telão e celulares</button>`}
+          <button class="btn sm" data-act="sucCmd" data-cmd="start" data-k="${k}" ${st && (ph === 'idle' || ph === 'paused') ? '' : 'disabled'}>▶ ${ph === 'paused' ? 'Retomar' : k === 'd1' ? 'Abrir' : 'Iniciar'} recebimento${k === 'd1' || ph === 'paused' ? '' : ' (2 min)'}</button>
+          <button class="btn sm ghost" data-act="sucCmd" data-cmd="pause" data-k="${k}" ${ph === 'run' ? '' : 'disabled'}>❚❚ Pausar</button>
+          <button class="btn sm ghost" data-act="sucCmd" data-cmd="end" data-k="${k}" ${st && ph !== 'done' ? '' : 'disabled'}>⏭ Encerrar</button>
+          <button class="btn sm ghost" data-act="sucCmd" data-cmd="reset" data-k="${k}" ${ph === 'done' || ph === 'paused' ? '' : 'disabled'}>↺ Reiniciar</button>
+        </div>
+        <div class="actions suc-links"><a href="/painel?sala=${encodeURIComponent(SUC.roomId)}&d=${k}" target="_blank" ${SUC.roomId ? '' : 'aria-disabled="true"'}>🚗 Abrir no painel 3D ↗</a><a href="#" data-act="sucCopy" data-k="${k}">🔗 Copiar link de resposta</a><a href="#" class="danger" data-act="sucCmd" data-cmd="clear" data-k="${k}">🗑 Limpar respostas</a></div>
+      </div>`;
+    }).join('');
+    return `${sucBanner()}
+      <div class="card suc-hero">
+        <div class="suc-circuits"><div class="tcx" style="--c:var(--yellow)"><b>2026</b><span>LAST TIME DEPARTED</span></div><div class="tcx" style="--c:var(--cyan)"><b>${clock}</b><span>PRESENT TIME</span></div><div class="tcx" style="--c:var(--orange)"><b>2027</b><span>DESTINATION TIME</span></div></div>
+        <h1 class="suc-title">DE VOLTA PARA O SUCESSO</h1>
+        <p class="small center">As quatro dinâmicas do painel do Lucas. <b>Liberar</b> põe a pergunta + QR no telão e o botão "Responder agora" em todos os celulares; <b>Voltar ao Townhall</b> devolve o evento de onde parou. O carro, a nuvem de palavras, o sorteio e o tempo de fala ficam no <a href="/painel${SUC.roomId ? '?sala=' + encodeURIComponent(SUC.roomId) : ''}" target="_blank">painel 3D ↗</a> (mesma senha).</p>
+        <div class="actions suc-room">
+          ${rooms.length ? `<label class="small">Sala <select class="input" data-act="sucRoom">${rooms.map(r => `<option value="${esc(r.id)}" ${r.id === SUC.roomId ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : `<span class="small">${SUC.rooms ? 'Nenhuma sala ainda.' : 'Carregando salas…'}</span>`}
+          <button class="btn sm ${rooms.length ? 'ghost' : ''}" data-act="sucNewRoom">＋ ${rooms.length ? 'Nova sala' : 'Criar a sala do evento'}</button>
+          ${room ? `<span class="small">${esc(room.name)} · respostas salvas no servidor</span>` : ''}
+        </div>
+        ${SUC.error ? `<div class="warn">⚠ ${esc(SUC.error)}</div>` : ''}
+      </div>
+      <div class="suc-grid">${cards}</div>`;
+  }
+  setInterval(() => { if (A.tab !== 'sucesso') return; document.querySelectorAll('.suc-left').forEach(b => { const left = sucLeft(SUC.states[b.dataset.k]); if (left !== null && left !== undefined) b.textContent = fmt(left); }); }, 500);
+
   function vControl() {
     const O = A.O, s = O.state, c = s.conn, ph = c.phase, t = c.timer, S = O.settings;
     const late = O.people.filter(p => p.late);
@@ -160,7 +250,7 @@
       <div class="actions" style="margin-top:10px">${[['auto', '🔁 Automático'], ['clock', '🕰 Relógio'], ['logo', '⚡ Logo']].map(([k, l]) => `<button class="btn sm ${scene === k ? '' : 'ghost'}" data-act="setScene" data-scene="${k}">${l}</button>`).join('')}</div>
       <label class="sw" style="margin-top:10px"><input type="checkbox" data-act="toggleMutual" ${S.showMutualOnScreen ? 'checked' : ''}> Mostrar os nomes das conexões mútuas no telão (só primeiros nomes)</label></div>`;
 
-    return `
+    return `${sucBanner()}
       <div class="card"><h2>Blocos do townhall</h2>
         ${blockCard('welcome', welcome)}
         ${blockCard('standby', standby)}
@@ -402,7 +492,26 @@
         return run(async () => { await act('settings', { settings: { autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda } }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
       }
       case 'saveMessage': case 'showMessage': return run(() => act('setMessage', { message: { emoji: $('#msgEmoji').value, title: $('#msgTitle').value, body: $('#msgBody').value }, show: act_ === 'showMessage' }), act_ === 'showMessage' ? 'Mensagem exibida nos celulares' : 'Mensagem salva');
-      case 'logout': localStorage.removeItem('bttf.admin'); location.reload(); return;
+      case 'logout': localStorage.removeItem('bttf.admin'); api('POST', '/api/admin/logout').finally(() => location.reload()); return;
+      case 'sucShow': return run(async () => { await api('POST', '/api/admin/presentation', { roomId: SUC.roomId, activityId: el.dataset.k }); sucPoll(); }, 'Dinâmica no telão e nos celulares 🚀');
+      case 'sucStop': return run(async () => { await api('POST', '/api/admin/presentation', { roomId: null }); sucPoll(); }, 'De volta ao townhall');
+      case 'sucCmd': {
+        const k = el.dataset.k, cmd = el.dataset.cmd;
+        const go = () => run(async () => { await api('POST', `/api/rooms/${SUC.roomId}/activities/${k}/command`, { action: cmd }); await sucPoll(); });
+        if (cmd === 'clear') return confirm('Apagar as respostas desta dinâmica? Não dá para desfazer.') && go();
+        if (cmd === 'end') return confirm('Encerrar o recebimento agora? No painel 3D o carro entra no portal.') && go();
+        return go();
+      }
+      case 'sucRoom': SUC.roomId = el.value; localStorage.setItem('bttf.sucessoRoom', SUC.roomId); SUC.cursor = 0; SUC.resp.clear(); SUC.states = {}; return sucPoll();
+      case 'sucNewRoom': {
+        const name = prompt('Nome da sala (ex.: Townhall · Novembro 2026):', 'Townhall · De Volta para o Sucesso');
+        if (!name) return;
+        return run(async () => { const r = await api('POST', '/api/rooms', { name }); SUC.roomId = r.id; localStorage.setItem('bttf.sucessoRoom', r.id); SUC.rooms = null; SUC.cursor = 0; SUC.resp.clear(); SUC.states = {}; await sucPoll(); }, 'Sala criada');
+      }
+      case 'sucCopy': {
+        const url = `${location.origin}/participar/${SUC.roomId}?d=${el.dataset.k}`;
+        return navigator.clipboard.writeText(url).then(() => toast('Link copiado'), () => prompt('Copie o link:', url));
+      }
       case 'addPerson': return dialog(personForm(), () => { $('#fSave').onclick = () => run(async () => { await api('POST', '/api/admin/people', personFromForm()); closeDialog(); }, 'Pessoa adicionada'); });
       case 'editPerson': { const p = O.people.find(x => x.id === +id); return dialog(personForm(p), () => { $('#fSave').onclick = () => run(async () => { await api('PUT', `/api/admin/people/${id}`, personFromForm()); closeDialog(); }, 'Salvo'); }); }
       case 'toggleCheckin': return run(() => api('PUT', `/api/admin/people/${id}`, { checkedIn: el.dataset.v === '1' }));
@@ -446,9 +555,9 @@
     const tab = e.target.closest('#tabs [data-tab]'); if (tab) { A.tab = tab.dataset.tab; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b === tab)); render(true); return; }
     const go = e.target.closest('[data-go]'); if (go) { e.preventDefault(); A.tab = go.dataset.go; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === A.tab)); render(true); return; }
     const rt = e.target.closest('[data-roundtab]'); if (rt) { A.round = +rt.dataset.roundtab; render(true); return; }
-    const el = e.target.closest('[data-act]'); if (el && el.tagName !== 'INPUT') onAction(el);
+    const el = e.target.closest('[data-act]'); if (el && el.tagName !== 'INPUT' && el.tagName !== 'SELECT') { if (el.tagName === 'A') e.preventDefault(); onAction(el); }
   });
-  document.addEventListener('change', e => { const el = e.target.closest('input[data-act]'); if (el) onAction(el); });
+  document.addEventListener('change', e => { const el = e.target.closest('input[data-act],select[data-act]'); if (el) onAction(el); });
   document.addEventListener('input', e => { if (e.target.id === 'peopleQ') { A.peopleQ = e.target.value; render(true); } });
   document.addEventListener('pointerdown', () => { A.pressing = true; }, true);
   document.addEventListener('pointerup', () => { A.pressing = false; }, true);

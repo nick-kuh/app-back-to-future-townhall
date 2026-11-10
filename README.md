@@ -9,6 +9,39 @@ cálculo automático de quem cada pessoa deve procurar depois.
 - **Painel do Doc** (apresentador/admin): `http://SEU-SERVIDOR/admin.html` · senha padrão `doc1985`
   (troque definindo a variável de ambiente `ADMIN_PASSWORD`).
 
+## 🚀 De Volta para o Sucesso (parte 2 do townhall)
+
+As quatro dinâmicas ao vivo do projeto do Lucas
+([`LucasBarbosaMelo/de-volta-para-o-sucesso-townhall`](https://github.com/LucasBarbosaMelo/de-volta-para-o-sucesso-townhall))
+agora rodam **dentro deste mesmo app**, no mesmo servidor e com a mesma senha:
+
+| Dinâmica | Pergunta |
+|---|---|
+| 01 · Antes de Partir | O que você considera um sucesso? |
+| 02 · Look Back | Olhando para 2026, o que fez você pensar: "isso foi um sucesso"? |
+| 03 · Uso de IA | O que você fez (projeto, agente ou aprendizado) em 2026 com a ajuda da IA? |
+| 04 · Look Ahead | O que precisaria ter acontecido para você dizer: "2027 foi um sucesso"? |
+
+- **Painel do Doc → aba 🚀 Sucesso**: cria a sala do evento, mostra as quatro dinâmicas com contagem de
+  respostas e cronômetro, e tem **📺 Liberar no telão e celulares**, iniciar/pausar/encerrar/reiniciar o
+  recebimento, copiar o link e **Voltar ao Townhall**. Enquanto uma dinâmica está liberada, a viagem do
+  bloco Conexões fica pausada e os blocos travados; ao voltar, tudo continua de onde parou.
+- **Painel 3D** (`/painel`): o painel original do Lucas, sem alterações: carro que se energiza a cada
+  resposta (flux capacitor, 1,21 gigawatts), portal, nuvem de palavras 3D, sorteio de viajante, tempo de
+  fala e download das respostas (.txt/Word). Entra com a senha do Painel do Doc.
+- **Celulares**: quando o Doc libera, todos os celulares mostram a pergunta e o botão **Responder agora**,
+  que abre o formulário do Lucas (`/participar/<sala>`, sem login).
+- **Telão**: pergunta + QR + contagem + cronômetro + o carro 3D carregando a cada resposta e entrando no
+  portal quando o recebimento termina. As últimas respostas aparecem quando o telão está aberto no
+  navegador logado no Painel do Doc.
+
+**Mesmo visual nos dois:** o motor 3D do painel do Lucas virou `public/delorean3d.js` e é usado no
+townhall também: céu synthwave com montanhas e estrada no fundo do telão e dos celulares, e o carro
+carregando o flux capacitor a cada check-in (telão e celular) e entrando no portal no "88 MPH!".
+
+O código do Lucas está em [`sucesso/`](sucesso/) (API, banco, páginas e testes originais); a ponte com
+este servidor está em `server/sucesso.js`. As respostas ficam em `data/sucesso.db` (SQLite).
+
 ## Como rodar
 
 Requisitos: Node.js 22.13 ou mais novo (usa o SQLite embutido do Node, sem dependências nativas).
@@ -28,7 +61,7 @@ Variáveis de ambiente:
 | `ADMIN_PASSWORD` | `doc1985`  | senha do Painel do Doc                    |
 | `DATA_DIR`       | `./data`   | pasta do banco SQLite                     |
 
-Testes (algoritmo de duplas + fluxo completo do evento):
+Testes (algoritmo de duplas + fluxo completo do evento + integração com o Sucesso + testes originais do Lucas):
 
 ```bash
 npm test
@@ -62,7 +95,10 @@ entre dispositivos). O servidor usa WebSocket (Socket.IO) para avisar os celular
 |---|---|---|
 | `/` | viajantes (celular) | check-in pelo nome, blocos, viagens, avaliação, resultado |
 | `/telao.html` | projetor | QR do check-in, circuitos de tempo, cronômetros gigantes, 88 MPH, avaliação, conexões, créditos; modos "relógio", "logo" e "frases" para servir de fundo durante PPT ou fala |
-| `/admin.html` | apresentador (notebook) | Painel do Doc |
+| `/admin.html` | apresentador (notebook) | Painel do Doc (inclui a aba 🚀 Sucesso) |
+| `/painel` | apresentador | painel 3D do De Volta para o Sucesso (mesma senha) |
+| `/participar/<sala>` | participantes | formulário de resposta das dinâmicas (sem login) |
+| `/ao-vivo` | todos | página de entrada do De Volta para o Sucesso |
 
 Os viajantes nunca veem área, WL ou time uns dos outros: esses dados ficam só no painel, para o sorteio.
 
@@ -114,6 +150,9 @@ server/queues.js     filas de perguntas por dupla (eras, sem repetir, rotação)
 server/results.js    ranking → conexões
 server/db.js         SQLite (node:sqlite) e esquema
 server/seed/         lista de pessoas e banco de perguntas iniciais
-public/              app do viajante (index.html, app.*), telão (telao.*) e Painel do Doc (admin.*)
+server/sucesso.js    ponte com o De Volta para o Sucesso (API do Lucas sem alterações, login do Doc)
+public/              app do viajante (index.html, app.*), telão (telao.*), Painel do Doc (admin.*)
+public/delorean3d.js motor 3D (céu, estrada, carro) extraído do painel do Sucesso
+sucesso/             projeto do Lucas: server/api.js, drizzle/, public/ (painel, participar), tests/
 scripts/             testes
 ```

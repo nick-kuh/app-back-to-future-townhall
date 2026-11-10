@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0a1f">
+<meta name="description" content="Um townhall para celebrar 2026, compartilhar aprendizados e construir o sucesso em 2027.">
+<title>De Volta para o Sucesso · Townhall ao vivo</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0a1f;--text:#f3f0ff;--muted:#bcb5da;--cy:#22d3ee;--mg:#ff2e88;--yl:#ffd23f;--or:#ff6b1a}*{box-sizing:border-box}body{margin:0;min-height:100svh;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 28%,#58225355,transparent 65%),var(--bg);color:var(--text);font:16px/1.6 "Segoe UI",Arial,sans-serif}body:before{content:"";position:fixed;inset:auto 0 0;height:28vh;background-image:linear-gradient(var(--mg) 1px,transparent 1px),linear-gradient(90deg,var(--mg) 1px,transparent 1px);background-size:50px 50px;opacity:.15;mask-image:linear-gradient(transparent,#000);pointer-events:none}main{position:relative;max-width:830px;width:100%;padding:48px 24px;text-align:center}.time{display:flex;justify-content:center;align-items:center;gap:24px;font:700 14px/1 Consolas,monospace;letter-spacing:3px;color:var(--cy)}.time span:last-child{color:var(--or)}.time i{display:block;height:1px;width:70px;background:var(--mg)}.tag{margin:25px 0 12px;color:var(--cy);font:700 12px/1.5 Consolas,monospace;letter-spacing:4px}h1{font:900 italic clamp(38px,8vw,72px)/1 "Arial Black",Arial,sans-serif;letter-spacing:-2px;margin:0;color:var(--yl);text-shadow:0 4px 0 #9b234f}.intro{max-width:570px;margin:24px auto 32px;color:var(--muted);font-size:18px}.cards{display:grid;grid-template-columns:1fr 1fr;gap:18px;text-align:left}.card{border:1px solid #3c3156;background:linear-gradient(145deg,#231c3fee,#141127ee);border-radius:16px;padding:25px}.card:first-child{border-top:3px solid var(--cy)}.card:last-child{border-top:3px solid var(--mg)}.label{font:700 11px/1.4 Consolas,monospace;letter-spacing:2px;text-transform:uppercase;color:var(--cy);margin:0 0 10px}.card:last-child .label{color:#ff8bbc}h2{font-size:22px;line-height:1.3;margin:0 0 12px}.card p:not(.label){font-size:14px;color:var(--muted);margin:0 0 20px}.action{display:inline-flex;align-items:center;justify-content:center;min-height:46px;border:0;border-radius:8px;padding:11px 16px;background:var(--yl);color:#171025;text-decoration:none;font:800 14px/1.3 "Segoe UI",Arial}.action:hover{background:#ffe174}.action:focus-visible{outline:3px solid var(--cy);outline-offset:5px}.steps{font-size:13px;color:#d3c9e9;border-top:1px solid #3c3156;padding-top:15px}.note{font-size:12px;color:var(--muted);margin:24px 0 0}@media(max-width:560px){main{padding:35px 20px}.cards{grid-template-columns:1fr;gap:14px}.intro{font-size:16px;margin-bottom:26px}.card{padding:22px}.time{gap:18px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+.action[hidden]{display:none}.back-link{display:inline-block;margin-top:12px;padding:10px 0;color:var(--cy);font-size:14px}.back-link:focus-visible{outline:3px solid var(--cy);outline-offset:4px}
+</style>
+</head>
+<body>
+<main>
+  <div class="time"><span>2026</span><i aria-hidden="true"></i><span>2027</span></div>
+  <p class="tag">TOWNHALL · AO VIVO</p>
+  <h1>DE VOLTA<br>PARA O SUCESSO</h1>
+  <p class="intro">Celebrar o que conquistamos. Compartilhar o que aprendemos. Imaginar o que vem pela frente.</p>
+  <div class="cards">
+    <section class="card" aria-labelledby="participantTitle">
+      <p class="label">Para participar</p>
+      <h2 id="participantTitle">Escaneie o QR no telão.</h2>
+      <p id="participantDetails">Abra a câmera do celular e aponte para o QR code da dinâmica. Você entra direto na sala, sem precisar fazer login.</p>
+      <div class="steps" id="qrSteps">Leia a pergunta · Envie sua ideia · Acompanhe ao vivo</div>
+      <a class="action" id="liveLink" hidden>Responder agora <span aria-hidden="true">&nbsp;→</span></a>
+    </section>
+    <section class="card" aria-labelledby="presenterTitle">
+      <p class="label">Para apresentar</p>
+      <h2 id="presenterTitle">Conduza a viagem.</h2>
+      <p>Abra sua sala, apresente as quatro dinâmicas e acompanhe as respostas chegando ao painel.</p>
+      <a class="action" href="/painel">Abrir painel do apresentador <span aria-hidden="true">&nbsp;→</span></a>
+    </section>
+  </div>
+  <p class="note">Sua próxima conquista começa com uma ideia compartilhada.</p>
+  <a class="back-link" href="/">← Voltar ao app dos viajantes</a>
+</main>
+<script src="/townhall-sync.js"></script>
+<script>
+(() => {
+  const title = document.getElementById('participantTitle');
+  const details = document.getElementById('participantDetails');
+  const steps = document.getElementById('qrSteps');
+  const link = document.getElementById('liveLink');
+  const defaultTitle = title.textContent;
+  const defaultDetails = details.textContent;
+  function update(state) {
+    const presentation = state?.presentation;
+    const active = typeof presentation?.roomId === 'string' && presentation.roomId.length === 36
+      && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(presentation.roomId)
+      && ['d1', 'd2', 'd3', 'd4'].includes(presentation.activityId);
+    if (active) link.href = '/participar/' + presentation.roomId + '?d=' + presentation.activityId;
+    title.textContent = active ? presentation.title : defaultTitle;
+    details.textContent = active ? presentation.question : defaultDetails;
+    steps.hidden = active;
+    link.hidden = !active;
+  }
+  TownhallSync.poll(signal => TownhallSync.request('/api/state', {signal}), update, () => update(null), 1800);
+})();
+</script>
+</body>
+</html>

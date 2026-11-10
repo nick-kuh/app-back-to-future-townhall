@@ -37,7 +37,12 @@
     { y: '1985-A', f: 'FILME II · LINHA ALTERNATIVA', d: 'Biff rouba o almanaque e Hill Valley vira uma cidade sombria. A missão: consertar o tempo.' },
   ];
 
-  const S = { state: null, offset: 0, socket: null, key: '', people: null, eraIdx: 0, quoteIdx: 0 };
+  const S = { state: null, offset: 0, socket: null, key: '', people: null, eraIdx: 0, quoteIdx: 0,
+    car: null, energy: 0, checked: null, live: null, liveCount: null, ended: false, pollT: null, replies: '' };
+  // De Volta para o Sucesso: as quatro dinâmicas (mesmas cores do painel do Lucas)
+  const DYN = { d1: { n: '01', c: 'var(--cyan)' }, d2: { n: '02', c: 'var(--yellow)' }, d3: { n: '03', c: 'var(--magenta)' }, d4: { n: '04', c: 'var(--orange)' } };
+  const TARGET = 20; // respostas para energia máxima (igual ao painel)
+  const PHASES = { idle: 'AGUARDANDO INÍCIO', run: 'RECEBENDO RESPOSTAS', paused: 'RECEBIMENTO PAUSADO', done: 'RECEBIMENTO ENCERRADO' };
   const serverNow = () => Date.now() + S.offset;
   const ledNow = (sec = false) => { const d = new Date(serverNow()); return `${MONTHS[d.getMonth()]} ${pad(d.getDate())} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}${sec ? ':' + pad(d.getSeconds()) : ''}`; };
   const roundEra = r => (S.state && S.state.conn.eras[ERA_KEYS[(Math.max(1, r) - 1) % 3]]) || { label: '', year: '', led: '' };
@@ -49,6 +54,20 @@
     S.socket = io({ transports: ['websocket', 'polling'], tryAllTransports: true });
     S.socket.on('connect', () => S.socket.emit('hello', {}, res => { if (res && res.state) { S.state = res.state; S.offset = res.now - Date.now(); render(); } }));
     S.socket.on('state', st => { S.state = st; S.offset = st.now - Date.now(); render(); });
+    S.socket.on('sucesso:pulse', () => pollScreen());
+  }
+  // Dinâmica do Sucesso no telão: contagem, cronômetro e últimas respostas (estas só com o login do Doc neste navegador).
+  async function pollScreen() {
+    clearTimeout(S.pollT);
+    const p = S.state && S.state.presentation;
+    if (!p) { S.live = null; return; }
+    try {
+      const d = await (await fetch('/api/sucesso/screen', { cache: 'no-store', credentials: 'same-origin' })).json();
+      const a = d.liveActivity;
+      S.live = a && a.roomId === p.roomId && a.activityId === p.activityId ? a : null;
+      patchProjection();
+    } catch { /* tenta de novo */ }
+    S.pollT = setTimeout(pollScreen, document.hidden ? 5000 : 1500);
   }
   async function loadPeople() { try { S.people = await (await fetch('/api/people')).json(); } catch { S.people = []; } }
 
@@ -87,14 +106,100 @@
     return `<div class="qrbox">${svg ? `<div class="qr">${svg}</div>` : ''}<div class="url">${esc(url.replace(/^https?:\/\//, ''))}</div></div>`;
   }
 
+  // Carro 3D + flux capacitor (do painel "De Volta para o Sucesso")
+  const carBox = (cls = '', extra = '') => `<div class="carbox ${cls}"><canvas class="car3d" data-car></canvas>${extra}
+      <div class="energy"><div class="lbl"><span><svg class="fluxi" viewBox="0 0 24 24"><line x1="4" y1="4" x2="12" y2="12"/><line x1="20" y1="4" x2="12" y2="12"/><line x1="12" y1="12" x2="12" y2="21"/></svg>FLUX CAPACITOR</span><span id="gw">0.00 / 1.21 GIGAWATTS</span></div><div class="ebar" id="ebarW"><i id="ebar"></i></div></div></div>`;
+  function setEnergy(e, animate) {
+    e = Math.max(0, Math.min(1, e || 0));
+    const gain = e - S.energy; S.energy = e;
+    const bar = $('#ebar'), gw = $('#gw');
+    if (bar) bar.style.width = (e * 100).toFixed(1) + '%';
+    if (gw) gw.textContent = e >= 1 ? '⚡ 1.21 GIGAWATTS · PRONTO PARA A VIAGEM' : `${(e * 1.21).toFixed(2)} / 1.21 GIGAWATTS`;
+    if (!S.car) return;
+    if (animate && gain > 0) {
+      S.car.charge(e);
+      const box = $('.carbox'), w = $('#ebarW');
+      if (box) { const g = document.createElement('div'); g.className = 'gwplus'; g.textContent = `+${(gain * 1.21).toFixed(2)} GW ⚡`; box.appendChild(g); setTimeout(() => g.remove(), 1300); }
+      if (w) { w.classList.remove('hit'); void w.offsetWidth; w.classList.add('hit'); }
+    } else S.car.setEnergy(e);
+  }
+  function mountCar(key) {
+    const cv = $('[data-car]');
+    S.car = cv && window.Delorean3D ? Delorean3D.car(cv) : null;
+    S.energy = 0;
+    if (!S.car) return;
+    if (key === 'welcome') setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), false);
+    if (key === 'roundEnd') { setEnergy(1, false); setTimeout(() => S.car && S.car.doWarp(), 500); }
+    if (key === 'projection') { S.liveCount = null; S.ended = false; S.replies = ''; patchProjection(); }
+  }
+  // faíscas contínuas no carro (mais energia, mais faíscas)
+  setInterval(() => { if (S.car && !document.hidden && S.energy > 0 && Math.random() < S.energy * .7) S.car.spark(); }, 700);
+
+  function projectionScene(p) {
+    const d = DYN[p.activityId] || DYN.d1;
+    const url = new URL('/participar/' + encodeURIComponent(p.roomId), location.origin);
+    url.searchParams.set('d', p.activityId);
+    let svg = '';
+    try { const q = qrcode(0, 'M'); q.addData(url.href); q.make(); svg = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch { svg = ''; }
+    return `<section class="live-projection" style="--c:${d.c}">
+      <div class="kicker">DE VOLTA PARA O SUCESSO · DINÂMICA ${d.n} · ${esc(String(p.title).toUpperCase())}</div>
+      <h1 class="pq">${esc(p.question)}</h1>
+      <div class="projection-body">
+        <div class="projection-entry">
+          ${svg ? `<div class="qr">${svg}</div>` : `<a class="url" href="${esc(url.href)}">${esc(url.href)}</a>`}
+          <div class="scan">▲ ESCANEIE E RESPONDA ▲</div>
+          <div class="tcbox"><b id="pCount">000</b><span>RESPOSTAS</span></div>
+        </div>
+        ${carBox('wide', `<div class="feed" id="pFeed"></div>
+          <div class="phase" id="pPhase">SINCRONIZANDO…</div>
+          <div class="tcbox timer" id="pTimerW" hidden><b id="pTimer">--:--</b><span>RECEBIMENTO</span></div>
+          <div class="portal-msg" id="pDone">${p.activityId === 'd4' ? 'DESTINO: 2027 ⚡' : p.activityId === 'd1' ? 'PRONTOS PARA PARTIR ⚡' : 'MISSÃO CUMPRIDA ⚡'}</div>`)}
+      </div>
+    </section>`;
+  }
+  function patchProjection() {
+    const cnt = $('#pCount'); if (!cnt) return;
+    const a = S.live, n = a && Number.isSafeInteger(a.responseCount) ? a.responseCount : null;
+    cnt.textContent = n === null ? '---' : String(n).padStart(3, '0');
+    const ph = $('#pPhase'); ph.textContent = a ? PHASES[a.phase] || '' : 'SINCRONIZANDO…'; ph.dataset.phase = a ? a.phase : '';
+    if (n !== null) { setEnergy(n / TARGET, S.liveCount !== null && n > S.liveCount); S.liveCount = n; }
+    if (a && a.phase === 'done' && !S.ended) {
+      S.ended = true;
+      if (S.car) { S.car.doWarp(); setTimeout(() => { if (S.ended) { flash(); $('.carbox') && $('.carbox').classList.add('arrived'); } }, 2300); }
+      else $('.carbox') && $('.carbox').classList.add('arrived');
+    } else if (a && a.phase !== 'done' && S.ended) {
+      S.ended = false; $('.carbox') && $('.carbox').classList.remove('arrived'); if (S.car) S.car.reset(S.energy);
+    }
+    const replies = a && Array.isArray(a.latestResponses) ? a.latestResponses.map(r => r && r.answer).filter(x => typeof x === 'string' && x.trim()).slice(0, 3) : [];
+    const key = JSON.stringify(replies);
+    if (key !== S.replies) {
+      const fresh = S.replies !== '' && replies[0] && replies[0] !== (JSON.parse(S.replies || '[]')[0]);
+      S.replies = key;
+      $('#pFeed').innerHTML = replies.map((r, i) => `<div class="${i === 0 && fresh ? 'new' : ''}">${esc(r)}</div>`).join('');
+    }
+    tickProjection();
+  }
+  function tickProjection() {
+    const w = $('#pTimerW'); if (!w) return;
+    const a = S.live;
+    const running = a && a.phase === 'run' && Number.isFinite(a.endsAt);
+    const paused = a && a.phase === 'paused' && a.activityId !== 'd1' && Number.isFinite(a.remainingSeconds);
+    w.hidden = !running && !paused;
+    if (w.hidden) return;
+    const sec = running ? Math.max(0, Math.ceil((a.endsAt - serverNow()) / 1000)) : a.remainingSeconds;
+    $('#pTimer').textContent = fmt(sec);
+    w.classList.toggle('alert', running && sec <= 30);
+  }
+
   /* ---------- cenas ---------- */
   function sceneFor() {
     const st = S.state, c = st.conn, sc = (st.screen && st.screen.scene) || 'auto';
+    if (st.presentation) return ['projection', projectionScene(st.presentation)];
     if (sc === 'clock') return ['clock', sceneClock()];
     if (sc === 'logo') return ['logo', `${logo()}${flux()}`];
 
     const b = st.block;
-    if (b === 'welcome') return ['welcome', `${logo()}${qrBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div><div class="bar"><i id="countBar" style="width:${Math.round(100 * st.counts.checkedIn / Math.max(1, st.counts.total))}%"></i></div>`];
+    if (b === 'welcome') return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox()}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div></div></div>`];
     if (b === 'standby') return ['clock', sceneClock()];
     if (b === 'message') { const m = st.message; return ['message', `<div class="msg"><div class="e">${esc(m.emoji || '📣')}</div></div><div class="title">${esc(m.title)}</div><div class="msg"><p>${linkify(m.body)}</p></div>`]; }
     if (b === 'closing') return ['closing', `<div class="title">FIM DA VIAGEM</div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
@@ -103,7 +208,7 @@
     if (c.phase === 'idle' || c.phase === 'ready') return ['prep', `<div class="kicker">BLOCO CONEXÕES</div><div class="title">ROTAS TEMPORAIS</div>${flux()}`];
     if (c.phase === 'matching') return ['matching', `<div class="kicker">VIAGEM ${r}/3 · ${esc(era.label)} · ${esc(era.year)}</div><div class="title">ENCONTRE SUA DUPLA</div>${t && t.kind === 'matching' ? huge('matching', 'amber') : ''}<div class="sub">Encontre quem tem a mesma placa no celular.</div>`];
     if (c.phase === 'talk') return ['talk', `<div class="kicker">VIAGEM ${r}/3 · ${esc(era.label)} · ${esc(era.year)}</div><div class="rowx">${gauge()}${huge('talk')}</div>`];
-    if (c.phase === 'roundEnd') return ['roundEnd', `<div class="title">88 MPH!</div>${t && t.kind === 'break' ? huge('break', 'amber') : ''}`];
+    if (c.phase === 'roundEnd') return ['roundEnd', `<div class="title">88 MPH!</div>${carBox('warp')}${t && t.kind === 'break' ? huge('break', 'amber') : ''}`];
     if (c.phase === 'ranking') return ['ranking', `<div class="kicker">AVALIAÇÃO</div><div class="title cy">AVALIE NO CELULAR</div><div class="count"><span id="rankDone">${c.rankingDone}</span><small> / ${c.rankingTotal} avaliaram</small></div><div class="bar"><i id="rankBar" style="width:${Math.round(100 * c.rankingDone / Math.max(1, c.rankingTotal))}%"></i></div>${t && t.kind === 'ranking' ? huge('ranking', 'green') : ''}`];
     if (c.phase === 'results') return ['results', `<div class="kicker">CONEXÕES CALCULADAS</div><div class="title">OLHE O CELULAR</div><div class="sub"><b>${c.mutualCount}</b> conexões mútuas</div>${c.mutualPairs && c.mutualPairs.length ? `<div class="mutual">${c.mutualPairs.map(p => `<span>${esc(p[0].split(' ')[0])} ⚡ ${esc(p[1].split(' ')[0])}</span>`).join('')}</div>` : ''}`];
     return ['clock', sceneClock()];
@@ -125,21 +230,28 @@
   function render() {
     if (!S.state) return;
     const [key, html] = sceneFor();
-    const k = `${key}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
+    const pr = S.state.presentation;
+    const k = `${key}|${pr ? pr.roomId + pr.activityId : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
     if (k !== S.key) {
       S.key = k; $('#scene').innerHTML = html;
-      if (key === 'roundEnd' || key === 'results') { flash(); drive(); }
+      $('#scene').classList.toggle('projection-scene', key === 'projection');
+      $('#scene').dataset.key = key;
+      mountCar(key);
+      if (key === 'roundEnd' || key === 'results') { flash(); if (key === 'results') drive(); }
       if (key === 'matching') drive();
+      if (key === 'projection') pollScreen(); else { clearTimeout(S.pollT); S.live = null; }
     } else {
-      const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; const b = $('#countBar'); if (b) b.style.width = Math.round(100 * S.state.counts.checkedIn / Math.max(1, S.state.counts.total)) + '%'; }
+      const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), S.checked !== null && S.state.counts.checkedIn > S.checked); }
       const rd = $('#rankDone'); if (rd) { rd.textContent = S.state.conn.rankingDone; const b = $('#rankBar'); if (b) b.style.width = Math.round(100 * S.state.conn.rankingDone / Math.max(1, S.state.conn.rankingTotal)) + '%'; }
     }
+    S.checked = S.state.counts.checkedIn;
     tick();
   }
   function tick() {
     $('#osdNow').textContent = ledNow();
     const led = $('#ledNow'); if (led) led.textContent = ledNow(true);
     if (!S.state) return;
+    tickProjection();
     const t = S.state.conn.timer, wrap = $('#cdwrap');
     if (!t || !wrap || wrap.dataset.kind !== t.kind) return;
     const left = t.paused ? t.remaining : Math.max(0, Math.round((t.endsAt - serverNow()) / 1000));
@@ -157,5 +269,7 @@
 
   setInterval(() => { if (Math.random() < .35) drive(); }, 40000);
   setInterval(() => { if (Math.random() < .2) flash(); }, 9000);
+  // fundo 3D: o mesmo céu e a mesma estrada do painel do Sucesso
+  if (window.Delorean3D) Delorean3D.background($('#bg3d'), { dprMax: 1 });
   connect();
 })();

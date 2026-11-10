@@ -58,6 +58,8 @@ class Engine {
       message: Object.assign({}, DEFAULT_MESSAGE, saved.message || {}),
       conn: Object.assign(defaultConn(), saved.conn || {}),
       screen: Object.assign({}, DEFAULT_SCREEN, saved.screen || {}),
+      // Dinâmica do "De Volta para o Sucesso" em exibição no telão e nos celulares (null = townhall)
+      presentation: saved.presentation && saved.presentation.roomId ? saved.presentation : null,
     };
     delete this.state.conn.talk; // modelo antigo
     this.settings = Object.assign({}, DEFAULT_SETTINGS, kvGet('settings', {}));
@@ -583,6 +585,45 @@ class Engine {
     this.commit();
   }
 
+  /* ---------------- De Volta para o Sucesso ---------------- */
+  // Mesmo comportamento do projeto do Lucas: ao exibir uma dinâmica, a viagem em andamento
+  // pausa sozinha; ao voltar ao townhall ela retoma (se foi a dinâmica que pausou).
+  pausedTimerKey() {
+    const { phase, round, timer } = this.state.conn;
+    if (!timer || !timer.paused) return null;
+    return JSON.stringify([phase, round, timer.kind, timer.endsAt, timer.remaining, timer.duration]);
+  }
+  setPresentation(selection) {
+    const previous = this.state.presentation;
+    if (!selection) {
+      if (!previous) return null;
+      this.state.presentation = null;
+      const t = this.state.conn.timer;
+      if (previous.pausedJourney && previous.pausedJourney === this.pausedTimerKey() && t && t.paused) {
+        t.paused = false; t.endsAt = now() + t.remaining * 1000; t.remaining = null; this.rearmTimer();
+      }
+      this.commit({ title: 'De volta ao townhall', body: 'Olhe para o seu celular.' });
+      return null;
+    }
+    let pausedJourney = previous ? previous.pausedJourney || null : null;
+    const t = this.state.conn.timer;
+    if (t && !t.paused) {
+      t.paused = true; t.remaining = Math.max(0, Math.round((t.endsAt - now()) / 1000)); this.clearTimer();
+      pausedJourney = this.pausedTimerKey();
+    }
+    const { roomId, activityId, title, question, ownerId } = selection;
+    this.state.presentation = { roomId, activityId, title, question, ownerId, pausedJourney };
+    this.commit({ title: 'De Volta para o Sucesso', body: title });
+    return this.presentation();
+  }
+  presentation() {
+    const p = this.state.presentation;
+    return p ? { roomId: p.roomId, activityId: p.activityId, title: p.title, question: p.question } : null;
+  }
+  requireJourney() {
+    if (this.state.presentation) throw Object.assign(new Error('Volte ao Townhall antes de alterar a viagem ou a avaliação.'), { status: 409 });
+  }
+
   /* ---------------- snapshots ---------------- */
   publicState() {
     const c = this.state.conn;
@@ -605,6 +646,7 @@ class Engine {
         mutualCount: c.phase === 'results' ? this.mutualPairs().length : 0,
       },
       screen: this.state.screen,
+      presentation: this.presentation(),
       settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints },
       now: now(),
     };

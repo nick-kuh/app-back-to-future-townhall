@@ -110,7 +110,15 @@
   }
 
   /* ---------------- render ---------------- */
+  // Dinâmica do "De Volta para o Sucesso" liberada pelo Doc: vale para todos os celulares, com ou sem check-in.
+  function currentPresentation() {
+    const p = S.state && S.state.presentation;
+    if (!p || typeof p.roomId !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.roomId) || !['d1', 'd2', 'd3', 'd4'].includes(p.activityId)) return null;
+    return p;
+  }
   function viewKey() {
+    const pr = currentPresentation();
+    if (pr) return ['presentation', pr.roomId, pr.activityId, pr.title, pr.question].join('|');
     if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}|${S.showTaken ? 'taken' : ''}`;
     const c = S.state.conn, g = S.me && S.me.group, t = c.timer;
     const content = JSON.stringify([S.state.message, S.state.event, S.state.settings, S.me && S.me.person, g && g.partners, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result, t ? t.kind : '']);
@@ -123,6 +131,11 @@
     const prev = S.lastKey; S.lastKey = k;
     const p = prev.split('|'), n = k.split('|');
     S.jump = !prev || p.slice(0, 4).join('|') !== n.slice(0, 4).join('|');
+    if (n[0] === 'presentation' || p[0] === 'presentation') {
+      clearInterval(warp._t); $('#warp').classList.remove('on', 'go');
+      if (prev && n[0] === 'presentation') { beep('ok'); buzz([80, 40, 160]); flashSky(); }
+      return render();
+    }
     const enteringPhase = ph => n[0] === 'app' && n[1] === 'connections' && n[2] === ph && !(p[1] === 'connections' && p[2] === ph && p[3] === n[3]);
     if (prev && p[1] === 'standby' && n[1] && n[1] !== 'standby') { beep('ok'); buzz([80, 40, 160]); flashSky(); }
     if (prev && enteringPhase('matching')) { beep('ok'); buzz([80, 40, 80]); return warp(`VIAGEM ${n[3]} · RUMO A ${roundEra(+n[3]).year}`, render); }
@@ -134,14 +147,17 @@
   }
   function render() {
     const app = $('#app');
-    if (S.screen === 'splash') app.innerHTML = vSplash();
+    const presentation = currentPresentation();
+    if (presentation) app.innerHTML = vPresentation(presentation);
+    else if (S.screen === 'splash') app.innerHTML = vSplash();
     else if (S.screen === 'identify') app.innerHTML = S.pick ? vConfirm() : vIdentify();
     else if (!S.state || !S.me) app.innerHTML = vLoading();
     else {
       const b = S.state.block;
       app.innerHTML = b === 'standby' ? vStandby() : b === 'welcome' ? vWelcome() : b === 'message' ? vMessage() : b === 'closing' ? vClosing() : vConnections();
     }
-    document.body.classList.toggle('off', S.screen === 'app' && !!S.state && !!S.me && S.state.block === 'standby');
+    document.body.classList.toggle('off', !presentation && S.screen === 'app' && !!S.state && !!S.me && S.state.block === 'standby');
+    mountCar();
     wakeLock();
     if (S.jump !== false) window.scrollTo(0, 0);
     S.jump = true;
@@ -149,11 +165,51 @@
     tick();
   }
   function patch() {
-    if (!S.state) return;
-    const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; const b = $('#countBar'); if (b) b.style.width = Math.round(100 * S.state.counts.checkedIn / Math.max(1, S.state.counts.total)) + '%'; }
+    if (!S.state || currentPresentation()) return;
+    const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), true); }
     const rp = $('#rankProgress'); if (rp) rp.textContent = `${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} viajantes já avaliaram`;
     if (S.screen === 'identify' && !S.pick) refreshPeopleSoon();
     if (S.me && S.me.group && S.state.conn.phase === 'talk') patchQuestion(false);
+  }
+
+  /* ---- DeLorean 3D + flux capacitor (do painel "De Volta para o Sucesso") ---- */
+  const carBox = () => `<div class="carbox"><canvas class="car3d" data-car></canvas>
+      <div class="energy"><div class="lbl"><span><svg class="fluxi" viewBox="0 0 24 24"><line x1="4" y1="4" x2="12" y2="12"/><line x1="20" y1="4" x2="12" y2="12"/><line x1="12" y1="12" x2="12" y2="21"/></svg>FLUX CAPACITOR</span><span id="gw"></span></div><div class="ebar" id="ebarW"><i id="ebar"></i></div></div></div>`;
+  function setEnergy(e, animate) {
+    e = Math.max(0, Math.min(1, e || 0));
+    const gain = e - (S.energy || 0); S.energy = e;
+    const bar = $('#ebar'), gw = $('#gw');
+    if (bar) bar.style.width = (e * 100).toFixed(1) + '%';
+    if (gw) gw.textContent = `${(e * 1.21).toFixed(2)} / 1.21 GW`;
+    if (!S.car) return;
+    if (animate && gain > 0) {
+      S.car.charge(e);
+      const box = $('.carbox'); if (box) { const g = document.createElement('div'); g.className = 'gwplus'; g.textContent = `+${(gain * 1.21).toFixed(2)} GW ⚡`; box.appendChild(g); setTimeout(() => g.remove(), 1300); }
+    } else S.car.setEnergy(e);
+  }
+  function mountCar() {
+    const cv = $('[data-car]');
+    if (S.car && S.car.cv === cv) return;
+    S.car = cv && window.Delorean3D ? Delorean3D.car(cv, { dprMax: 1.5 }) : null;
+    S.energy = 0;
+    if (S.car && S.state) setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), false);
+  }
+  setInterval(() => { if (S.car && S.car.cv.isConnected && !document.hidden && S.energy > 0 && Math.random() < S.energy * .5) S.car.spark(); }, 900);
+
+  // Tela liberada pelo Doc: mesma identidade do painel do Sucesso (mostradores 2026 → 2027).
+  const DYN = { d1: { n: '01', c: 'var(--cyan)' }, d2: { n: '02', c: 'var(--yellow)' }, d3: { n: '03', c: 'var(--magenta)' }, d4: { n: '04', c: 'var(--orange)' } };
+  function vPresentation(p) {
+    const d = DYN[p.activityId] || DYN.d1;
+    const link = '/participar/' + p.roomId + '?d=' + p.activityId;
+    return `<div class="spacer"></div>
+      <div class="tcrow"><div class="tcbox" style="--c:var(--yellow)"><b>2026</b><span>LAST TIME DEPARTED</span></div><div class="tcbox" style="--c:var(--orange)"><b>2027</b><span>DESTINATION TIME</span></div></div>
+      <section class="panel glow presentation-card" style="--c:${d.c}" aria-labelledby="liveTitle">
+        <div class="kicker">DE VOLTA PARA O SUCESSO · DINÂMICA ${d.n}</div>
+        <h1 id="liveTitle">${esc(p.title)}</h1>
+        <p class="pq">${esc(p.question)}</p>
+        <a class="btn cyan app-switch" href="${esc(link)}">⚡ Responder agora</a>
+        <p class="small center" style="margin-top:10px">A pergunta também está no telão.</p>
+      </section><div class="spacer"></div>`;
   }
 
   const logo = (sm = false) => `<div class="logo ${sm ? 'sm' : ''}"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div>${sm ? '' : '<div class="l3">TOWNHALL · 1985</div>'}</div>`;
@@ -202,7 +258,7 @@
     return `<div class="trip">${logo(true)}<div class="small">${esc(first(me.name))}</div></div>`;
   }
   function vWelcome() {
-    const st = S.state, me = S.me.person, pct = Math.round(100 * st.counts.checkedIn / Math.max(1, st.counts.total));
+    const st = S.state, me = S.me.person;
     return `${vHeader()}
       <div class="panel glow match">
         <div class="polaroids"><div class="polaroid"><div class="photo">${av(me)}</div><div class="cap">${esc(first(me.name))} · Hill Valley</div></div></div>
@@ -212,7 +268,7 @@
       <div class="panel center">
         <div class="kicker">A bordo</div>
         <div class="big"><span id="count">${st.counts.checkedIn}</span><span style="font-size:18px;color:var(--muted)"> / ${st.counts.total}</span></div>
-        <div class="bar"><i id="countBar" style="width:${pct}%"></i></div>
+        ${carBox()}
       </div>
       <div class="spacer"></div>
       <button class="linkbtn" data-action="checkout">Não sou ${esc(first(me.name))} · trocar</button>`;
@@ -485,6 +541,8 @@
   document.addEventListener('touchstart', unlockAudio, { passive: true });
   setInterval(() => { if (Math.random() < .08) flashSky(); }, 6000);
 
+  // fundo 3D: o mesmo céu e a mesma estrada do painel do Sucesso (mais leve no celular)
+  if (window.Delorean3D) { Delorean3D.setFps(24); Delorean3D.background($('#bg3d'), { dprMax: 1, speed: 6 }); }
   render();
   connect();
 })();

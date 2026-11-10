@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning server/index.js",
     "dev": "node --no-warnings=ExperimentalWarning --watch server/index.js",
-    "test": "node --no-warnings=ExperimentalWarning scripts/test-matching.js && node --no-warnings=ExperimentalWarning scripts/test-flow.js"
+    "test": "node --no-warnings=ExperimentalWarning scripts/test-matching.js && node --no-warnings=ExperimentalWarning scripts/test-flow.js && node --no-warnings=ExperimentalWarning scripts/test-sucesso.js && node --no-warnings=ExperimentalWarning --test sucesso/tests/*.test.mjs"
   },
   "repository": {
     "type": "git",
