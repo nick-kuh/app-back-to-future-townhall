@@ -95,6 +95,28 @@ function createSucesso({ dbPath, adminPassword }) {
       WHERE r.room_id = ? AND r.activity_id = ? ORDER BY r.sequence`).bind(setting.roomId, setting.activityId).all().results
       .map(r => ({ id: r.id, name: r.name, answer: r.answer, personId: personOfUuid(r.participant_id), createdAt: r.created_at }));
   }
+  /* ---------- sala do evento: criada e escolhida sozinha (o Doc não precisa pensar em salas) ---------- */
+  const internal = (path, body) => worker.fetch(new Request('http://townhall.local' + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'oai-authenticated-user-id': PRESENTER_ID }, body: JSON.stringify(body) }), { DB });
+  const roomExists = id => !!(mod && UUID.test(String(id || '')) && DB.prepare('SELECT id FROM rooms WHERE id = ?').bind(id).first());
+  const latestRoom = () => { const r = DB.prepare('SELECT id FROM rooms WHERE owner_id = ? ORDER BY created_at DESC LIMIT 1').bind(PRESENTER_ID).first(); return r ? r.id : null; };
+  async function createRoom(name) {
+    const result = await internal('/api/rooms', { name }), data = await result.json().catch(() => ({}));
+    if (!result.ok) throw Object.assign(new Error(data.error || 'Não foi possível criar a sala do Sucesso.'), { status: result.status });
+    return data.id;
+  }
+  // Zera as respostas das quatro dinâmicas (rodada nova em cada uma), pelo mesmo comando "limpar" do painel.
+  async function clearRoom(roomId) {
+    if (!roomExists(roomId)) return;
+    for (const k of Object.keys(mod.DEFINITIONS)) await internal(`/api/rooms/${roomId}/activities/${k}/command`, { action: 'clear' });
+    for (const fn of listeners) fn();
+  }
+  // Situação das quatro dinâmicas para o Painel do Doc (sem textos de respostas)
+  function overview(roomId) {
+    if (!roomExists(roomId)) return null;
+    const acts = {};
+    for (const [k, def] of Object.entries(mod.DEFINITIONS)) acts[k] = { ...live({ roomId, activityId: k }), title: def.title, question: def.question };
+    return { roomId, acts };
+  }
   const mine = (setting, personId) => responses(setting).filter(r => r.personId === personId).map(r => ({ id: r.id, answer: r.answer, anonymous: r.name === 'Anônimo' }));
   // Resposta enviada pelo app: passa pela API original (fase, prazo, limite de 200 caracteres,
   // 2 s entre envios, reenvio sem duplicar), com o nome do check-in.
@@ -189,7 +211,7 @@ function createSucesso({ dbPath, adminPassword }) {
 
   return {
     init, mount, prepare, storePresentation, publicPresentation,
-    live, responses, mine, answer,
+    live, responses, mine, answer, roomExists, latestRoom, createRoom, clearRoom, overview,
     hasCookie, setCookie, clearCookie,
     onChange: fn => listeners.push(fn),
     ready: () => !!mod,

@@ -115,10 +115,17 @@ app.get('/api/admin/overview', wrap(() => adminOverview()));
 
 // Enquanto uma dinâmica do Sucesso está no telão, a viagem fica congelada (como no projeto do Lucas).
 const JOURNEY_ACTIONS = new Set(['setBlock', 'generate', 'reveal', 'startTalk', 'pause', 'resume', 'addTime', 'endTalk', 'skip',
-  'startJourney', 'openRanking', 'computeResults', 'resetConnections', 'resetEvent', 'testRandomRankings', 'setStage']);
+  'startJourney', 'openRanking', 'computeResults', 'resetConnections', 'testRandomRankings']);
+// Tela avulsa (mensagem rápida, olhos no telão): tira a dinâmica do Sucesso do ar; o Doc volta ao roteiro depois.
+const isDetour = a => (a.type === 'setMessage' && a.show) || (a.type === 'setBlock' && (a.block === 'message' || a.block === 'standby'));
+function dropPresentation() {
+  if (!engine.state.presentation) return;
+  engine.setPresentation(null, { silent: true }); sucesso.storePresentation(null); armExpiry();
+}
 app.post('/api/admin/action', wrap(req => {
   const a = req.body || {};
-  if (JOURNEY_ACTIONS.has(a.type) || (a.type === 'setMessage' && a.show)) engine.requireJourney();
+  if (isDetour(a) || a.type === 'resetEvent') dropPresentation();
+  else if (JOURNEY_ACTIONS.has(a.type)) engine.requireJourney();
   switch (a.type) {
     case 'setBlock': engine.setBlock(a.block); break;
     case 'setMessage': engine.setMessage(a.message || {}, !!a.show); break;
@@ -133,12 +140,11 @@ app.post('/api/admin/action', wrap(req => {
     case 'skip': engine.skip(); break;
     case 'startJourney': engine.startJourney(); break;
     case 'setScene': engine.setScene(a.scene); break;
-    case 'setStage': engine.setStage(a.index); break;
     case 'setAudio': engine.setAudio({ mode: a.mode, volume: a.volume, out: a.out }); break;
     case 'openRanking': engine.openRanking(); break;
     case 'computeResults': engine.computeResults(); break;
     case 'resetConnections': engine.resetConnections(); break;
-    case 'resetEvent': engine.resetEvent(); break;
+    case 'resetEvent': engine.resetEvent(); sucesso.clearRoom(engine.state.sucessoRoom).catch(e => console.error('[sucesso] limpar sala:', e.message)); break;
     case 'testCheckinAll': engine.testCheckinAll(); break;
     case 'testRandomRankings': engine.testRandomRankings(); break;
     default: throw new Error('Ação desconhecida: ' + a.type);
@@ -147,10 +153,54 @@ app.post('/api/admin/action', wrap(req => {
 }));
 
 // Exibir uma dinâmica do Sucesso no telão e nos celulares ({roomId, activityId}) ou voltar ao townhall ({roomId: null}).
+// A sala das dinâmicas do Sucesso é escolhida sozinha: a que já está em uso, a mais recente ou uma nova.
+async function ensureRoom() {
+  let id = engine.state.sucessoRoom;
+  if (id && sucesso.roomExists(id)) return id;
+  id = sucesso.latestRoom() || await sucesso.createRoom('Townhall');
+  engine.state.sucessoRoom = id; engine.save();
+  return id;
+}
+// Roteiro: coloca um passo no ar. Passo do Sucesso = dinâmica no telão e nos celulares; qualquer outro
+// tira a dinâmica do ar e mostra a tela do passo. Chamar com o passo atual também serve para "voltar ao roteiro".
+async function goStep(id) {
+  const step = engine.stepById(id);
+  if (!step) throw Object.assign(new Error('Esse passo não está mais no roteiro.'), { status: 404 });
+  if (step.type === 'sucesso') {
+    if (!sucesso.ready()) throw Object.assign(new Error('As dinâmicas do Sucesso ainda estão carregando. Tente de novo em instantes.'), { status: 503 });
+    const selection = await sucesso.prepare(await ensureRoom(), step.activity);
+    engine.applyStep(step.id, { silent: true });
+    if (engine.state.presentation) engine.setPresentation(null, { silent: true });
+    engine.setPresentation(selection);
+    sucesso.storePresentation(engine.state.presentation);
+  } else {
+    if (engine.state.presentation) { engine.setPresentation(null, { silent: true }); sucesso.storePresentation(null); }
+    engine.applyStep(step.id);
+  }
+  armExpiry();
+  return { ok: true, step: engine.state.step };
+}
+app.post('/api/admin/step', wrapAsync(req => goStep(String((req.body || {}).id || ''))));
+
+// Painel 3D do Lucas ("Exibir no telão e nos celulares" / "Voltar ao Townhall"): o roteiro acompanha.
 app.post('/api/admin/presentation', wrapAsync(async req => {
   const { roomId = null, activityId = null } = req.body || {};
-  if (roomId === null) { engine.setPresentation(null); sucesso.storePresentation(null); armExpiry(); return { presentation: null }; }
+  if (roomId === null) { // volta para o passo em que o evento estava antes da dinâmica
+    if (engine.state.presentation) {
+      engine.setPresentation(null, { silent: true }); sucesso.storePresentation(null);
+      const steps = engine.settings.steps, at = steps.findIndex(x => x.id === engine.state.step);
+      const back = engine.stepById(engine.state.returnStep) || steps.slice(0, Math.max(0, at)).reverse().find(x => x.type !== 'sucesso') || steps.find(x => x.type !== 'sucesso');
+      if (back && back.type !== 'sucesso') engine.applyStep(back.id); else engine.commit({ title: 'De volta ao townhall', body: 'Olhe para o seu celular.' });
+    }
+    armExpiry();
+    return { presentation: null };
+  }
   const selection = await sucesso.prepare(roomId, activityId);
+  engine.state.sucessoRoom = roomId;
+  const step = engine.settings.steps.find(x => x.type === 'sucesso' && x.activity === activityId);
+  if (step) engine.applyStep(step.id, { silent: true });
+  else { const cur = engine.currentStep(); if (cur.type !== 'sucesso') engine.state.returnStep = cur.id; engine.holdJourney(); }
+  if (engine.state.presentation) engine.setPresentation(null, { silent: true });
   engine.setPresentation(selection);
   sucesso.storePresentation(engine.state.presentation);
   armExpiry();
@@ -233,7 +283,7 @@ function telaoStatus() {
   for (const [, s] of io.of('/').sockets) if (s.data.telao) list.push(s.data.telao);
   return { count: list.length, sound: list.some(t => !t.locked), auth: list.some(t => t.auth) };
 }
-const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus() });
+const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null });
 
 // Liga o socket à pessoa dona do token (do evento ou guardado no socket) e revalida sempre:
 // se o token foi trocado (outro aparelho assumiu o nome) ou o check-in foi desfeito, desliga.
@@ -295,6 +345,7 @@ sucesso.init().then(() => {
   // mantém a API do Sucesso alinhada com o que está em exibição (sobrevive a reinícios)
   sucesso.storePresentation(engine.state.presentation);
   armExpiry();
+  return ensureRoom();
 }).catch(err => console.error('[sucesso] falhou ao iniciar:', err)).finally(() => server.listen(PORT, () => {
   console.log(`⚡ De Volta ao Futuro · townhall rodando em http://localhost:${PORT}`);
   console.log(`   Painel do Doc: http://localhost:${PORT}/admin.html  (senha: ${ADMIN_PASSWORD === 'doc1985' ? 'doc1985 · defina ADMIN_PASSWORD para trocar' : 'definida via ADMIN_PASSWORD'})`);

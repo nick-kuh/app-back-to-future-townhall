@@ -25,17 +25,16 @@ rodam **dentro deste mesmo app**, no mesmo servidor e com a mesma senha:
 - **Um login só.** A pessoa escolhe o nome uma vez, no check-in, e esse nome vale para tudo: nas
   dinâmicas do Sucesso ela responde direto no app, sem digitar o nome de novo. Quem cai e volta no
   meio do evento entra de novo pelo nome e cai no momento atual.
-- **Painel do Doc → aba 🚀 Sucesso**: cria a sala do evento e, para cada dinâmica: **📺 Liberar no
-  telão e celulares**, iniciar/pausar/encerrar/reiniciar o recebimento, **🎲 Sortear viajante** e o
-  **tempo de fala** (dinâmicas 2 e 3), ver e **baixar as respostas** (.txt/Word) e **Voltar ao
-  Townhall**. Enquanto uma dinâmica está liberada, a viagem do bloco Conexões fica pausada e os
-  blocos travados; ao voltar, tudo continua de onde parou.
+- **Painel do Doc**: cada dinâmica é um passo do roteiro. Ao chegar nela, a pergunta entra no telão
+  e nos celulares; os botões do passo são iniciar/pausar/encerrar o recebimento, **🎲 Sortear viajante**
+  e o **tempo de fala** (dinâmicas 2 e 3). Em "Mais opções": ver e **baixar as respostas** (.txt/Word),
+  reabrir o recebimento e apagar as respostas.
 - **Celulares**: pergunta + campo de resposta (200 caracteres) + prazo. Depois do envio, a pessoa vê a
   própria resposta. Quem é sorteado recebe o aviso "É você!" com a resposta e o tempo de fala.
 - **Telão**: pergunta + QR do app + contagem + prazo + o carro 3D carregando a cada resposta; ao
   encerrar, o carro entra no portal e aparece a **nuvem de palavras**; no sorteio, roleta de nomes,
   resposta, guia e cronômetro de fala. Os **textos das respostas só aparecem no telão aberto no
-  navegador logado no Painel do Doc** (a aba Sucesso avisa se o telão está aberto e logado).
+  navegador logado no Painel do Doc** (o topo do painel avisa se o telão está aberto e logado).
 - **Painel 3D** (`/painel`): o painel original do Lucas continua disponível, com a mesma senha. O QR
   dele abre o formulário original (`/participar/<sala>`), que também usa o nome do check-in.
 
@@ -48,9 +47,9 @@ alterações); a ponte com este servidor está em `server/sucesso.js`. As respos
 
 ## 🎤 Blocos do evento, telão calmo e som
 
-- **Blocos do evento** (aba Controle): Bloco 1, 2, 3… com **nome, tema e quem fala**, editáveis a
-  qualquer momento. Ao **▶ Exibir** um bloco, os celulares mostram o nome e o tema dele e o telão
-  entra no **modo calmo**: fundo parado e escurecido, sem raios, sem carro passando, só o tema.
+- **Blocos de fala** (passos do roteiro): cada um tem **nome, tema e quem fala**, editáveis a qualquer
+  momento. Quando o bloco entra no ar, os celulares mostram o nome e o tema dele e o telão entra no
+  **modo calmo**: fundo parado e escurecido, sem raios, sem carro passando, só o tema.
 - **Som** (três botões no topo do Painel do Doc, sempre à mão): **🎵 Música** (animada),
   **🎼 Trilha sonora** (fundo calmo) e **🔇 Sem áudio**, mais o volume. A música é original, gerada
   no navegador (`public/trilha.js`, Web Audio), sem arquivos. Exibir um bloco de fala desliga o som
@@ -113,39 +112,63 @@ entre dispositivos). O servidor usa WebSocket (Socket.IO) para avisar os celular
 |---|---|---|
 | `/` | viajantes (celular) | check-in pelo nome, blocos, viagens, avaliação, resultado |
 | `/telao.html` | projetor | QR do check-in, circuitos de tempo, cronômetros gigantes, 88 MPH, avaliação, conexões, créditos; modos "relógio", "logo" e "frases" para servir de fundo durante PPT ou fala |
-| `/admin.html` | apresentador (notebook) | Painel do Doc (inclui a aba 🚀 Sucesso) |
+| `/admin.html` | apresentador (notebook) | Painel do Doc: roteiro do evento (Ao vivo) e preparação |
 | `/painel` | apresentador | painel 3D do De Volta para o Sucesso (mesma senha) |
 | `/participar/<sala>` | participantes | formulário de resposta das dinâmicas (sem login) |
 | `/ao-vivo` | todos | página de entrada do De Volta para o Sucesso |
 
 Os viajantes nunca veem área, WL ou time uns dos outros: esses dados ficam só no painel, para o sorteio.
 
-## Fluxo do evento (Painel do Doc)
+## Painel do Doc: como conduzir o evento
 
-1. **Pessoas** · a lista do townhall já vem carregada (47 pessoas). Dá para editar WL/área, adicionar,
-   marcar ausente, fazer check-in manual, importar outra lista (colar do Excel) e **importar as respostas do
-   forms** (CSV/planilha): as respostas aparecem na tela da dupla como "para puxar assunto".
-2. **Perguntas** · banco inicial com 42 perguntas em três eras (presente · 1985, passado · 1955, futuro · 2015).
-   Edite, desative ou substitua em massa (uma por linha, com prefixo `[presente]`, `[passado]` ou `[futuro]`;
-   `[off]` marca uma desativada).
-3. **Controle** · os **blocos do evento** (falas) e as telas/dinâmicas; cada um tem o botão **Exibir**:
-   - **Check-in**: a pessoa digita o próprio nome e a lista aparece já filtrada (ela fica oculta até
-     começar a digitar). Quem errou usa "trocar". Quem já embarcou e voltou (celular novo, navegador
-     limpo) acha o nome marcado como "já embarcou" e entra de novo no lugar dele.
-   - **Olhos no telão**: tela apagada ("neste momento você não precisa do celular").
-   - **Mensagem**: aviso livre (intervalo, link de fotos etc.).
-   - **Conexões**: `▶ Iniciar viagens` sorteia as duplas (se ainda não sorteou) e dispara o fluxo
-     automático: tempo para a dupla se encontrar → 4 min de conversa → "88 MPH" → próxima dupla, três vezes.
-     Depois da 3ª viagem a avaliação abre sozinha nos celulares e fecha quando todos avaliarem (ou no tempo
-     limite); os resultados vão para os celulares automaticamente. Ao vivo: pausar, +30 s, pular etapa e
-     controle manual.
-   - **Encerramento**: agradecimento + lembrete da conexão; no telão, créditos com todos os nomes.
-   - **Telão**: escolhe o modo da tela projetada (automático, relógio, logo, frases).
-4. **Config** · tempos (encontro, conversa, intervalo, avaliação), fluxo automático ligado/desligado, textos.
-5. **Testes** · check-in de todos, modo demo com tempos curtos e avaliações aleatórias para ensaiar sozinho.
+O painel tem duas áreas.
 
-Quem chegar depois do sorteio aparece como "fora das rotas" no painel; use **Recalcular** para incluir a
-pessoa nas próximas viagens sem mexer nas que já aconteceram.
+**▶ Ao vivo** (é onde você fica durante o evento)
+
+- À esquerda, o **roteiro**: os passos do evento em ordem (check-in, blocos de fala, Conexões, as
+  dinâmicas do Sucesso, encerramento). O passo que está no ar fica em destaque.
+- À direita, **só o passo atual**: o que os celulares e o telão estão mostrando, os números do momento
+  e **um botão principal por vez** (iniciar viagens, iniciar/encerrar recebimento, sortear viajante…).
+  Quando o passo não pede mais nada, o botão principal vira **Próximo ▶**.
+- Dá para clicar em qualquer passo do roteiro para pular ou voltar; o que é raro fica em "Mais opções".
+- **Fora do roteiro**: "Aviso rápido" (intervalo, recado, link) e "Olhos no telão" entram na hora e
+  depois é só voltar ao roteiro.
+- O topo mostra o que está **no ar**, quantas pessoas embarcaram, se o **telão** está aberto e logado
+  e os três botões de **som**.
+
+O que cada passo faz:
+
+| Passo | Celulares | Telão | Você faz |
+|---|---|---|---|
+| Check-in | cada pessoa digita o nome e embarca | QR do app + carro carregando | acompanha quem falta |
+| Bloco de fala | nome e tema do bloco | modo calmo, só o tema | nada (som desliga sozinho) |
+| Conexões | dupla, perguntas, avaliação e resultado | cronômetros e "88 MPH" | **Iniciar viagens**; o resto anda sozinho |
+| Sucesso 01–04 | pergunta e resposta, com o nome do check-in | carro, nuvem de palavras, sorteio | **Iniciar / Encerrar recebimento**, **Sortear**, tempo de fala |
+| Aviso / intervalo | o aviso | o aviso | nada |
+| Encerramento | agradecimento e a conexão de cada um | créditos com todos os nomes | baixar as respostas |
+
+Sair do passo Conexões no meio das viagens deixa a viagem em pausa; ao voltar, ela continua de onde
+parou. A sala das dinâmicas do Sucesso é criada sozinha.
+
+**⚙ Preparar** (antes do evento)
+
+1. **Roteiro** · a ordem dos passos: reordenar, remover, adicionar blocos de fala e avisos, escrever o
+   tema e quem fala em cada bloco. Pode mudar durante o evento.
+2. **Pessoas** · a lista do townhall já vem carregada (47 pessoas). Dá para editar WL/área, adicionar,
+   marcar ausente, fazer check-in manual, importar outra lista (colar do Excel) e **importar as respostas
+   do forms** (CSV/planilha): as respostas aparecem na tela da dupla como "para puxar assunto".
+3. **Perguntas** · banco inicial com 42 perguntas em três eras (presente · 1985, passado · 1955,
+   futuro · 2015). Edite, desative ou substitua em massa (uma por linha, com prefixo `[presente]`,
+   `[passado]` ou `[futuro]`; `[off]` marca uma desativada).
+4. **Ajustes** · tempos das viagens, fluxo automático ou manual, textos, som (onde toca, arquivos
+   próprios) e acesso.
+5. **Testes** · check-in de todos, modo demo com tempos curtos, avaliações aleatórias e **resetar o
+   evento** (volta o roteiro ao começo e apaga check-ins, duplas e respostas: use depois do ensaio).
+
+No check-in, a pessoa digita o próprio nome e a lista aparece já filtrada (ela fica oculta até começar a
+digitar). Quem já embarcou e voltou (celular novo, navegador limpo) acha o nome marcado como "já
+embarcou" e entra de novo no lugar dele. Quem chegar depois do sorteio das duplas aparece como "sem
+dupla" no passo Conexões, com um botão para incluir a pessoa nas próximas viagens.
 
 ## Regras da dinâmica
 

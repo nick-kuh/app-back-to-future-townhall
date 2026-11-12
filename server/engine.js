@@ -9,6 +9,46 @@ const { computeResults, POINTS } = require('./results');
 const TOTAL_ROUNDS = 3;
 const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing', 'stage'];
 const AUDIO_MODES = ['off', 'music', 'ambient'];
+
+// Roteiro do evento: a ordem dos passos que o Doc percorre no painel ("Próximo ▶").
+//  checkin · stage (bloco de fala: título, tema, quem fala) · connections · sucesso (dinâmica d1..d4)
+//  message (aviso/intervalo) · standby (olhos no telão) · closing
+const STEP_TYPES = ['checkin', 'stage', 'connections', 'sucesso', 'message', 'standby', 'closing'];
+const SUCESSO_ACTS = ['d1', 'd2', 'd3', 'd4'];
+const STEP_BLOCK = { checkin: 'welcome', stage: 'stage', connections: 'connections', message: 'message', standby: 'standby', closing: 'closing' };
+const clip = (v, n) => String(v ?? '').trim().slice(0, n);
+function defaultSteps(stages) {
+  const st = i => Object.assign({ title: `Bloco ${i + 1}`, theme: '', speaker: '' }, (stages || [])[i] || {});
+  return [
+    { type: 'checkin' },
+    { type: 'stage', ...st(0) },
+    { type: 'connections' },
+    { type: 'stage', ...st(1) },
+    { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' },
+    { type: 'stage', ...st(2) },
+    { type: 'closing' },
+  ].map((x, i) => ({ id: 'p' + (i + 1), ...x }));
+}
+// Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões e cada
+// dinâmica do Sucesso só entram uma vez (o estado delas é um só).
+function cleanSteps(list) {
+  const out = [], ids = new Set(), once = new Set();
+  for (const raw of (Array.isArray(list) ? list : []).slice(0, 40)) {
+    if (!raw || !STEP_TYPES.includes(raw.type)) continue;
+    if (raw.type === 'sucesso' && !SUCESSO_ACTS.includes(raw.activity)) continue;
+    const unique = raw.type === 'connections' ? 'connections' : raw.type === 'sucesso' ? raw.activity : null;
+    if (unique) { if (once.has(unique)) continue; once.add(unique); }
+    let id = typeof raw.id === 'string' && /^[a-z0-9]{1,16}$/i.test(raw.id) && !ids.has(raw.id) ? raw.id : null;
+    while (!id || ids.has(id)) id = 'p' + crypto.randomBytes(4).toString('hex');
+    ids.add(id);
+    const step = { id, type: raw.type };
+    if (raw.type === 'stage') { step.title = clip(raw.title, 60) || 'Bloco'; step.theme = clip(raw.theme, 200); step.speaker = clip(raw.speaker, 80); }
+    if (raw.type === 'message') { step.emoji = clip(raw.emoji, 8) || '📣'; step.title = clip(raw.title, 80) || 'Aviso'; step.body = clip(raw.body, 600); }
+    if (raw.type === 'sucesso') step.activity = raw.activity;
+    out.push(step);
+  }
+  return out;
+}
 const PHASES = ['idle', 'ready', 'matching', 'talk', 'roundEnd', 'ranking', 'results'];
 
 const DEFAULT_SETTINGS = {
@@ -23,12 +63,7 @@ const DEFAULT_SETTINGS = {
   welcomeText: 'Aguarde: a viagem começa em breve.',
   closingText: 'Obrigado por viajar com a gente. Marque aquele café com a sua conexão!',
   standbyText: 'Agora você não precisa do celular.',
-  // Blocos do evento (falas): o Doc exibe um bloco e os celulares mostram o tema; o telão fica calmo.
-  stages: [
-    { title: 'Bloco 1', theme: '', speaker: '' },
-    { title: 'Bloco 2', theme: '', speaker: '' },
-    { title: 'Bloco 3', theme: '', speaker: '' },
-  ],
+  steps: null,            // roteiro do evento (montado no construtor; editável em Preparar → Roteiro)
   stageText: 'Agora a atenção é no palco.',
   stageMutes: true,       // exibir um bloco de fala desliga o som do telão
   musicUrl: '',           // opcional: arquivo de áudio próprio para "Música" (senão, toca a trilha gerada no navegador)
@@ -71,21 +106,28 @@ class Engine {
       screen: Object.assign({}, DEFAULT_SCREEN, saved.screen || {}),
       // Dinâmica do "De Volta para o Sucesso" em exibição no telão e nos celulares (null = townhall)
       presentation: saved.presentation && saved.presentation.roomId ? saved.presentation : null,
-      stage: Number.isInteger(saved.stage) ? saved.stage : 0,        // bloco de fala em exibição (índice em settings.stages)
+      step: typeof saved.step === 'string' ? saved.step : null,      // passo do roteiro que está no ar
+      detour: saved.detour === 'message' || saved.detour === 'standby' ? saved.detour : null, // tela avulsa fora do roteiro
+      returnStep: typeof saved.returnStep === 'string' ? saved.returnStep : null,           // de onde o evento saiu para uma dinâmica do Sucesso
+      sucessoRoom: typeof saved.sucessoRoom === 'string' ? saved.sucessoRoom : null,        // sala das dinâmicas do Sucesso (criada sozinha)
       audio: Object.assign({ mode: 'off', volume: 60, out: 'telao' }, saved.audio || {}), // som: off | music | ambient · sai do telão ou do painel
       drawn: saved.drawn && typeof saved.drawn === 'object' ? saved.drawn : {}, // respostas já sorteadas por dinâmica/rodada
     };
     delete this.state.conn.talk; // modelo antigo
     this.settings = Object.assign({}, DEFAULT_SETTINGS, kvGet('settings', {}));
+    const steps = cleanSteps(this.settings.steps);
+    this.settings.steps = steps.length ? steps : defaultSteps(this.settings.stages); // versões antigas guardavam só os blocos de fala
+    delete this.settings.stages;
+    if (!this.stepById(this.state.step)) this.state.step = this.settings.steps[0].id;
     this.listeners = [];
     this.timer = null;
     this.rearmTimer();
   }
 
   onChange(fn) { this.listeners.push(fn); }
+  save() { kvSet('state', this.state); kvSet('settings', this.settings); }
   commit(notice) {
-    kvSet('state', this.state);
-    kvSet('settings', this.settings);
+    this.save();
     for (const fn of this.listeners) fn(notice || null);
   }
 
@@ -371,7 +413,7 @@ class Engine {
     if (c.phase === 'talk') this.finishTalk();
     this.stopTimer();
     c.phase = 'matching'; c.round = round;
-    this.state.block = 'connections';
+    this.state.block = 'connections'; this.state.detour = null; this.syncCursor('connections');
     this.assignQueues(round);
     if (this.auto() && Number(this.settings.findSeconds) > 0) this.startTimer('matching', this.settings.findSeconds);
     this.commit({ title: `Viagem ${round} · ${eraOfRound(round).year}`, body: 'Sua dupla foi revelada. Encontre essa pessoa na sala!' });
@@ -542,6 +584,9 @@ class Engine {
     const wasOff = this.state.block === 'standby';
     this.state.block = block;
     if (block === 'stage' && this.settings.stageMutes) this.state.audio.mode = 'off';
+    // mensagem e "olhos no telão" são telas avulsas (fora do roteiro); as outras levam o cursor junto
+    if (block === 'message' || block === 'standby') { this.state.detour = block; this.holdJourney(); }
+    else { this.state.detour = null; this.syncCursor({ welcome: 'checkin', connections: 'connections', closing: 'closing', stage: 'stage' }[block]); if (block === 'connections') this.releaseJourney(); else this.holdJourney(); }
     const notices = {
       message: { title: this.state.message.title, body: this.state.message.body },
       welcome: wasOff ? { title: 'Circuitos ligados', body: 'Estamos de volta. Olhe para o seu celular.' } : null,
@@ -552,7 +597,7 @@ class Engine {
   }
   setMessage(m, show = false) {
     this.state.message = { title: String(m.title || '').trim(), body: String(m.body || '').trim(), emoji: String(m.emoji || '📣').trim() };
-    if (show) this.state.block = 'message';
+    if (show) { this.state.block = 'message'; this.state.detour = 'message'; this.holdJourney(); }
     this.commit(show ? { title: this.state.message.title, body: this.state.message.body } : null);
   }
   updateSettings(partial) {
@@ -568,9 +613,13 @@ class Engine {
     if (partial.stageMutes !== undefined) s.stageMutes = !!partial.stageMutes;
     // áudio próprio: só endereços http(s) ou caminhos do próprio site
     for (const k of ['musicUrl', 'ambientUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
-    if (Array.isArray(partial.stages)) {
-      const list = partial.stages.slice(0, 12).map((x, i) => ({ title: String((x && x.title) || '').trim().slice(0, 60) || `Bloco ${i + 1}`, theme: String((x && x.theme) || '').trim().slice(0, 200), speaker: String((x && x.speaker) || '').trim().slice(0, 80) }));
-      if (list.length) { s.stages = list; this.state.stage = Math.min(this.state.stage || 0, list.length - 1); }
+    if (partial.steps !== undefined) {
+      const list = cleanSteps(partial.steps);
+      if (!list.length) throw new Error('O roteiro precisa de pelo menos um passo.');
+      s.steps = list;
+      if (!this.stepById(this.state.step)) this.state.step = list[0].id; // o passo que estava no ar foi removido
+      const cur = this.currentStep();                                   // mudou o texto do passo que está no ar: reflete na hora
+      if (!this.state.detour && cur.type === 'message' && this.state.block === 'message') this.state.message = { title: cur.title, body: cur.body, emoji: cur.emoji };
     }
     if (Array.isArray(partial.agenda)) s.agenda = partial.agenda.map(a => ({ time: String(a.time || ''), title: String(a.title || '') })).filter(a => a.title);
     this.commit();
@@ -589,8 +638,8 @@ class Engine {
   resetEvent() {
     this.resetConnections();
     db.exec("UPDATE people SET checked_in_at = NULL, token = NULL");
-    this.state.block = 'welcome';
-    this.commit();
+    this.state.presentation = null; this.state.returnStep = null;
+    this.applyStep(this.settings.steps[0].id); // o roteiro volta para o começo
   }
   // utilidades de teste
   testCheckinAll() { db.prepare('UPDATE people SET checked_in_at = COALESCE(checked_in_at, ?) WHERE active = 1').run(iso()); this.commit(); }
@@ -608,33 +657,36 @@ class Engine {
   }
 
   /* ---------------- De Volta para o Sucesso ---------------- */
-  // Mesmo comportamento do projeto do Lucas: ao exibir uma dinâmica, a viagem em andamento
-  // pausa sozinha; ao voltar ao townhall ela retoma (se foi a dinâmica que pausou).
+  // A viagem (cronômetro das Conexões) espera quando o evento sai do passo Conexões — para uma
+  // dinâmica do Sucesso, outro passo do roteiro ou uma tela avulsa — e continua de onde parou quando
+  // o evento volta. Se foi o Doc que pausou na mão, ela continua pausada.
   pausedTimerKey() {
     const { phase, round, timer } = this.state.conn;
     if (!timer || !timer.paused) return null;
     return JSON.stringify([phase, round, timer.kind, timer.endsAt, timer.remaining, timer.duration]);
   }
-  setPresentation(selection) {
+  holdJourney() {
+    const c = this.state.conn, t = c.timer;
+    if (!t || t.paused) return;
+    t.paused = true; t.remaining = Math.max(0, Math.round((t.endsAt - now()) / 1000)); this.clearTimer();
+    c.held = this.pausedTimerKey();
+  }
+  releaseJourney() {
+    const c = this.state.conn, t = c.timer, held = c.held; c.held = null;
+    if (!held || !t || !t.paused || held !== this.pausedTimerKey()) return;
+    t.paused = false; t.endsAt = now() + t.remaining * 1000; t.remaining = null; this.rearmTimer();
+  }
+  setPresentation(selection, { silent = false } = {}) {
     const previous = this.state.presentation;
     if (!selection) {
       if (!previous) return null;
       this.state.presentation = null;
-      const t = this.state.conn.timer;
-      if (previous.pausedJourney && previous.pausedJourney === this.pausedTimerKey() && t && t.paused) {
-        t.paused = false; t.endsAt = now() + t.remaining * 1000; t.remaining = null; this.rearmTimer();
-      }
-      this.commit({ title: 'De volta ao townhall', body: 'Olhe para o seu celular.' });
+      if (!silent) this.commit({ title: 'De volta ao townhall', body: 'Olhe para o seu celular.' });
       return null;
     }
-    let pausedJourney = previous ? previous.pausedJourney || null : null;
-    const t = this.state.conn.timer;
-    if (t && !t.paused) {
-      t.paused = true; t.remaining = Math.max(0, Math.round((t.endsAt - now()) / 1000)); this.clearTimer();
-      pausedJourney = this.pausedTimerKey();
-    }
+    this.holdJourney();
     const { roomId, activityId, title, question, ownerId } = selection;
-    this.state.presentation = { roomId, activityId, title, question, ownerId, pausedJourney };
+    this.state.presentation = { roomId, activityId, title, question, ownerId };
     this.commit({ title: 'De Volta para o Sucesso', body: title });
     return this.presentation();
   }
@@ -675,17 +727,41 @@ class Engine {
     p.draw = null; this.commit();
   }
 
-  /* ---------------- blocos do evento (falas) e som ---------------- */
-  stageInfo() {
-    const list = this.settings.stages || [], i = Math.max(0, Math.min(list.length - 1, this.state.stage || 0)), st = list[i] || { title: 'Bloco', theme: '', speaker: '' };
-    return { index: i, count: list.length, title: st.title, theme: st.theme, speaker: st.speaker };
+  /* ---------------- roteiro do evento ---------------- */
+  stepById(id) { return (this.settings.steps || []).find(x => x.id === id) || null; }
+  currentStep() { return this.stepById(this.state.step) || this.settings.steps[0]; }
+  // Alguma ação antiga mudou a tela direto (ex.: revelar as duplas): o cursor do roteiro acompanha.
+  syncCursor(type) {
+    if (this.currentStep().type === type) return;
+    const step = this.settings.steps.find(x => x.type === type);
+    if (step) this.state.step = step.id;
   }
-  setStage(index) {
-    const list = this.settings.stages || [], i = Number(index);
-    if (!Number.isInteger(i) || i < 0 || i >= list.length) throw new Error('Bloco inválido.');
-    this.state.stage = i; this.state.block = 'stage';
-    if (this.settings.stageMutes) this.state.audio.mode = 'off';
-    this.commit({ title: list[i].title, body: list[i].theme || this.settings.stageText });
+  // Coloca um passo do roteiro no ar (celulares e telão). As dinâmicas do Sucesso são ligadas pelo
+  // servidor, que conhece a sala: aqui só o cursor anda e a viagem fica esperando.
+  applyStep(id, { silent = false } = {}) {
+    const step = this.stepById(id);
+    if (!step) throw Object.assign(new Error('Esse passo não está mais no roteiro.'), { status: 404 });
+    const before = this.currentStep();
+    if (step.type === 'sucesso' && before.type !== 'sucesso') this.state.returnStep = before.id;
+    this.state.step = step.id; this.state.detour = null;
+    let notice = null;
+    switch (step.type) {
+      case 'checkin': this.state.block = 'welcome'; break;
+      case 'stage': this.state.block = 'stage'; if (this.settings.stageMutes) this.state.audio.mode = 'off'; notice = { title: step.title, body: step.theme || this.settings.stageText }; break;
+      case 'connections': this.state.block = 'connections'; notice = { title: 'Conexões', body: 'Olhe para o seu celular.' }; break;
+      case 'message': this.state.message = { title: step.title, body: step.body, emoji: step.emoji }; this.state.block = 'message'; notice = { title: step.title, body: step.body }; break;
+      case 'standby': this.state.block = 'standby'; break;
+      case 'closing': this.state.block = 'closing'; notice = { title: 'Fim da viagem', body: this.settings.closingText }; break;
+      default: break; // sucesso: a apresentação entra em seguida
+    }
+    if (step.type === 'connections') this.releaseJourney(); else this.holdJourney();
+    if (!silent) this.commit(notice);
+    return step;
+  }
+  // Bloco de fala no ar: o que o celular e o telão mostram
+  stageInfo() {
+    const step = this.currentStep();
+    return step && step.type === 'stage' ? { title: step.title, theme: step.theme, speaker: step.speaker } : { title: 'Bloco', theme: '', speaker: '' };
   }
   setAudio({ mode, volume, out } = {}) {
     if (mode !== undefined) { if (!AUDIO_MODES.includes(mode)) throw new Error('Modo de som inválido.'); this.state.audio.mode = mode; }
@@ -721,6 +797,7 @@ class Engine {
       screen: this.state.screen,
       presentation: this.presentation(),
       stage: this.stageInfo(),
+      step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length },
       audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
       settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints },
       now: now(),
@@ -796,4 +873,4 @@ class Engine {
   }
 }
 
-module.exports = { Engine, TOTAL_ROUNDS, BLOCKS, PHASES, normalizeWl };
+module.exports = { Engine, TOTAL_ROUNDS, BLOCKS, PHASES, STEP_TYPES, normalizeWl, defaultSteps };

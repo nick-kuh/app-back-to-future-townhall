@@ -52,7 +52,6 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     assert.equal(st.presentation.title, 'Uso de IA'); assert.equal(st.conn.timer.paused, true);
     assert.equal(st.presentation.live.phase, 'idle'); assert.equal(st.presentation.live.talkSeconds, 180); assert.deepEqual(st.presentation.live.guide, ['DESAFIO', 'COMO USOU IA', 'IMPACTO']);
     r = await call('POST', '/api/admin/action', { type: 'skip' }); assert.equal(r.status, 409);
-    r = await call('POST', '/api/admin/action', { type: 'setStage', index: 0 }); assert.equal(r.status, 409); // blocos travados durante a dinâmica
     r = await call('POST', '/api/admin/presentation', { roomId: room.id, activityId: 'd9' }); assert.equal(r.status, 400);
 
     // resposta pelo app: o nome vem do check-in (não de um formulário)
@@ -111,16 +110,45 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     assert.equal(st.presentation, null); assert.equal(st.conn.timer.paused, false);
     r = await call('POST', '/api/admin/action', { type: 'skip' }); assert.equal(r.status, 200);
 
-    // blocos do evento (falas) e som
-    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { stages: [{ title: 'Abertura', theme: 'O ano que passou', speaker: 'Diretoria' }, { title: '' }] } }); assert.equal(r.status, 200);
+    // ---------- roteiro do evento ----------
+    const step = id => call('POST', '/api/admin/step', { id });
+    const state = async () => (await call('GET', '/api/state')).json;
+    let ov = (await call('GET', '/api/admin/overview')).json; const steps = ov.settings.steps;
+    assert.deepEqual(steps.map(x => x.type), ['checkin', 'stage', 'connections', 'stage', 'sucesso', 'sucesso', 'sucesso', 'sucesso', 'stage', 'closing']);
+    assert.equal(ov.state.step, steps[2].id);                       // as viagens levaram o cursor para o passo Conexões
+    assert.ok(ov.sucesso.roomId); assert.equal(ov.sucesso.acts.d3.responseCount, 3);
+    // sair do passo Conexões segura a viagem; voltar solta
+    steps[1].title = 'Abertura'; steps[1].theme = 'O ano que passou'; steps[1].speaker = 'Diretoria';
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { steps } }); assert.equal(r.status, 200);
     r = await call('POST', '/api/admin/action', { type: 'setAudio', mode: 'music', volume: 70 }); assert.equal(r.status, 200);
-    st = (await call('GET', '/api/state')).json; assert.equal(st.audio.mode, 'music'); assert.equal(st.audio.volume, 70);
-    r = await call('POST', '/api/admin/action', { type: 'setStage', index: 0 }); assert.equal(r.status, 200);
-    st = (await call('GET', '/api/state')).json;
-    assert.equal(st.block, 'stage'); assert.deepEqual(st.stage, { index: 0, count: 2, title: 'Abertura', theme: 'O ano que passou', speaker: 'Diretoria' });
-    assert.equal(st.audio.mode, 'off');                                                             // bloco de fala desliga o som
-    r = await call('POST', '/api/admin/action', { type: 'setStage', index: 5 }); assert.equal(r.status, 400);
+    st = await state(); assert.equal(st.audio.mode, 'music'); assert.equal(st.audio.volume, 70);
+    r = await step(steps[1].id); assert.equal(r.status, 200);
+    st = await state();
+    assert.equal(st.block, 'stage'); assert.deepEqual(st.stage, { title: 'Abertura', theme: 'O ano que passou', speaker: 'Diretoria' });
+    assert.equal(st.audio.mode, 'off');                             // bloco de fala desliga o som
+    assert.equal(st.conn.timer.paused, true);                       // a viagem espera
+    r = await step(steps[2].id); st = await state(); assert.equal(st.block, 'connections'); assert.equal(st.conn.timer.paused, false);
+    // passo do Sucesso: a dinâmica entra no ar na sala do evento; tela avulsa tira; voltar ao roteiro recoloca
+    r = await step(steps[4].id); assert.equal(r.status, 200);
+    st = await state(); assert.equal(st.presentation.activityId, 'd1'); assert.equal(st.conn.timer.paused, true);
+    ov = (await call('GET', '/api/admin/overview')).json; assert.equal(ov.sucesso.roomId, st.presentation.roomId);
+    r = await call('POST', '/api/admin/action', { type: 'setMessage', message: { title: 'Intervalo', body: '10 min', emoji: '☕' }, show: true }); assert.equal(r.status, 200);
+    st = await state(); assert.equal(st.presentation, null); assert.equal(st.block, 'message');
+    ov = (await call('GET', '/api/admin/overview')).json; assert.equal(ov.state.detour, 'message'); assert.equal(ov.state.step, steps[4].id);
+    r = await step(steps[4].id); st = await state(); assert.equal(st.presentation.activityId, 'd1');
+    ov = (await call('GET', '/api/admin/overview')).json; assert.equal(ov.state.detour, null);
+    r = await step('nao-existe'); assert.equal(r.status, 404);
+    r = await step(steps[9].id); st = await state(); assert.equal(st.block, 'closing'); assert.equal(st.presentation, null);
+    // roteiro editado: tipos desconhecidos e repetidos saem; o passo no ar removido volta o cursor para o começo
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { steps: [{ type: 'checkin' }, { type: 'connections' }, { type: 'connections' }, { type: 'sucesso', activity: 'd9' }, { type: 'message', title: 'Intervalo' }, { type: 'xyz' }] } });
+    ov = (await call('GET', '/api/admin/overview')).json; assert.deepEqual(ov.settings.steps.map(x => x.type), ['checkin', 'connections', 'message']); assert.equal(ov.state.step, ov.settings.steps[0].id);
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { steps: [] } }); assert.equal(r.status, 400);
     r = await call('POST', '/api/admin/action', { type: 'setAudio', mode: 'rock' }); assert.equal(r.status, 400);
+    // resetar o evento: check-ins, roteiro e respostas do Sucesso voltam ao zero
+    r = await call('POST', '/api/admin/action', { type: 'resetEvent' }); assert.equal(r.status, 200);
+    await new Promise(done => setTimeout(done, 400));
+    ov = (await call('GET', '/api/admin/overview')).json;
+    assert.equal(ov.counts.checkedIn, 0); assert.equal(ov.state.block, 'welcome'); assert.equal(ov.sucesso.acts.d3.responseCount, 0); assert.equal(ov.sucesso.acts.d4.responseCount, 0);
     console.log('OK · townhall + De Volta para o Sucesso integrados');
   } catch (e) {
     console.error('FALHOU:', e); process.exitCode = 1;

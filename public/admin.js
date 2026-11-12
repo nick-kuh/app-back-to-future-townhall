@@ -12,11 +12,20 @@
   const WLS = ['Estag', 'WL1', 'WL2', 'WL3'];
   const PHASE_LABEL = { idle: 'sem duplas', ready: 'duplas prontas', matching: 'duplas se encontrando', talk: 'conversa em andamento', roundEnd: '88 MPH (intervalo)', ranking: 'avaliação aberta', results: 'resultados publicados' };
   const TIMER_LABEL = { matching: 'encontro', talk: 'conversa', break: 'intervalo', ranking: 'avaliação' };
-  const BLOCK_LABEL = { standby: 'Olhos no telão', welcome: 'Check-in', message: 'Mensagem', connections: 'Conexões', closing: 'Encerramento', stage: 'Bloco de fala' };
-  const BLOCK_ICON = { standby: '📺', welcome: '🚪', message: '📣', connections: '⚡', closing: '🏁', stage: '🎤' };
-  const AUDIO_LABEL = { music: '🎵 Música', ambient: '🎼 Trilha sonora', off: '🔇 Sem áudio' };
+  // roteiro do evento
+  const STEP_ICON = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', message: '📣', standby: '📺', closing: '🏁' };
+  const STEP_KIND = { checkin: 'Check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', message: 'Aviso', standby: 'Olhos no telão', closing: 'Encerramento' };
+  const STEP_HINT = { checkin: 'as pessoas entram pelo nome', connections: '3 viagens em duplas e avaliação', sucesso: 'pergunta ao vivo, nuvem de palavras', standby: 'celulares em pausa, atenção no telão', closing: 'agradecimento e créditos' };
+  const SUC_NAME = { d1: 'Antes de Partir', d2: 'Look Back', d3: 'Uso de IA', d4: 'Look Ahead' };
+  const SUC_COLOR = { d1: 'var(--cyan)', d2: 'var(--yellow)', d3: 'var(--magenta)', d4: 'var(--orange)' };
+  const SUC_PHASE = { idle: 'aguardando você iniciar', run: 'recebendo respostas', paused: 'recebimento pausado', done: 'recebimento encerrado' };
+  const TALK = { d2: 120, d3: 180 }; // dinâmicas com sorteio e tempo de fala (como no painel do Lucas)
+  const stepTitle = x => (x.type === 'checkin' ? 'Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : 'Encerramento');
+  const DEFAULT_STEPS = () => [{ type: 'checkin' }, { type: 'stage', title: 'Bloco 1', theme: '', speaker: '' }, { type: 'connections' }, { type: 'stage', title: 'Bloco 2', theme: '', speaker: '' },
+    { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' }, { type: 'stage', title: 'Bloco 3', theme: '', speaker: '' }, { type: 'closing' }];
+  const AUDIO_LABEL = { music: '🎵 Música', ambient: '🎼 Trilha', off: '🔇 Sem áudio' };
 
-  const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'control', round: 1, offset: 0, socket: null, peopleQ: '', connected: false, lastHtml: '', pressing: false };
+  const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'live', prep: 'roteiro', open: new Set(), edit: null, stepsDraft: null, round: 1, offset: 0, socket: null, peopleQ: '', connected: false, lastHtml: '', pressing: false };
 
   function toast(msg, err) {
     const t = $('#toast'); t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 3500);
@@ -60,34 +69,53 @@
   }
 
   /* ---------- render ---------- */
+  // Duas áreas: "Ao vivo" (o roteiro e o passo que está no ar) e "Preparar" (roteiro, pessoas, perguntas, ajustes, testes).
+  const PREP = [['roteiro', 'Roteiro'], ['people', 'Pessoas'], ['questions', 'Perguntas'], ['config', 'Ajustes'], ['tests', 'Testes']];
   function render(force) {
     if (!A.O) return;
     renderStatus(); renderAudio();
     if (A.pressing) { clearTimeout(A.renderLater); A.renderLater = setTimeout(() => render(force), 250); return; }
-    const live = ['control', 'people', 'questions', 'sucesso'].includes(A.tab);
-    if (A.tab === 'sucesso') sucStart(); else sucStop();
-    if (!force && !live && $('#main').dataset.view === A.tab) return;
-    const html = ({ control: vControl, sucesso: vSucesso, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.tab]();
-    if (!force && $('#main').dataset.view === A.tab && html === A.lastHtml) return;
+    const view = A.tab === 'live' ? 'live' : 'prep-' + A.prep;
+    if (!force && ['prep-config', 'prep-tests'].includes(view) && $('#main').dataset.view === view) return;
+    const html = A.tab === 'live' ? vLive()
+      : `<div class="subtabs prepnav">${PREP.map(([k, l]) => `<button class="${A.prep === k ? 'on' : ''}" data-prep="${k}">${l}</button>`).join('')}</div>` + ({ roteiro: vRoteiro, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.prep]();
+    if (!force && $('#main').dataset.view === view && html === A.lastHtml) return;
     A.lastHtml = html;
     const y = window.scrollY;
     const ae = document.activeElement, focusId = ae && ae.id && $('#main').contains(ae) ? ae.id : null;
     const caret = focusId && typeof ae.selectionStart === 'number' ? ae.selectionStart : null;
-    $('#main').dataset.view = A.tab;
+    $('#main').dataset.view = view;
     $('#main').innerHTML = html;
     window.scrollTo(0, y);
     if (focusId) { const el = document.getElementById(focusId); if (el) { el.focus(); if (caret !== null && el.setSelectionRange) el.setSelectionRange(caret, caret); } }
+    document.querySelectorAll('#tabs [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === A.tab));
+    tickLive();
   }
   function timerLeft(t) { return t ? (t.paused ? t.remaining : Math.max(0, Math.round((t.endsAt - (Date.now() + A.offset)) / 1000))) : null; }
+  function talkLeft(t) { return t ? (t.endsAt ? Math.max(0, Math.ceil((t.endsAt - Date.now() - A.offset) / 1000)) : t.remaining) : 0; }
+  const liveStep = () => { const steps = A.O.settings.steps, i = Math.max(0, steps.findIndex(x => x.id === A.O.state.step)); return { steps, i, step: steps[i], next: steps[i + 1] || null, prev: steps[i - 1] || null }; };
+  const sucAct = k => (A.O.sucesso && A.O.sucesso.acts[k]) || {};
+  const sucEff = a => (a.phase === 'run' && a.endsAt && a.endsAt <= Date.now() + A.offset ? 'done' : a.phase || null); // o prazo pode acabar entre dois avisos do servidor
+  const sucLeft = a => (a.phase === 'run' && a.endsAt ? Math.max(0, Math.ceil((a.endsAt - Date.now() - A.offset) / 1000)) : a.remainingSeconds || 0);
+  // O que está no ar agora, em uma linha
+  function nowText() {
+    const O = A.O, { steps, i, step } = liveStep();
+    if (O.state.detour) return `fora do roteiro · ${O.state.detour === 'message' ? 'aviso: ' + (O.state.message.title || '') : 'olhos no telão'}`;
+    let extra = '';
+    if (step.type === 'connections') { const c = O.state.conn, t = c.timer; extra = ` · ${c.round ? `viagem ${c.round}/3 · ` : ''}${t ? `${TIMER_LABEL[t.kind] || t.kind} ${fmt(timerLeft(t))}${t.paused ? ' ⏸' : ''}` : PHASE_LABEL[c.phase] || c.phase}`; }
+    if (step.type === 'sucesso') { const a = sucAct(step.activity), ph = sucEff(a); if (ph) extra = ` · ${ph === 'run' ? 'recebendo' + (a.endsAt ? ' ' + fmt(sucLeft(a)) : '') : ph === 'done' ? 'encerrado' : ph === 'paused' ? 'pausado' : 'não iniciado'} · ${a.responseCount} resp.`; }
+    if (step.type === 'stage' && step.theme) extra = ` · ${step.theme}`;
+    return `${i + 1}/${steps.length} · ${step.type === 'sucesso' ? 'Sucesso ' + step.activity.slice(1).padStart(2, '0') : stepTitle(step)}${extra}`;
+  }
   function renderStatus() {
     const O = A.O; if (!O) return;
-    const c = O.state.conn, t = c.timer, left = timerLeft(t);
-    $('#status').innerHTML = `
-      <span class="pill ${A.connected ? 'on' : 'off'}">${A.connected ? '● conectado' : '○ desconectado'}</span>
-      <span class="pill hot ${O.state.presentation ? 'suc' : ''}">Celulares: ${O.state.presentation ? '🚀 Sucesso · ' + esc(O.state.presentation.title) : O.state.block === 'stage' ? '🎤 ' + esc(stageNow().title) : BLOCK_LABEL[O.state.block]}</span>
-      <span class="pill">Conexões: ${PHASE_LABEL[c.phase] || c.phase}${c.round ? ` · viagem ${c.round}/3` : ''}</span>
-      ${t ? `<span class="pill led ${t.paused ? 'paused' : ''}">${TIMER_LABEL[t.kind] || t.kind} ${fmt(left)}${t.paused ? ' ⏸' : ''}</span>` : ''}
-      <span class="pill">A bordo: ${O.counts.checkedIn}/${O.counts.total}</span>`;
+    const tl = O.telao || { count: 0 };
+    const html = `<span class="dot ${A.connected ? 'on' : 'off'}" title="${A.connected ? 'Conectado ao servidor' : 'Sem conexão com o servidor'}"></span>
+      ${A.connected ? '' : '<span class="pill off">sem conexão</span>'}
+      <span class="nowchip" title="No ar agora: ${esc(nowText())}"><small>NO AR</small><span>${esc(nowText())}</span></span>
+      <span class="pill" title="Pessoas que já fizeram check-in">👥 ${O.counts.checkedIn}/${O.counts.total}</span>
+      <a class="pill ${tl.count ? (tl.auth ? 'on' : 'hot') : 'off'}" href="/telao.html" target="_blank" title="${tl.count ? (tl.auth ? 'Telão aberto e logado' : 'Telão aberto sem login: não mostra as respostas do Sucesso') : 'Nenhum telão aberto. Clique para abrir.'}">📽 Telão ${tl.count ? (tl.auth ? '✓' : 'sem login') : 'fechado'}</a>`;
+    if (html !== A.statusHtml) { A.statusHtml = html; $('#status').innerHTML = html; }
   }
   setInterval(renderStatus, 500);
 
@@ -106,230 +134,230 @@
       <input type="range" min="0" max="100" step="5" value="${a.volume}" data-act="audioVol" title="Volume" aria-label="Volume">`;
   }
   document.addEventListener('pointerdown', () => { if (window.Trilha) Trilha.unlock(); });
-  const stageNow = () => { const O = A.O, list = O.settings.stages || []; return list[Math.min(list.length - 1, O.state.stage || 0)] || { title: 'Bloco', theme: '', speaker: '' }; };
+  /* ====================== AO VIVO: o roteiro e o passo que está no ar ====================== */
+  const btn = (label, act, o = {}) => `<button class="btn ${o.cls || ''}" data-act="${act}"${Object.entries(o.data || {}).map(([k, v]) => ` data-${k}="${esc(v)}"`).join('')} ${o.disabled ? 'disabled' : ''}>${label}</button>`;
+  // <details> que continua aberto quando o painel se redesenha
+  const det = (key, summary, content, cls = 'mini') => `<details class="${cls}" data-d="${key}" ${A.open.has(key) ? 'open' : ''}><summary>${summary}</summary>${content}</details>`;
+  document.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.d) { if (d.open) A.open.add(d.dataset.d); else A.open.delete(d.dataset.d); } }, true);
 
-  function blockCard(key, body, extra = '') {
-    const on = !A.O.state.presentation && A.O.state.block === key;
-    return `<div class="block ${on ? 'active' : ''}" id="blk-${key}">
-      <div class="bh"><span class="bi">${BLOCK_ICON[key]}</span><div class="bt">${BLOCK_LABEL[key]}<div class="small">${on ? '● na tela dos celulares agora' : 'pronto para exibir'}</div></div>
-        ${extra}<button class="btn sm ${on ? 'ghost' : 'cyan'}" data-act="setBlock" data-block="${key}" ${on || A.O.state.presentation ? 'disabled' : ''}>${on ? 'Exibindo' : '▶ Exibir nos celulares'}</button></div>
-      <div class="bb">${body}</div></div>`;
-  }
-  /* ---------- De Volta para o Sucesso ---------- */
-  // As quatro dinâmicas do painel do Lucas (/painel). Aqui o Doc escolhe a sala, libera a dinâmica
-  // no telão e nos celulares e controla o recebimento; o carro, a nuvem e o sorteio ficam no painel 3D.
-  const SUC = { rooms: null, roomId: localStorage.getItem('bttf.sucessoRoom') || '', states: {}, resp: new Map(), cursor: 0, offset: 0, timer: null, error: '', loading: false };
-  const DYN = {
-    d1: { n: '01', c: 'var(--cyan)', hint: 'Abre recebendo · nuvem de palavras ao vivo' },
-    d2: { n: '02', c: 'var(--yellow)', hint: '2 min · carro carrega 1,21 GW · depois nuvem + sorteio com 2 min de fala' },
-    d3: { n: '03', c: 'var(--magenta)', hint: '2 min · carro · depois nuvem + sorteio com 3 min de fala (desafio → IA → impacto)' },
-    d4: { n: '04', c: 'var(--orange)', hint: '2 min · carro · a pessoa pode enviar sem nome · nuvem + "Destino: 2027"' },
-  };
-  const SUC_PHASE = { idle: 'aguardando abertura', run: 'recebendo respostas', paused: 'recebimento pausado', done: 'recebimento encerrado' };
-  function sucStart() { if (!SUC.timer && !SUC.loading) sucPoll(); }
-  function sucStop() { clearTimeout(SUC.timer); SUC.timer = null; }
-  async function sucPoll() {
-    clearTimeout(SUC.timer); SUC.timer = null; SUC.loading = true;
-    try {
-      if (!SUC.rooms) {
-        const r = await api('GET', '/api/rooms'); SUC.rooms = r.rooms || [];
-        if (!SUC.rooms.some(x => x.id === SUC.roomId)) { SUC.roomId = SUC.rooms[0] ? SUC.rooms[0].id : ''; SUC.cursor = 0; SUC.resp.clear(); }
-      }
-      if (SUC.roomId) {
-        const d = await api('GET', `/api/rooms/${SUC.roomId}/snapshot?after=${SUC.cursor}`);
-        SUC.offset = d.serverNow - Date.now();
-        for (const a of d.activities) SUC.states[a.id] = a;
-        for (const x of d.responses || []) SUC.resp.set(x.id, { a: x.activityId, r: x.roundId, n: x.name, t: x.answer, at: x.createdAt });
-        SUC.cursor = d.cursor || SUC.cursor;
-      }
-      SUC.error = '';
-    } catch (e) { SUC.error = e.message; SUC.rooms = SUC.rooms && SUC.rooms.length ? SUC.rooms : null; }
-    SUC.loading = false;
-    if (A.tab === 'sucesso') { SUC.timer = setTimeout(sucPoll, document.hidden ? 6000 : 2000); render(); }
-  }
-  const sucAnswers = k => { const st = SUC.states[k], out = []; if (st) for (const v of SUC.resp.values()) if (v.a === k && v.r === st.roundId) out.push(v); return out; };
-  const sucCount = k => sucAnswers(k).length;
-  const TALK = { d2: 120, d3: 180 }; // dinâmicas com sorteio e tempo de fala (como no painel do Lucas)
-  function talkLeft(t) { return t ? (t.endsAt ? Math.max(0, Math.ceil((t.endsAt - Date.now() - A.offset) / 1000)) : t.remaining) : 0; }
-  // Registro das respostas (.txt ou Word), como o botão de download do painel 3D
-  function sucDownload(k, type) {
-    const st = SUC.states[k], list = sucAnswers(k), date = new Date().toLocaleString('pt-BR');
-    if (!st || !list.length) return toast('Nenhuma resposta para baixar.', true);
-    const title = `De Volta para o Sucesso | Dinâmica ${k.slice(1)}: ${st.title}`;
-    let blob, name = `Respostas_${st.title.replace(/[^\p{L}\p{N}]+/gu, '')}`;
-    if (type === 'txt') { blob = new Blob([`${title.toUpperCase()}\nPergunta: ${st.question}\nData: ${date}\nTotal: ${list.length}\n\n` + list.map((r, i) => `${i + 1}. ${r.n}: ${r.t}`).join('\n')], { type: 'text/plain;charset=utf-8' }); name += '.txt'; }
-    else {
-      const h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"></head><body style="font-family:Calibri"><h1 style="color:#FF6B1A">${esc(title)}</h1><p><b>Pergunta:</b> ${esc(st.question)}</p><p><b>Data:</b> ${date} &nbsp; <b>Total:</b> ${list.length}</p><table border="1" cellpadding="6" style="border-collapse:collapse;width:100%"><tr style="background:#17142E;color:#fff"><th>#</th><th>Nome</th><th>Resposta</th></tr>${list.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.n)}</td><td>${esc(r.t)}</td></tr>`).join('')}</table></body></html>`;
-      blob = new Blob(['\ufeff', h], { type: 'application/msword' }); name += '.doc';
+  function stepSub(x) {
+    const O = A.O;
+    if (x.type === 'checkin') return `${O.counts.checkedIn} de ${O.counts.total} a bordo`;
+    if (x.type === 'stage') return x.theme || 'sem tema definido';
+    if (x.type === 'connections') { const c = O.state.conn, here = liveStep().step.id === x.id && !O.state.detour; return c.phase === 'idle' || c.phase === 'ready' ? '3 viagens em duplas' : c.phase === 'results' ? 'conexões enviadas' : `${here ? PHASE_LABEL[c.phase] : 'em pausa'}${c.round ? ` · viagem ${c.round}/3` : ''}`; }
+    if (x.type === 'sucesso') {
+      // a dinâmica 01 não tem cronômetro: nasce aberta, então só conta como "recebendo" quando está na tela
+      const a = sucAct(x.activity), ph = sucEff(a), here = liveStep().step.id === x.id && !O.state.detour, open = ph === 'run' && (a.endsAt || here);
+      return ph ? `${a.responseCount} respostas · ${ph === 'done' ? 'encerrado' : open ? 'recebendo' : ph === 'run' ? 'sem cronômetro' : ph === 'paused' ? 'pausado' : 'não iniciado'}` : '';
     }
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast('Download iniciado');
+    if (x.type === 'message') return x.body || '';
+    return STEP_HINT[x.type] || '';
   }
-  function sucLeft(st) {
-    if (!st) return null;
-    if (st.phase === 'run' && st.endsAt) return Math.max(0, Math.ceil((st.endsAt - Date.now() - SUC.offset) / 1000));
-    return st.id === 'd1' ? null : st.remainingSeconds;
-  }
-  function sucBanner() {
-    const p = A.O && A.O.state.presentation;
-    if (!p) return '';
-    const d = DYN[p.activityId] || DYN.d1;
-    return `<div class="card suc-live" style="--c:${d.c}"><div class="suc-live-row"><div><div class="kicker">🚀 No telão e nos celulares agora</div>
-      <h2 style="margin:4px 0 2px">De Volta para o Sucesso · Dinâmica ${d.n} · ${esc(p.title)}</h2>
-      <p class="small">${esc(p.question)} · A viagem do bloco Conexões fica pausada e volta sozinha quando você voltar ao Townhall.</p></div>
-      <div class="actions"><a class="btn ghost sm" href="/painel?sala=${encodeURIComponent(p.roomId)}&d=${encodeURIComponent(p.activityId)}" target="_blank">Painel 3D ↗</a><button class="btn sm" data-act="sucStop">⏮ Voltar ao Townhall</button></div></div></div>`;
-  }
-  function vSucesso() {
-    const pres = A.O.state.presentation, room = (SUC.rooms || []).find(r => r.id === SUC.roomId);
-    const clock = new Date(Date.now() + A.offset).toTimeString().slice(0, 5);
-    const rooms = SUC.rooms || [];
-    const cards = Object.keys(DYN).map(k => {
-      const d = DYN[k], st = SUC.states[k], live = pres && pres.roomId === SUC.roomId && pres.activityId === k;
-      const answers = sucAnswers(k), n = answers.length, left = sucLeft(st), ph = st ? st.phase : null, draw = live ? pres.draw : null;
-      return `<div class="suc-card ${live ? 'live' : ''}" style="--c:${d.c}">
-        <div class="suc-head"><span class="n">${d.n}</span><div><div class="t">Dinâmica ${+d.n}: ${esc(st ? st.title : '')}</div><div class="small">${esc(d.hint)}</div></div>${live ? '<span class="pill hot">● no telão</span>' : ''}</div>
-        <p class="q">${esc(st ? st.question : 'Carregando…')}</p>
-        <div class="suc-stats"><div class="tcx"><b>${String(n).padStart(3, '0')}</b><span>RESPOSTAS</span></div>${left !== null && left !== undefined ? `<div class="tcx ${ph === 'run' && left <= 30 ? 'alert' : ''}" style="--c:var(--yellow)"><b class="suc-left" data-k="${k}">${fmt(left)}</b><span>RECEBIMENTO</span></div>` : ''}<span class="suc-ph" data-phase="${ph || ''}">${ph ? SUC_PHASE[ph] : '—'}</span></div>
-        <div class="actions">
-          ${live ? `<button class="btn sm ghost" data-act="sucStop">⏮ Voltar ao Townhall</button>` : `<button class="btn sm cyan" data-act="sucShow" data-k="${k}" ${SUC.roomId ? '' : 'disabled'}>📺 Liberar no telão e celulares</button>`}
-          <button class="btn sm" data-act="sucCmd" data-cmd="start" data-k="${k}" ${st && (ph === 'idle' || ph === 'paused') ? '' : 'disabled'}>▶ ${ph === 'paused' ? 'Retomar' : k === 'd1' ? 'Abrir' : 'Iniciar'} recebimento${k === 'd1' || ph === 'paused' ? '' : ' (2 min)'}</button>
-          <button class="btn sm ghost" data-act="sucCmd" data-cmd="pause" data-k="${k}" ${ph === 'run' ? '' : 'disabled'}>❚❚ Pausar</button>
-          <button class="btn sm ghost" data-act="sucCmd" data-cmd="end" data-k="${k}" ${st && ph !== 'done' ? '' : 'disabled'}>⏭ Encerrar</button>
-          <button class="btn sm ghost" data-act="sucCmd" data-cmd="reset" data-k="${k}" ${ph === 'done' || ph === 'paused' ? '' : 'disabled'}>↺ Reiniciar</button>
-        </div>
-        ${live && TALK[k] ? (draw ? `<div class="suc-draw on"><div class="small">🎲 VIAJANTE SORTEADO${draw.personId ? ' · avisado no celular' : ''}</div><div class="who">${esc(draw.name)}</div><div class="what">“${esc(draw.answer)}”</div>
-            <div class="suc-stats"><div class="tcx ${draw.talk.endsAt && talkLeft(draw.talk) <= 30 ? 'alert' : ''}" style="--c:var(--orange)"><b class="suc-talk">${fmt(talkLeft(draw.talk))}</b><span>TEMPO DE FALA</span></div>
-              <div class="actions">${draw.talk.endsAt && talkLeft(draw.talk) > 0 ? '<button class="btn sm ghost" data-act="sucDraw" data-cmd="talkPause">❚❚ Pausar</button>' : '<button class="btn sm cyan" data-act="sucDraw" data-cmd="talkStart">▶ Iniciar fala</button>'}<button class="btn sm ghost" data-act="sucDraw" data-cmd="talkReset">↺ Reiniciar</button></div></div>
-            <div class="actions"><button class="btn sm" data-act="sucDraw" data-cmd="draw">🎲 Sortear outro</button><button class="btn sm ghost" data-act="sucDraw" data-cmd="close">Voltar para a nuvem</button></div></div>`
-          : `<div class="suc-draw"><button class="btn sm" data-act="sucDraw" data-cmd="draw" ${ph === 'done' && n ? '' : 'disabled'}>🎲 Sortear viajante</button><span class="small">${ph === 'done' ? (n ? `${fmt(TALK[k])} de fala para quem for sorteado` : 'sem respostas para sortear') : 'disponível depois de encerrar o recebimento'}</span></div>`) : ''}
-        ${n ? `<details class="suc-answers"><summary>Ver respostas (${n})</summary><div class="list">${answers.slice().reverse().map(r => `<p><b>${esc(r.n)}</b> · ${esc(r.t)}</p>`).join('')}</div>
-            <div class="actions"><button class="btn ghost xs" data-act="sucDownload" data-k="${k}" data-type="txt">⬇ Baixar .txt</button><button class="btn ghost xs" data-act="sucDownload" data-k="${k}" data-type="doc">⬇ Baixar Word</button></div></details>` : ''}
-        <div class="actions suc-links"><a href="/painel?sala=${encodeURIComponent(SUC.roomId)}&d=${k}" target="_blank" ${SUC.roomId ? '' : 'aria-disabled="true"'}>🚗 Abrir no painel 3D ↗</a><a href="#" data-act="sucCopy" data-k="${k}">🔗 Copiar link de resposta</a><a href="#" class="danger" data-act="sucCmd" data-cmd="clear" data-k="${k}">🗑 Limpar respostas</a></div>
+  function vLive() {
+    const O = A.O, { steps, i, step, next, prev } = liveStep(), detour = O.state.detour, scene = (O.state.screen && O.state.screen.scene) || 'auto';
+    // viagem interrompida no meio (o evento saiu do passo Conexões): fica marcada como em pausa, não como feita
+    const held = x => x.type === 'connections' && ['matching', 'talk', 'roundEnd', 'ranking'].includes(O.state.conn.phase);
+    const road = steps.map((x, n) => `<button class="rs ${n === i ? 'now' : held(x) ? 'held' : n < i ? 'done' : ''}" data-act="jumpStep" data-id="${x.id}" title="Ir para este passo">
+        <span class="n">${n === i ? n + 1 : held(x) ? '⏸' : n < i ? '✓' : n + 1}</span><span class="ic">${STEP_ICON[x.type]}</span>
+        <span class="tx"><b>${esc(stepTitle(x))}</b><small>${esc(stepSub(x))}</small></span></button>`).join('');
+    const extras = `<div class="road-extra">
+        <div class="small">Fora do roteiro</div>
+        <div class="actions">${btn('📣 Aviso rápido', 'quickMessage', { cls: 'ghost sm' })}${btn('📺 Olhos no telão', 'standbyNow', { cls: 'ghost sm' })}</div>
+        ${det('telao', '📽 Tela do telão', `<div class="actions" style="margin-top:8px">${[['auto', 'Segue o roteiro'], ['clock', 'Relógio'], ['logo', 'Logo']].map(([k, l]) => `<button class="btn xs ${scene === k ? '' : 'ghost'}" data-act="setScene" data-scene="${k}">${l}</button>`).join('')}</div>
+          <label class="sw" style="margin-top:8px"><input type="checkbox" data-act="toggleMutual" ${O.settings.showMutualOnScreen ? 'checked' : ''}> Mostrar no telão os nomes das conexões mútuas</label>`)}
+        <a href="#" class="small" data-go="roteiro">✎ Editar roteiro</a>
       </div>`;
-    }).join('');
-    return `${sucBanner()}
-      <div class="card suc-hero">
-        <div class="suc-circuits"><div class="tcx" style="--c:var(--yellow)"><b>2026</b><span>LAST TIME DEPARTED</span></div><div class="tcx" style="--c:var(--cyan)"><b>${clock}</b><span>PRESENT TIME</span></div><div class="tcx" style="--c:var(--orange)"><b>2027</b><span>DESTINATION TIME</span></div></div>
-        <h1 class="suc-title">DE VOLTA PARA O SUCESSO</h1>
-        <p class="small center">As quatro dinâmicas do Lucas, agora no fluxo do evento. <b>Liberar</b> põe a pergunta no telão e abre a resposta no app de cada pessoa, já com o nome do check-in. Ao <b>encerrar</b>, o carro entra no portal e o telão mostra a nuvem de palavras; nas dinâmicas 2 e 3 você <b>sorteia</b> um viajante e controla o tempo de fala por aqui. <b>Voltar ao Townhall</b> devolve o evento de onde parou.</p>
-        <p class="small center">${(A.O.telao || {}).count ? ((A.O.telao || {}).auth ? '<span class="ok">✔ Telão aberto e logado: mostra respostas, nuvem e sorteio.</span>' : '<span class="warn">⚠ O telão está aberto sem login: não vai mostrar as respostas, a nuvem nem o texto do sorteado.</span>') : '<span class="warn">⚠ Nenhum telão aberto.</span>'} As respostas só aparecem no telão aberto <b>neste navegador</b> (logado): <a href="/telao.html" target="_blank">abrir telão ↗</a>. O <a href="/painel${SUC.roomId ? '?sala=' + encodeURIComponent(SUC.roomId) : ''}" target="_blank">painel 3D ↗</a> original continua disponível.</p>
-        <div class="actions suc-room">
-          ${rooms.length ? `<label class="small">Sala <select class="input" data-act="sucRoom">${rooms.map(r => `<option value="${esc(r.id)}" ${r.id === SUC.roomId ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : `<span class="small">${SUC.rooms ? 'Nenhuma sala ainda.' : 'Carregando salas…'}</span>`}
-          <button class="btn sm ${rooms.length ? 'ghost' : ''}" data-act="sucNewRoom">＋ ${rooms.length ? 'Nova sala' : 'Criar a sala do evento'}</button>
-          ${room ? `<span class="small">${esc(room.name)} · respostas salvas no servidor</span>` : ''}
-        </div>
-        ${SUC.error ? `<div class="warn">⚠ ${esc(SUC.error)}</div>` : ''}
-      </div>
-      <div class="suc-grid">${cards}</div>`;
+    return `<div class="live"><aside class="road"><div class="road-title">Roteiro</div>${road}${extras}</aside>${detour ? panelDetour(detour, step) : panelStep(step, i, steps.length, next, prev)}</div>`;
+  }
+  // Painel do passo atual: um botão principal por vez; quando o passo não pede mais nada, o principal é "Próximo".
+  function panelStep(step, i, total, next, prev) {
+    const p = ({ checkin: pCheckin, stage: pStage, connections: pConnections, sucesso: pSucesso, message: pMessage, standby: pStandby, closing: pClosing })[step.type](step);
+    // "Próximo" vira o botão principal quando o passo não pede mais nada; com algo em andamento ele fica discreto
+    const nextBig = !p.primary && !p.busy;
+    const nextBtn = next ? btn(`Próximo: ${esc(stepTitle(next))} ▶`, 'goStep', { cls: nextBig ? 'big next' : 'ghost next', data: { id: next.id, guard: p.busy || '' } }) : '';
+    return `<section class="stepbox t-${step.type}" ${step.type === 'sucesso' ? `style="--c:${SUC_COLOR[step.activity]}"` : ''}>
+      <div class="sb-head"><span class="kick">Passo ${i + 1} de ${total} · ${STEP_KIND[step.type]}</span><span class="onair">${esc(p.onair || '')}</span></div>
+      <h1>${STEP_ICON[step.type]} ${esc(p.title || stepTitle(step))}</h1>
+      ${p.body || ''}
+      ${p.warn ? `<div class="sb-warn">${p.warn}</div>` : ''}
+      <div class="sb-actions">${p.primary || (nextBig ? nextBtn : '')}${(p.secondary || []).join('')}${nextBig && !next ? '<span class="ok">✔ Último passo do roteiro</span>' : ''}</div>
+      <div class="sb-nav">${prev ? `<a href="#" data-act="jumpStep" data-id="${prev.id}">← voltar para ${esc(stepTitle(prev))}</a>` : '<span></span>'}${nextBig ? '' : nextBtn}</div>
+      ${p.more ? det('more-' + step.type, 'Mais opções', `<div class="sb-more-in">${p.more}</div>`, 'sb-more') : ''}
+    </section>`;
+  }
+  function panelDetour(kind, step) {
+    const O = A.O, m = O.state.message;
+    return `<section class="stepbox t-detour">
+      <div class="sb-head"><span class="kick">Fora do roteiro</span><span class="onair">Celulares e telão: ${kind === 'message' ? 'este aviso' : 'tela de pausa'}</span></div>
+      <h1>${kind === 'message' ? `${esc(m.emoji || '📣')} ${esc(m.title)}` : '📺 Olhos no telão'}</h1>
+      <p class="lead">${esc(kind === 'message' ? m.body : O.settings.standbyText || '')}</p>
+      <div class="sb-actions">${btn(`↩ Voltar ao roteiro: ${esc(stepTitle(step))}`, 'goStep', { cls: 'big', data: { id: step.id } })}${kind === 'message' ? btn('✎ Editar aviso', 'quickMessage', { cls: 'ghost' }) : ''}</div>
+    </section>`;
+  }
+
+  function pCheckin() {
+    const O = A.O, missing = O.people.filter(p => p.active && !p.checkedInAt);
+    return { onair: 'Celulares: cada pessoa digita o nome e embarca · Telão: QR do app',
+      body: `<div class="bigstat"><b>${O.counts.checkedIn}</b><span>de ${O.counts.total} a bordo</span></div>
+        <div class="bar"><i style="width:${Math.round(100 * O.counts.checkedIn / Math.max(1, O.counts.total))}%"></i></div>
+        ${missing.length ? det('missing', `Quem ainda não entrou (${missing.length})`, `<p class="small" style="margin-top:6px">${esc(missing.map(p => p.name).join(' · '))}</p>`) : '<p class="ok">✔ Todo mundo a bordo</p>'}` };
+  }
+  // edição rápida do passo que está no ar (tema do bloco, texto do aviso)
+  const editing = step => (A.edit && A.edit.id === step.id ? A.edit : null);
+  const editField = (label, field, value, tag = 'input') => `<label class="f">${label}${tag === 'textarea' ? `<textarea class="input" id="ed-${field}" data-edit="${field}">${esc(value)}</textarea>` : `<input class="input" id="ed-${field}" data-edit="${field}" value="${esc(value)}">`}</label>`;
+  const editActions = `<div class="actions">${btn('Salvar', 'saveEdit', { cls: 'sm' })}${btn('Cancelar', 'cancelEdit', { cls: 'ghost sm' })}</div>`;
+  function pStage(step) {
+    const ed = editing(step);
+    return { onair: `Celulares: nome e tema do bloco · Telão calmo${A.O.settings.stageMutes ? ' · som desligado' : ''}`,
+      body: ed ? `<div class="form editstep">${editField('Nome do bloco', 'title', ed.title)}${editField('Tema (aparece no celular e no telão)', 'theme', ed.theme)}${editField('Quem fala (opcional)', 'speaker', ed.speaker)}${editActions}</div>`
+        : `<div class="theme">${esc(step.theme || 'Sem tema definido')}</div>${step.speaker ? `<div class="speaker">com ${esc(step.speaker)}</div>` : ''}<div class="actions">${btn('✎ Editar tema', 'editStep', { cls: 'ghost sm', data: { id: step.id } })}</div>` };
+  }
+  function pMessage(step) {
+    const ed = editing(step);
+    return { title: `${step.emoji || ''} ${step.title}`.trim(), onair: 'Celulares e telão: este aviso',
+      body: ed ? `<div class="form editstep">${editField('Emoji', 'emoji', ed.emoji)}${editField('Título', 'title', ed.title)}${editField('Texto (links viram clicáveis)', 'body', ed.body, 'textarea')}${editActions}</div>`
+        : `<p class="lead">${esc(step.body || 'Sem texto.')}</p><div class="actions">${btn('✎ Editar aviso', 'editStep', { cls: 'ghost sm', data: { id: step.id } })}</div>` };
+  }
+  const pStandby = () => ({ onair: 'Celulares em pausa · Telão: relógio', body: `<p class="lead">${esc(A.O.settings.standbyText || '')}</p>` });
+  function pClosing() {
+    return { onair: 'Celulares: agradecimento e a conexão de cada um · Telão: créditos',
+      body: `<p class="lead">${esc(A.O.settings.closingText || '')}</p>
+        <div class="actions" style="align-items:center"><span class="small">Respostas do Sucesso:</span>${['d1', 'd2', 'd3', 'd4'].map(k => btn(`${k.slice(1).padStart(2, '0')} · ${SUC_NAME[k]}`, 'sucAnswers', { cls: 'ghost xs', data: { k } })).join('')}</div>` };
+  }
+  function pConnections() {
+    const O = A.O, s = O.state, c = s.conn, ph = c.phase, t = c.timer, S = O.settings;
+    const late = O.people.filter(p => p.late), inProgress = ['matching', 'talk', 'roundEnd', 'ranking'].includes(ph);
+    const ranked = O.people.filter(p => p.ranked).length, rankTotal = O.people.filter(p => p.inRounds && p.active && p.checkedInAt).length;
+    const notRanked = O.people.filter(p => p.active && p.checkedInAt && p.inRounds && !p.ranked);
+    const regenFrom = ph === 'matching' ? c.round : c.round + 1, round = O.rounds[A.round - 1];
+    const levelTxt = { strict: 'área ≠ e WL ≠ em todas as duplas', wl: 'precisou liberar WL igual em algumas duplas', area: 'precisou liberar área igual em algumas duplas', all: 'sem restrição em algumas duplas' };
+    const clock = t ? `<div class="clock ${t.paused ? 'paused' : ''}"><b data-timer="conn">${fmt(timerLeft(t))}</b><span>${TIMER_LABEL[t.kind] || t.kind}${t.paused ? ' · pausado' : ''}</span></div>` : '';
+    const timerBtns = t ? [t.paused ? btn('▶ Retomar', 'resume', { cls: 'cyan' }) : btn('⏸ Pausar', 'pause', { cls: 'ghost' }), btn('+30 s', 'addTime', { cls: 'ghost' }), btn('⏭ Pular etapa', 'skip', { cls: 'ghost' })] : [];
+    let body, primary = null, secondary = [];
+    if (ph === 'idle' || ph === 'ready') {
+      body = `<p class="lead">${O.counts.checkedIn} pessoas a bordo. O app sorteia as duplas (área e WL diferentes) e conduz as 3 viagens${S.autoFlow ? ' sozinho' : ''}: ${fmt(S.findSeconds)} para a dupla se encontrar, ${fmt(S.roundSeconds)} de conversa e, no fim, a avaliação.</p>`;
+      primary = btn('▶ Iniciar viagens', 'startJourney', { cls: 'big', disabled: O.counts.checkedIn < 2 });
+    } else if (ph === 'ranking') {
+      body = `<div class="phase">Avaliação aberta nos celulares</div>${clock}<p>${ranked} de ${rankTotal} avaliaram</p><div class="bar"><i style="width:${Math.round(100 * ranked / Math.max(1, rankTotal))}%"></i></div>
+        ${notRanked.length ? det('notranked', `Quem falta avaliar (${notRanked.length})`, `<p class="small" style="margin-top:6px">${esc(notRanked.map(p => p.name).join(' · '))}</p>`) : '<p class="ok">✔ Todos avaliaram</p>'}`;
+      primary = btn('🔮 Calcular conexões agora', 'computeResults', { cls: 'big' }); secondary = timerBtns.slice(0, 2);
+    } else if (ph === 'results') {
+      const mutual = Math.floor(O.results.filter(r => r.mutual).length / 2);
+      body = `<div class="phase">Conexões enviadas para os celulares</div><p class="lead">${O.results.length} pessoas receberam a conexão sugerida · ${mutual} ${mutual === 1 ? 'conexão mútua' : 'conexões mútuas'}.</p>`;
+      secondary = [btn('🔮 Recalcular e reenviar', 'computeResults', { cls: 'ghost' })];
+    } else {
+      body = `<div class="phase">Viagem ${c.round} de 3 · ${PHASE_LABEL[ph]}</div>${clock}${S.autoFlow ? '<p class="small">Avança sozinho quando o tempo acaba.</p>' : ''}`;
+      secondary = timerBtns;
+      if (!S.autoFlow) primary = ph === 'matching' ? btn('▶ Iniciar conversa', 'startTalk', { cls: 'big' }) : ph === 'talk' ? btn('⏹ Encerrar conversa', 'endTalk', { cls: 'big' }) : c.round < 3 ? btn(`👥 Revelar viagem ${c.round + 1}`, 'reveal', { cls: 'big', data: { round: c.round + 1 } }) : btn('📋 Abrir avaliação', 'openRanking', { cls: 'big' });
+    }
+    const warn = [c.repeats ? '⚠ Com menos de 6 pessoas algumas duplas se repetem (modo ensaio).' : '',
+      late.length ? `⚠ ${late.length} pessoa(s) entraram depois do sorteio e estão sem dupla: ${esc(late.map(p => p.name).join(', '))}. ${regenFrom <= 3 && inProgress && ph !== 'ranking' ? btn(`↻ Incluir ${ph === 'matching' ? `a partir da viagem ${regenFrom}` : `nas viagens ${regenFrom}–3`}`, 'regenRest', { cls: 'ghost xs' }) : ''}` : ''].filter(Boolean).join('<br>');
+    const pairs = c.generatedAt ? det('pairs', 'Ver as duplas de cada viagem', `<div class="subtabs" style="margin-top:8px">${O.rounds.map(r => `<button class="${A.round === r.round ? 'on' : ''}" data-roundtab="${r.round}">Viagem ${r.round} · ${esc(r.era.year)} ${r.round === c.round ? '●' : ''}</button>`).join('')}</div>
+        ${round && round.groups.length ? `<div class="small" style="margin-bottom:6px">${round.groups.length} grupos · ${round.check.ok}/${round.check.total} pares com área ≠ e WL ≠ · ${esc(levelTxt[round.level] || round.level || '')}</div>
+          ${round.groups.map(g => `<div class="grp"><span class="code">${esc(g.code)}</span>${g.members.map((m, n) => `${n ? '<span class="x">⇄</span>' : ''}<span class="m">${av(m)}<b>${esc(m.name)}</b><span class="meta">(${esc(m.area)} · ${esc(m.wl)})</span></span>`).join('')}<span class="${g.flags.area && g.flags.wl ? 'ok' : 'warn'}" style="margin-left:auto">${g.flags.area ? '✔ área' : '! área'} ${g.flags.wl ? '✔ WL' : '! WL'}</span>${round.round === c.round && ph === 'talk' && g.currentQuestion ? `<div class="q">pergunta ${g.position + 1}/${g.queueLen}: ${esc(g.currentQuestion)}</div>` : ''}</div>`).join('')}` : '<p class="muted">Rodada ainda não gerada.</p>'}`) : '';
+    const results = O.results.length ? det('results', `Ver as conexões calculadas (${O.results.length})`, `<div class="tblwrap" style="margin-top:8px"><table class="tbl"><tr><th>Viajante</th><th>Conexão sugerida</th><th>Pts</th><th>Mútua</th></tr>
+        ${O.results.slice().sort((a, b) => (b.mutual - a.mutual) || (b.score - a.score)).map(r => `<tr><td>${av(r.person)}${esc(r.person.name)}</td><td>${r.match ? av(r.match) + esc(r.match.name) : '<span class="x">—</span>'}</td><td class="mono">${r.score}</td><td>${r.mutual ? '<span class="ok">⚡ sim</span>' : '<span class="x">não</span>'}</td></tr>`).join('')}</table></div>`) : '';
+    const more = `<div class="actions">
+        ${!(c.played >= 1) ? btn(c.generatedAt ? '⚡ Sortear as duplas de novo' : '⚡ Sortear as duplas agora (sem começar)', 'generate', { cls: 'ghost sm', disabled: O.counts.checkedIn < 2 }) : ''}
+        ${S.autoFlow && inProgress ? `${btn('▶ Iniciar conversa', 'startTalk', { cls: 'ghost sm', disabled: ph !== 'matching' })}${btn('⏹ Encerrar conversa', 'endTalk', { cls: 'ghost sm', disabled: ph !== 'talk' })}${btn('📋 Abrir avaliação', 'openRanking', { cls: 'ghost sm', disabled: !(c.played >= 1 && ph !== 'ranking') })}` : ''}
+        ${btn('Zerar as Conexões', 'resetConnections', { cls: 'red sm' })}
+      </div>${pairs}${results}<p class="small" style="margin-top:8px">Tempos e modo manual em <a href="#" data-go="config">Ajustes</a>.</p>`;
+    return { body, primary, secondary, warn, more, busy: inProgress ? 'As viagens ainda não terminaram. Elas ficam em pausa até você voltar para este passo. Avançar mesmo assim?' : '',
+      onair: 'Celulares: dupla, perguntas e avaliação · Telão: cronômetro' };
+  }
+  function pSucesso(step) {
+    const O = A.O, k = step.activity, a = sucAct(k), pres = O.state.presentation, room = O.sucesso && O.sucesso.roomId, tl = O.telao || { count: 0 };
+    const onScreen = !!(pres && pres.activityId === k && pres.roomId === room), ph = sucEff(a), n = a.responseCount || 0, draw = onScreen ? pres.draw : null;
+    const drawnBefore = ((O.state.drawn || {})[`${room}:${k}:${a.roundId}`] || []).length > 0;
+    if (!O.sucesso) return { title: `Dinâmica ${k.slice(1)} · ${SUC_NAME[k]}`, body: '<p class="lead">As dinâmicas do Sucesso estão carregando…</p>' };
+    const stats = `<div class="suc-stats"><div class="tcx"><b>${String(n).padStart(3, '0')}</b><span>RESPOSTAS</span></div>${k !== 'd1' && ph && ph !== 'done' ? `<div class="tcx ${ph === 'run' && sucLeft(a) <= 30 ? 'alert' : ''}" style="--c:var(--yellow)"><b data-timer="suc" data-k="${k}">${fmt(sucLeft(a))}</b><span>RECEBIMENTO</span></div>` : ''}<span class="suc-ph" data-phase="${ph || ''}">${ph ? SUC_PHASE[ph] : ''}</span></div>`;
+    let body = `<p class="question">${esc(a.question || '')}</p>${stats}`, primary = null, secondary = [], busy = '';
+    const cmd = (label, c, cls) => btn(label, 'sucCmd', { cls, data: { k, cmd: c } }), dr = (label, c, cls) => btn(label, 'sucDraw', { cls, data: { cmd: c } });
+    if (!onScreen) { body += '<p class="warn">Esta dinâmica não está na tela agora.</p>'; primary = btn('📺 Exibir no telão e nos celulares', 'goStep', { cls: 'big', data: { id: step.id } }); }
+    else if (ph === 'idle') primary = cmd(`▶ Iniciar recebimento${k === 'd1' ? '' : ' (2 min)'}`, 'start', 'big');
+    else if (ph === 'run') { primary = cmd('⏭ Encerrar recebimento', 'end', 'big'); secondary = [cmd('❚❚ Pausar', 'pause', 'ghost')]; busy = 'O recebimento ainda está aberto. Avançar mesmo assim?'; }
+    else if (ph === 'paused') { primary = cmd('▶ Retomar recebimento', 'start', 'big'); secondary = [cmd('⏭ Encerrar', 'end', 'ghost')]; }
+    else if (ph === 'done' && TALK[k]) {
+      if (draw) {
+        const left = talkLeft(draw.talk), running = !!draw.talk.endsAt && left > 0;
+        body += `<div class="suc-draw on"><div class="small">🎲 VIAJANTE SORTEADO${draw.personId ? ' · avisado no celular' : ''}</div><div class="who">${esc(draw.name)}</div><div class="what">“${esc(draw.answer)}”</div>
+          <div class="tcx ${running && left <= 30 ? 'alert' : ''}" style="--c:var(--orange);align-self:flex-start"><b data-timer="talk">${fmt(left)}</b><span>TEMPO DE FALA</span></div></div>`;
+        primary = running ? dr('❚❚ Pausar tempo de fala', 'talkPause', 'big') : dr('▶ Iniciar tempo de fala', 'talkStart', 'big');
+        secondary = [dr('↺ Zerar tempo', 'talkReset', 'ghost'), dr('🎲 Sortear outro', 'draw', 'ghost'), dr('Voltar para a nuvem', 'close', 'ghost')];
+      } else if (n && !drawnBefore) primary = dr('🎲 Sortear viajante', 'draw', 'big');
+      else if (n) secondary = [dr('🎲 Sortear outro', 'draw', 'ghost')];
+    }
+    const warn = !onScreen ? '' : !tl.count ? '⚠ Nenhum telão aberto. <a href="/telao.html" target="_blank">Abrir telão ↗</a>' : !tl.auth ? '⚠ O telão está aberto sem login e não vai mostrar as respostas, a nuvem nem o sorteio. Abra-o neste navegador: <a href="/telao.html" target="_blank">abrir telão ↗</a>' : '';
+    const more = `<div class="actions">${btn(`Ver e baixar as respostas (${n})`, 'sucAnswers', { cls: 'ghost sm', data: { k } })}${btn('↺ Reabrir o recebimento', 'sucCmd', { cls: 'ghost sm', data: { k, cmd: 'reset' }, disabled: !(ph === 'done' || ph === 'paused') })}${btn('🗑 Apagar as respostas', 'sucCmd', { cls: 'red sm', data: { k, cmd: 'clear' } })}</div>
+      <p class="small" style="margin-top:8px"><a href="/painel?sala=${encodeURIComponent(room || '')}&d=${k}" target="_blank">Abrir o painel 3D original ↗</a></p>`;
+    return { title: `Dinâmica ${k.slice(1)} · ${a.title || SUC_NAME[k]}`, body, primary, secondary, more, warn, busy, onair: 'Celulares: pergunta e resposta · Telão: carro, nuvem e sorteio' };
+  }
+  // cronômetros e viradas de fase que dependem só do relógio
+  function tickLive() {
+    if (!A.O || A.tab !== 'live') return;
+    const t = A.O.state.conn.timer, c = $('[data-timer=conn]'); if (c && t) c.textContent = fmt(timerLeft(t));
+    const su = $('[data-timer=suc]'); if (su) su.textContent = fmt(sucLeft(sucAct(su.dataset.k)));
+    const d = A.O.state.presentation && A.O.state.presentation.draw, tk = $('[data-timer=talk]'); if (tk && d) tk.textContent = fmt(talkLeft(d.talk));
   }
   setInterval(() => {
-    if (A.tab !== 'sucesso') return;
-    document.querySelectorAll('.suc-left').forEach(b => { const left = sucLeft(SUC.states[b.dataset.k]); if (left !== null && left !== undefined) b.textContent = fmt(left); });
-    const d = A.O && A.O.state.presentation && A.O.state.presentation.draw, tk = $('.suc-talk');
-    if (d && tk) { const left = talkLeft(d.talk); if (tk.textContent !== fmt(left)) { tk.textContent = fmt(left); if (left === 0 || left === 30) render(); } }
+    if (!A.O || A.tab !== 'live') return;
+    tickLive();
+    const { step } = liveStep(), a = step.type === 'sucesso' ? sucAct(step.activity) : null, d = A.O.state.presentation && A.O.state.presentation.draw, left = d ? talkLeft(d.talk) : -1;
+    const key = [step.id, a ? sucEff(a) : '', a && a.phase === 'run' ? sucLeft(a) <= 30 : '', d ? (left > 30 ? 'a' : left > 0 ? 'b' : 'c') : ''].join('|');
+    if (key !== A.liveKey) { A.liveKey = key; render(); }
   }, 500);
 
-  function vControl() {
-    const O = A.O, s = O.state, c = s.conn, ph = c.phase, t = c.timer, S = O.settings;
-    const late = O.people.filter(p => p.late);
-    const notRanked = O.people.filter(p => p.active && p.checkedInAt && p.inRounds && !p.ranked);
-    const round = O.rounds[A.round - 1];
-    const regenFrom = ph === 'matching' ? c.round : c.round + 1;
-    const levelTxt = { strict: 'área ≠ e WL ≠ em todas as duplas', wl: 'precisou liberar WL igual em algumas duplas', area: 'precisou liberar área igual em algumas duplas', all: 'sem restrição em algumas duplas' };
-    const ranked = O.people.filter(p => p.ranked).length, rankTotal = O.people.filter(p => p.inRounds && p.active && p.checkedInAt).length;
-    const inProgress = ['matching', 'talk', 'roundEnd', 'ranking'].includes(ph);
-
-    const welcome = `<div class="small">Os viajantes escolhem o próprio nome na lista; quem já escolheu some da lista. Quem errou tem o botão "voltar e escolher outro nome".</div>
-      <div class="stats" style="margin-top:10px"><div class="stat"><b>${O.counts.checkedIn}</b><span class="small">a bordo</span></div><div class="stat"><b>${O.counts.total - O.counts.checkedIn}</b><span class="small">ainda não entraram</span></div></div>
-      <div class="bar"><i style="width:${Math.round(100 * O.counts.checkedIn / Math.max(1, O.counts.total))}%"></i></div>
-      <div class="small">No telão: QR code + link para o check-in. Lista de quem falta na aba <a href="#" data-go="people">Pessoas</a>.</div>`;
-    const standby = `<div class="small">Tela "apagada" nos celulares: <i>"${esc(S.standbyText || '')}"</i>. Use quando a atenção deve estar no telão (PPT, fala do Doc). Texto editável na aba <a href="#" data-go="config">Config</a>.</div>`;
-    const message = `<div class="form two">
-        <label class="f">Emoji<input class="input" id="msgEmoji" value="${esc(s.message.emoji)}"></label>
-        <label class="f">Título<input class="input" id="msgTitle" value="${esc(s.message.title)}"></label>
-        <label class="f" style="grid-column:1/-1">Texto (URLs viram links)<textarea class="input" id="msgBody">${esc(s.message.body)}</textarea></label>
-      </div><div class="actions" style="margin-top:8px"><button class="btn ghost sm" data-act="saveMessage">Salvar</button><button class="btn sm" data-act="showMessage">📣 Salvar e exibir nos celulares</button></div>`;
-    const closing = `<div class="small">Agradecimento + lembrete da conexão de cada pessoa. No telão: créditos com o nome de todos. Texto editável na aba <a href="#" data-go="config">Config</a>.</div>`;
-
-    const connections = `
-      <div class="steps">
-        <div class="step ${!c.generatedAt ? 'active' : 'done'}"><div class="n">1</div><div class="b">
-          <div class="t">Duplas (${O.counts.checkedIn} viajantes a bordo)</div>
-          <div class="small">Área diferente, WL diferente, sem repetir dupla; ímpar forma trio.${c.generatedAt ? ` · Geradas às ${new Date(c.generatedAt).toLocaleTimeString('pt-BR')} · ${levelTxt[c.worstLevel] || ''}` : ''}</div>
-          ${c.repeats ? '<div class="warn">⚠ Com menos de 6 viajantes algumas duplas se repetem (modo ensaio).</div>' : ''}
-          ${late.length ? `<div class="warn">⚠ ${late.length} pessoa(s) entraram depois do sorteio e estão fora das rotas: ${esc(late.map(p => p.name).join(', '))}.${regenFrom <= 3 && inProgress ? ' Recalcule as viagens restantes.' : ''}</div>` : ''}
-          <div class="actions">
-            ${!(c.played >= 1) ? `<button class="btn ghost sm" data-act="generate" ${O.counts.checkedIn < 2 ? 'disabled' : ''}>⚡ ${c.generatedAt ? 'Sortear de novo' : 'Sortear duplas'}</button>` : ''}
-            ${c.generatedAt && inProgress && ph !== 'ranking' && regenFrom <= 3 ? `<button class="btn ghost sm" data-act="regenRest">↻ Recalcular ${ph === 'matching' ? `a partir da viagem ${regenFrom}` : `viagens ${regenFrom}–3`}</button>` : ''}
-          </div>
-        </div></div>
-
-        <div class="step ${['ready'].includes(ph) || (ph === 'idle' && O.counts.checkedIn >= 2) ? 'active' : inProgress || ph === 'results' ? 'done' : ''}"><div class="n">2</div><div class="b">
-          <div class="t">Iniciar as viagens</div>
-          <div class="small">${S.autoFlow ? `Automático: ${fmt(S.findSeconds)} para se encontrar → ${fmt(S.roundSeconds)} de conversa → ${S.breakSeconds}s de "88 MPH" → próxima dupla. Depois da 3ª, a avaliação abre sozinha e fecha em ${fmt(S.rankingSeconds)} ou quando todos avaliarem.` : 'Modo manual: você revela cada viagem, inicia e encerra cada conversa pelos botões abaixo.'} <a href="#" data-go="config">Ajustar tempos</a></div>
-          <div class="actions"><button class="btn" data-act="startJourney" ${O.counts.checkedIn >= 2 && !inProgress && ph !== 'results' ? '' : 'disabled'}>▶ Iniciar viagens${c.generatedAt ? '' : ' (sorteia e começa)'}</button></div>
-        </div></div>
-
-        <div class="step ${inProgress ? 'active' : ''}"><div class="n">3</div><div class="b">
-          <div class="t">Ao vivo · ${PHASE_LABEL[ph]}${c.round ? ` · viagem ${c.round}/3` : ''}${t ? ` · ${TIMER_LABEL[t.kind]} <span class="mono" id="liveTimer">${fmt(timerLeft(t))}</span>${t.paused ? ' ⏸' : ''}` : ''}</div>
-          <div class="actions">
-            ${t ? (t.paused ? '<button class="btn cyan sm" data-act="resume">▶ Retomar</button>' : '<button class="btn ghost sm" data-act="pause">⏸ Pausar</button>') : ''}
-            <button class="btn ghost sm" data-act="addTime" ${t ? '' : 'disabled'}>+30s</button>
-            <button class="btn ghost sm" data-act="skip" ${inProgress ? '' : 'disabled'}>⏭ Pular etapa</button>
-            ${ph === 'ranking' ? `<button class="btn sm" data-act="computeResults">🔮 Calcular conexões agora</button>` : ''}
-            ${ph === 'results' ? `<button class="btn ghost sm" data-act="computeResults">🔮 Recalcular e reenviar</button><button class="btn sm" data-act="setBlock" data-block="closing">🏁 Ir para o encerramento</button>` : ''}
-          </div>
-          ${ph === 'ranking' || ph === 'results' ? `<div class="small">${ranked} de ${rankTotal} avaliaram</div><div class="bar"><i style="width:${Math.round(100 * ranked / Math.max(1, rankTotal))}%"></i></div>${notRanked.length ? `<div class="small">Faltam: ${esc(notRanked.map(p => p.name).join(', '))}</div>` : '<div class="ok">✔ Todos avaliaram</div>'}` : ''}
-          <details class="manual"><summary>Controle manual (se precisar interferir)</summary><div class="actions" style="margin-top:8px">
-            <button class="btn ghost sm" data-act="reveal" data-round="${ph === 'ready' ? 1 : c.round + 1}" ${(ph === 'ready' || ph === 'roundEnd') && (ph === 'ready' ? 1 : c.round + 1) <= 3 ? '' : 'disabled'}>👥 Revelar viagem ${ph === 'ready' ? 1 : Math.min(3, c.round + 1)}</button>
-            <button class="btn ghost sm" data-act="startTalk" ${ph === 'matching' ? '' : 'disabled'}>▶ Iniciar conversa</button>
-            <button class="btn ghost sm" data-act="endTalk" ${ph === 'talk' ? '' : 'disabled'}>⏹ Encerrar conversa</button>
-            <button class="btn ghost sm" data-act="openRanking" ${c.played >= 1 && ph !== 'ranking' && ph !== 'results' ? '' : 'disabled'}>📋 Abrir avaliação</button>
-            ${ph === 'matching' ? `<button class="btn ghost sm" data-act="reveal" data-round="${c.round}">↻ Re-revelar viagem ${c.round}</button>` : ''}
-            <button class="btn red sm" data-act="resetConnections">Resetar bloco</button>
-          </div></details>
-        </div></div>
-      </div>`;
-
-    const screenUrl = `${location.origin}/telao.html`;
-    const scene = (s.screen && s.screen.scene) || 'auto';
-    const telao = `<div class="card"><h2>📽 Telão</h2>
-      <p class="small"><a href="${esc(screenUrl)}" target="_blank">${esc(screenUrl)}</a> · automático segue o bloco; relógio e logo servem de fundo.</p>
-      <div class="actions" style="margin-top:10px">${[['auto', '🔁 Automático'], ['clock', '🕰 Relógio'], ['logo', '⚡ Logo']].map(([k, l]) => `<button class="btn sm ${scene === k ? '' : 'ghost'}" data-act="setScene" data-scene="${k}">${l}</button>`).join('')}</div>
-      <label class="sw" style="margin-top:10px"><input type="checkbox" data-act="toggleMutual" ${S.showMutualOnScreen ? 'checked' : ''}> Mostrar os nomes das conexões mútuas no telão (só primeiros nomes)</label></div>`;
-
-    // Blocos do evento (falas): rascunho local para não perder o que está sendo digitado quando o painel atualiza
-    const stages = A.stageDraft || S.stages || [], dirty = !!A.stageDraft, stageOn = !s.presentation && s.block === 'stage';
-    const stagesCard = `<div class="card"><h2>🎤 Blocos do evento</h2>
-        <p class="small">Para os momentos de fala: ao exibir um bloco, os celulares mostram o nome e o tema dele, o telão fica calmo (sem animação)${S.stageMutes ? ' e o som desliga' : ''}. Edite os textos à vontade.</p>
-        <div class="stages">${stages.map((g, i) => { const on = stageOn && !dirty && (s.stage || 0) === i; return `<div class="stage-row ${on ? 'active' : ''}">
-            <input class="input" data-stage="${i}" data-f="title" id="stg-t-${i}" value="${esc(g.title)}" placeholder="Bloco ${i + 1}" aria-label="Nome do bloco">
-            <input class="input" data-stage="${i}" data-f="theme" id="stg-h-${i}" value="${esc(g.theme)}" placeholder="Tema do bloco (aparece no celular e no telão)" aria-label="Tema">
-            <input class="input" data-stage="${i}" data-f="speaker" id="stg-s-${i}" value="${esc(g.speaker)}" placeholder="Quem fala (opcional)" aria-label="Quem fala">
-            <button class="btn sm ${on ? 'ghost' : 'cyan'}" data-act="showStage" data-i="${i}" ${on || s.presentation ? 'disabled' : ''}>${on ? '● Exibindo' : '▶ Exibir'}</button>
-            <button class="btn ghost xs" data-act="delStage" data-i="${i}" title="Remover bloco" ${stages.length <= 1 ? 'disabled' : ''}>✕</button>
-          </div>`; }).join('')}</div>
-        <div class="actions" style="margin-top:10px"><button class="btn ghost sm" data-act="addStage" ${stages.length >= 12 ? 'disabled' : ''}>＋ Adicionar bloco</button>${dirty ? '<button class="btn sm" data-act="saveStages">Salvar blocos</button><button class="btn ghost sm" data-act="discardStages">Descartar</button><span class="warn">alterações não salvas</span>' : ''}</div>
-      </div>`;
-
-    return `${sucBanner()}
-      ${stagesCard}
-      <div class="card"><h2>Telas e dinâmicas</h2>
-        ${blockCard('welcome', welcome)}
-        ${blockCard('standby', standby)}
-        ${blockCard('message', message)}
-        ${blockCard('connections', connections)}
-        ${blockCard('closing', closing)}
-      </div>
-      ${telao}
-      ${O.results.length ? `<div class="card ok"><h2>Conexões calculadas (${O.results.length})</h2><div class="tblwrap"><table class="tbl"><tr><th>Viajante</th><th>Conexão sugerida</th><th>Pts</th><th>Mútua</th></tr>
-        ${O.results.slice().sort((a, b) => (b.mutual - a.mutual) || (b.score - a.score)).map(r => `<tr><td>${av(r.person)}${esc(r.person.name)}</td><td>${r.match ? av(r.match) + esc(r.match.name) : '<span class="x">—</span>'}</td><td class="mono">${r.score}</td><td>${r.mutual ? '<span class="ok">⚡ sim</span>' : '<span class="x">não</span>'}</td></tr>`).join('')}</table></div></div>` : ''}
-      ${c.generatedAt ? `<div class="card"><h2>Duplas por viagem</h2>
-        <div class="subtabs">${O.rounds.map(r => `<button class="${A.round === r.round ? 'on' : ''}" data-roundtab="${r.round}">Viagem ${r.round} · ${esc(r.era.year)} ${r.round === c.round ? '●' : ''}</button>`).join('')}</div>
-        ${round && round.groups.length ? `<div class="small" style="margin-bottom:6px">${round.groups.length} grupos · ${round.check.ok}/${round.check.total} pares com área ≠ e WL ≠ · nível: ${esc(levelTxt[round.level] || round.level || '')}</div>
-          ${round.groups.map(g => `<div class="grp"><span class="code">${esc(g.code)}</span>${g.members.map((m, i) => `${i ? '<span class="x">⇄</span>' : ''}<span class="m">${av(m)}<b>${esc(m.name)}</b><span class="meta">(${esc(m.area)} · ${esc(m.wl)})</span></span>`).join('')}<span class="${g.flags.area && g.flags.wl ? 'ok' : 'warn'}" style="margin-left:auto">${g.flags.area ? '✔ área' : '! área'} ${g.flags.wl ? '✔ WL' : '! WL'}</span>${round.round === c.round && ph === 'talk' && g.currentQuestion ? `<div class="q">pergunta ${g.position + 1}/${g.queueLen}: ${esc(g.currentQuestion)}</div>` : ''}</div>`).join('')}` : '<p class="muted">Rodada ainda não gerada.</p>'}
-      </div>` : ''}`;
+  // Respostas de uma dinâmica do Sucesso: lista + download (.txt ou Word), como no painel 3D
+  async function sucAnswersDialog(k) {
+    const room = A.O.sucesso && A.O.sucesso.roomId, a = sucAct(k); if (!room) return toast('As dinâmicas do Sucesso ainda estão carregando.', true);
+    const d = await api('GET', `/api/rooms/${room}/snapshot?after=0`);
+    const list = (d.responses || []).filter(r => r.activityId === k).map(r => ({ n: r.name, t: r.answer }));
+    A.sucList = { k, list, title: a.title || SUC_NAME[k], question: a.question || '' };
+    dialog(`<h3>Dinâmica ${k.slice(1)} · ${esc(A.sucList.title)} · ${list.length} ${list.length === 1 ? 'resposta' : 'respostas'}</h3>
+      <div class="anslist">${list.length ? list.slice().reverse().map(r => `<p><b>${esc(r.n)}</b> · ${esc(r.t)}</p>`).join('') : '<p class="muted">Nenhuma resposta ainda.</p>'}</div>
+      <div class="actions" style="margin-top:12px"><button class="btn sm" data-act="sucDownload" data-type="txt" ${list.length ? '' : 'disabled'}>⬇ Baixar .txt</button><button class="btn sm" data-act="sucDownload" data-type="doc" ${list.length ? '' : 'disabled'}>⬇ Baixar Word</button><button class="btn ghost sm" data-close>Fechar</button></div>`);
   }
-  setInterval(() => { const el = $('#liveTimer'); const t = A.O && A.O.state.conn.timer; if (el && t) el.textContent = fmt(timerLeft(t)); }, 500);
+  function sucDownload(type) {
+    const L = A.sucList; if (!L || !L.list.length) return toast('Nenhuma resposta para baixar.', true);
+    const date = new Date().toLocaleString('pt-BR'), title = `De Volta para o Sucesso | Dinâmica ${L.k.slice(1)}: ${L.title}`;
+    let blob, name = `Respostas_${L.title.replace(/[^\p{L}\p{N}]+/gu, '')}`;
+    if (type === 'txt') { blob = new Blob([`${title.toUpperCase()}\nPergunta: ${L.question}\nData: ${date}\nTotal: ${L.list.length}\n\n` + L.list.map((r, n) => `${n + 1}. ${r.n}: ${r.t}`).join('\n')], { type: 'text/plain;charset=utf-8' }); name += '.txt'; }
+    else {
+      const h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"></head><body style="font-family:Calibri"><h1 style="color:#FF6B1A">${esc(title)}</h1><p><b>Pergunta:</b> ${esc(L.question)}</p><p><b>Data:</b> ${date} &nbsp; <b>Total:</b> ${L.list.length}</p><table border="1" cellpadding="6" style="border-collapse:collapse;width:100%"><tr style="background:#17142E;color:#fff"><th>#</th><th>Nome</th><th>Resposta</th></tr>${L.list.map((r, n) => `<tr><td>${n + 1}</td><td>${esc(r.n)}</td><td>${esc(r.t)}</td></tr>`).join('')}</table></body></html>`;
+      blob = new Blob(['﻿', h], { type: 'application/msword' }); name += '.doc';
+    }
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 5000); toast('Download iniciado');
+  }
+  function quickMessageDialog() {
+    const m = A.O.state.message;
+    dialog(`<h3>📣 Aviso rápido</h3><p class="small">Aparece na hora em todos os celulares e no telão, fora do roteiro (intervalo, recado, link). Depois é só voltar ao roteiro.</p>
+      <div class="form" style="margin-top:10px"><label class="f">Emoji<input class="input" id="qmEmoji" value="${esc(m.emoji)}"></label><label class="f">Título<input class="input" id="qmTitle" value="${esc(m.title)}"></label><label class="f">Texto (links viram clicáveis)<textarea class="input" id="qmBody">${esc(m.body)}</textarea></label></div>
+      <div class="actions" style="margin-top:12px"><button class="btn" id="qmShow">📣 Exibir agora</button><button class="btn ghost" data-close>Cancelar</button></div>`, () => {
+      $('#qmShow').onclick = () => run(async () => { await act('setMessage', { message: { emoji: $('#qmEmoji').value, title: $('#qmTitle').value, body: $('#qmBody').value }, show: true }); closeDialog(); }, 'Aviso no ar');
+    });
+  }
+
+  /* ====================== PREPARAR → ROTEIRO ====================== */
+  function vRoteiro() {
+    const O = A.O, list = A.stepsDraft || O.settings.steps, dirty = !!A.stepsDraft;
+    const has = t => list.some(x => x.type === t), hasAct = k => list.some(x => x.type === 'sucesso' && x.activity === k);
+    const row = (x, i) => {
+      const f = (field, ph, cls) => `<input class="input ${cls}" data-rs="${i}" data-f="${field}" id="rs-${field}-${i}" value="${esc(x[field] || '')}" placeholder="${ph}" aria-label="${ph}">`;
+      const fields = x.type === 'stage' ? `${f('title', 'Nome do bloco', 'w1')}${f('theme', 'Tema (aparece no celular e no telão)', 'w3')}${f('speaker', 'Quem fala (opcional)', 'w2')}`
+        : x.type === 'message' ? `${f('emoji', '📣', 'w0')}${f('title', 'Título do aviso', 'w2')}${f('body', 'Texto do aviso', 'w3')}`
+        : `<span class="fixed">${esc(stepTitle(x))}<small>${x.type === 'sucesso' && TALK[x.activity] ? 'pergunta ao vivo, nuvem, sorteio e tempo de fala' : STEP_HINT[x.type]}</small></span>`;
+      return `<div class="rrow ${!dirty && x.id === O.state.step ? 'now' : ''}"><span class="n">${i + 1}</span><span class="ic" title="${STEP_KIND[x.type]}">${STEP_ICON[x.type]}</span><div class="rf">${fields}</div>
+        <div class="rc">${!dirty && x.id === O.state.step ? '<span class="pill hot">no ar</span>' : ''}<button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'} title="Subir">↑</button><button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="1" ${i < list.length - 1 ? '' : 'disabled'} title="Descer">↓</button><button class="btn ghost xs" data-act="rsDel" data-i="${i}" ${list.length > 1 ? '' : 'disabled'} title="Remover">✕</button></div></div>`;
+    };
+    const add = (label, type, extra = '') => `<button class="btn ghost xs" data-act="rsAdd" data-type="${type}" ${extra}>＋ ${label}</button>`;
+    return `<div class="card"><h2>Roteiro do evento</h2>
+      <p class="small">A ordem dos passos do evento. No <a href="#" data-go="live">Ao vivo</a> você percorre o roteiro com o botão "Próximo". Dá para mudar a qualquer momento, inclusive durante o evento.</p>
+      <div class="rlist">${list.map(row).join('')}</div>
+      <div class="actions radd"><span class="small">Adicionar:</span>${add('Bloco de fala', 'stage')}${add('Aviso / intervalo', 'message')}${add('Olhos no telão', 'standby')}${add('Check-in', 'checkin')}${has('connections') ? '' : add('Conexões', 'connections')}${['d1', 'd2', 'd3', 'd4'].filter(k => !hasAct(k)).map(k => add(`Sucesso ${k.slice(1).padStart(2, '0')}`, 'sucesso', `data-activity="${k}"`)).join('')}${add('Encerramento', 'closing')}</div>
+      <div class="actions" style="margin-top:14px;align-items:center">${dirty ? '<button class="btn" data-act="rsSave">Salvar roteiro</button><button class="btn ghost" data-act="rsDiscard">Descartar alterações</button><span class="warn">alterações não salvas</span>' : '<span class="ok">✔ Roteiro salvo</span>'}<button class="btn ghost sm" data-act="rsDefault" style="margin-left:auto">Restaurar o roteiro padrão</button></div>
+    </div>`;
+  }
+  const draftSteps = () => (A.stepsDraft = A.stepsDraft || A.O.settings.steps.map(x => ({ ...x })));
 
   function vPeople() {
     const O = A.O, q = A.peopleQ.trim().toLowerCase();
@@ -443,9 +471,9 @@
       <div class="card"><h2>Zona de perigo</h2>
         <div class="actions">
           <button class="btn red" data-act="resetConnections">Resetar bloco de conexões</button>
-          <button class="btn red" data-act="resetEvent">Resetar evento (check-ins + conexões)</button>
+          <button class="btn red" data-act="resetEvent">Resetar o evento inteiro</button>
         </div>
-        <p class="small" style="margin-top:8px">Resetar o evento desfaz os check-ins: todo mundo precisa selecionar o nome de novo. A lista de pessoas e as perguntas são mantidas.</p></div>`;
+        <p class="small" style="margin-top:8px">Resetar o evento volta o roteiro para o primeiro passo e apaga check-ins, duplas, avaliações e as respostas do Sucesso (bom para usar depois do ensaio). A lista de pessoas, as perguntas e o roteiro são mantidos.</p></div>`;
   }
 
   /* ---------- diálogos ---------- */
@@ -534,7 +562,7 @@
     const act_ = el.dataset.act, id = el.dataset.id, O = A.O;
     switch (act_) {
       case 'generate': return confirmRun(O.state.conn.generatedAt ? 'Sortear de novo TODAS as duplas? As atuais serão descartadas.' : `Sortear as duplas com ${O.counts.checkedIn} viajantes a bordo?`, async () => { const r = await act('generate', { fromRound: 1 }); toast(`Duplas sorteadas · ${r.worstLabel}`); });
-      case 'startJourney': return confirmRun(`Iniciar as viagens agora com ${O.counts.checkedIn} viajantes a bordo?${O.state.conn.generatedAt ? '' : ' As duplas serão sorteadas.'}`, () => act('startJourney'), 'Viagem 1 começou ⚡');
+      case 'startJourney': return confirmRun(`Iniciar as viagens agora com ${O.counts.checkedIn} pessoas a bordo?${O.state.conn.generatedAt ? '' : ' As duplas serão sorteadas.'}`, () => act('startJourney'), 'Viagem 1 começou ⚡');
       case 'regenRest': { const from = O.state.conn.phase === 'matching' ? O.state.conn.round : O.state.conn.round + 1; if (from > 3) return toast('Não há viagens restantes para recalcular.', true); return confirmRun(`Recalcular as duplas da${from < 3 ? 's viagens' : ' viagem'} ${from < 3 ? `${from} a 3` : '3'} com quem está a bordo agora? As viagens já realizadas não mudam.`, async () => { const r = await act('generate', { fromRound: from }); toast(`Viagens ${from}–3 recalculadas · ${r.worstLabel}`); }); }
       case 'reveal': return run(() => act('reveal', { round: +el.dataset.round }), `Duplas da viagem ${el.dataset.round} reveladas`);
       case 'startTalk': return run(() => act('startTalk'), 'Conversa iniciada');
@@ -549,7 +577,7 @@
       case 'setScene': return run(() => act('setScene', { scene: el.dataset.scene }));
       case 'toggleMutual': return run(() => act('settings', { settings: { showMutualOnScreen: el.checked } }));
       case 'resetConnections': return confirmRun('Resetar o bloco de conexões? Apaga duplas, avaliações e resultados.', () => act('resetConnections'), 'Bloco resetado');
-      case 'resetEvent': return confirmRun('Resetar o EVENTO inteiro? Desfaz check-ins, duplas, avaliações e resultados.', () => act('resetEvent'), 'Evento resetado');
+      case 'resetEvent': return confirmRun('Resetar o EVENTO inteiro? O roteiro volta para o primeiro passo e são apagados check-ins, duplas, avaliações e as respostas do Sucesso.', () => act('resetEvent'), 'Evento resetado');
       case 'testCheckinAll': return run(() => act('testCheckinAll'), 'Check-in de todos feito');
       case 'testRandomRankings': return run(() => act('testRandomRankings'), 'Avaliações aleatórias enviadas');
       case 'demoTime': return run(() => act('settings', { settings: { roundSeconds: 30, findSeconds: 10, breakSeconds: 3, rankingSeconds: 30 } }), 'Modo demo: tempos curtos');
@@ -563,34 +591,52 @@
       }
       case 'saveMessage': case 'showMessage': return run(() => act('setMessage', { message: { emoji: $('#msgEmoji').value, title: $('#msgTitle').value, body: $('#msgBody').value }, show: act_ === 'showMessage' }), act_ === 'showMessage' ? 'Mensagem exibida nos celulares' : 'Mensagem salva');
       case 'logout': localStorage.removeItem('bttf.admin'); api('POST', '/api/admin/logout').finally(() => location.reload()); return;
-      case 'audio': return run(() => act('setAudio', { mode: el.dataset.mode }), el.dataset.mode === 'off' ? 'Som desligado' : `${AUDIO_LABEL[el.dataset.mode]} ligada · o som sai ${(O.state.audio || {}).out === 'painel' ? 'deste computador' : 'do telão'}`);
+      case 'audio': return run(() => act('setAudio', { mode: el.dataset.mode }), el.dataset.mode === 'off' ? 'Som desligado' : `${el.dataset.mode === 'music' ? '🎵 Música animada' : '🎼 Trilha de fundo'} ligada · o som sai ${(O.state.audio || {}).out === 'painel' ? 'deste computador' : 'do telão'}`);
       case 'audioOut': return run(() => act('setAudio', { out: el.dataset.out }), el.dataset.out === 'painel' ? 'O som agora sai deste computador' : 'O som agora sai do telão');
       case 'audioVol': return run(() => act('setAudio', { volume: +el.value }));
-      case 'addStage': A.stageDraft = (A.stageDraft || O.settings.stages || []).map(x => ({ ...x })).concat({ title: `Bloco ${(A.stageDraft || O.settings.stages || []).length + 1}`, theme: '', speaker: '' }); return render(true);
-      case 'delStage': A.stageDraft = (A.stageDraft || O.settings.stages || []).map(x => ({ ...x })).filter((_, i) => i !== +el.dataset.i); return render(true);
-      case 'discardStages': A.stageDraft = null; return render(true);
-      case 'saveStages': return run(async () => { await act('settings', { settings: { stages: A.stageDraft } }); A.stageDraft = null; }, 'Blocos salvos');
-      case 'showStage': return run(async () => { if (A.stageDraft) { await act('settings', { settings: { stages: A.stageDraft } }); A.stageDraft = null; } await act('setStage', { index: +el.dataset.i }); }, 'Bloco exibido nos celulares e no telão');
+      // --- roteiro: ao vivo ---
+      case 'goStep': {
+        if (el.dataset.guard && !confirm(el.dataset.guard)) return;
+        A.edit = null;
+        return run(() => api('POST', '/api/admin/step', { id }));
+      }
+      case 'jumpStep': {
+        const { step } = liveStep(), target = O.settings.steps.find(x => x.id === id);
+        if (!target || (target.id === step.id && !O.state.detour)) return;
+        if (!confirm(`Ir para "${stepTitle(target)}" agora? Os celulares e o telão mudam na hora.`)) return;
+        A.edit = null;
+        return run(() => api('POST', '/api/admin/step', { id }));
+      }
+      case 'standbyNow': return confirmRun('Colocar os celulares em "olhos no telão" agora? Depois é só voltar ao roteiro.', () => act('setBlock', { block: 'standby' }));
+      case 'quickMessage': return quickMessageDialog();
+      case 'editStep': { const x = O.settings.steps.find(y => y.id === id); if (x) { A.edit = { ...x }; render(true); const f = $('#ed-theme') || $('#ed-title'); if (f) f.focus(); } return; }
+      case 'cancelEdit': A.edit = null; return render(true);
+      case 'saveEdit': {
+        if (!A.edit) return;
+        const steps = O.settings.steps.map(x => (x.id === A.edit.id ? { ...A.edit } : x));
+        return run(async () => { await act('settings', { settings: { steps } }); A.edit = null; }, 'Salvo');
+      }
+      // --- roteiro: editor (Preparar) ---
+      case 'rsAdd': {
+        const t = el.dataset.type, list = draftSteps();
+        list.push(t === 'stage' ? { type: t, title: `Bloco ${list.filter(x => x.type === 'stage').length + 1}`, theme: '', speaker: '' } : t === 'message' ? { type: t, emoji: '☕', title: 'Intervalo', body: 'Voltamos em 15 minutos.' } : t === 'sucesso' ? { type: t, activity: el.dataset.activity } : { type: t });
+        return render(true);
+      }
+      case 'rsDel': draftSteps().splice(+el.dataset.i, 1); return render(true);
+      case 'rsMove': { const list = draftSteps(), a = +el.dataset.i, b = a + +el.dataset.d; if (b < 0 || b >= list.length) return; [list[a], list[b]] = [list[b], list[a]]; return render(true); }
+      case 'rsDiscard': A.stepsDraft = null; return render(true);
+      case 'rsDefault': if (!confirm('Trocar o roteiro pelo padrão? Você ainda precisa salvar para valer.')) return; A.stepsDraft = DEFAULT_STEPS(); return render(true);
+      case 'rsSave': return run(async () => { await act('settings', { settings: { steps: A.stepsDraft } }); A.stepsDraft = null; }, 'Roteiro salvo');
+      // --- dinâmicas do Sucesso ---
       case 'sucDraw': return run(() => api('POST', '/api/admin/sucesso/draw', { action: el.dataset.cmd }));
-      case 'sucDownload': return sucDownload(el.dataset.k, el.dataset.type);
-      case 'sucShow': return run(async () => { await api('POST', '/api/admin/presentation', { roomId: SUC.roomId, activityId: el.dataset.k }); sucPoll(); }, 'Dinâmica no telão e nos celulares 🚀');
-      case 'sucStop': return run(async () => { await api('POST', '/api/admin/presentation', { roomId: null }); sucPoll(); }, 'De volta ao townhall');
+      case 'sucAnswers': return run(() => sucAnswersDialog(el.dataset.k));
+      case 'sucDownload': return sucDownload(el.dataset.type);
       case 'sucCmd': {
-        const k = el.dataset.k, cmd = el.dataset.cmd;
-        const go = () => run(async () => { await api('POST', `/api/rooms/${SUC.roomId}/activities/${k}/command`, { action: cmd }); await sucPoll(); });
-        if (cmd === 'clear') return confirm('Apagar as respostas desta dinâmica? Não dá para desfazer.') && go();
-        if (cmd === 'end') return confirm('Encerrar o recebimento agora? No painel 3D o carro entra no portal.') && go();
-        return go();
-      }
-      case 'sucRoom': SUC.roomId = el.value; localStorage.setItem('bttf.sucessoRoom', SUC.roomId); SUC.cursor = 0; SUC.resp.clear(); SUC.states = {}; return sucPoll();
-      case 'sucNewRoom': {
-        const name = prompt('Nome da sala (ex.: Townhall · Novembro 2026):', 'Townhall · De Volta para o Sucesso');
-        if (!name) return;
-        return run(async () => { const r = await api('POST', '/api/rooms', { name }); SUC.roomId = r.id; localStorage.setItem('bttf.sucessoRoom', r.id); SUC.rooms = null; SUC.cursor = 0; SUC.resp.clear(); SUC.states = {}; await sucPoll(); }, 'Sala criada');
-      }
-      case 'sucCopy': {
-        const url = `${location.origin}/participar/${SUC.roomId}?d=${el.dataset.k}`;
-        return navigator.clipboard.writeText(url).then(() => toast('Link copiado'), () => prompt('Copie o link:', url));
+        const k = el.dataset.k, cmd = el.dataset.cmd, room = O.sucesso && O.sucesso.roomId;
+        if (!room) return toast('As dinâmicas do Sucesso ainda estão carregando.', true);
+        if (cmd === 'clear' && !confirm('Apagar as respostas desta dinâmica? Não dá para desfazer.')) return;
+        if (cmd === 'end' && !confirm('Encerrar o recebimento agora? O carro entra no portal e aparece a nuvem de palavras.')) return;
+        return run(() => api('POST', `/api/rooms/${room}/activities/${k}/command`, { action: cmd }));
       }
       case 'addPerson': return dialog(personForm(), () => { $('#fSave').onclick = () => run(async () => { await api('POST', '/api/admin/people', personFromForm()); closeDialog(); }, 'Pessoa adicionada'); });
       case 'editPerson': { const p = O.people.find(x => x.id === +id); return dialog(personForm(p), () => { $('#fSave').onclick = () => run(async () => { await api('PUT', `/api/admin/people/${id}`, personFromForm()); closeDialog(); }, 'Salvo'); }); }
@@ -632,8 +678,9 @@
   }
   document.addEventListener('click', e => {
     const close = e.target.closest('[data-close]'); if (close) { closeDialog(); return; }
-    const tab = e.target.closest('#tabs [data-tab]'); if (tab) { A.tab = tab.dataset.tab; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b === tab)); render(true); return; }
-    const go = e.target.closest('[data-go]'); if (go) { e.preventDefault(); A.tab = go.dataset.go; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === A.tab)); render(true); return; }
+    const tab = e.target.closest('#tabs [data-tab]'); if (tab) { A.tab = tab.dataset.tab; render(true); window.scrollTo(0, 0); return; }
+    const prep = e.target.closest('[data-prep]'); if (prep) { A.prep = prep.dataset.prep; render(true); return; }
+    const go = e.target.closest('[data-go]'); if (go) { e.preventDefault(); if (go.dataset.go === 'live') A.tab = 'live'; else { A.tab = 'prep'; A.prep = go.dataset.go; } render(true); window.scrollTo(0, 0); return; }
     const rt = e.target.closest('[data-roundtab]'); if (rt) { A.round = +rt.dataset.roundtab; render(true); return; }
     const el = e.target.closest('[data-act]'); if (el && el.tagName !== 'INPUT' && el.tagName !== 'SELECT') { if (el.tagName === 'A') e.preventDefault(); onAction(el); }
   });
@@ -641,8 +688,9 @@
   document.addEventListener('pointerup', () => setTimeout(renderAudio, 300), true);
   document.addEventListener('input', e => {
     if (e.target.id === 'peopleQ') { A.peopleQ = e.target.value; render(true); }
-    const st = e.target.closest('[data-stage]'); // rascunho dos blocos do evento
-    if (st) { const first = !A.stageDraft; A.stageDraft = A.stageDraft || (A.O.settings.stages || []).map(x => ({ ...x })); A.stageDraft[+st.dataset.stage][st.dataset.f] = st.value; if (first) render(true); }
+    const rs = e.target.closest('[data-rs]'); // rascunho do roteiro: nada se perde quando o painel atualiza
+    if (rs) { const first = !A.stepsDraft; draftSteps()[+rs.dataset.rs][rs.dataset.f] = rs.value; if (first) render(true); }
+    const ed = e.target.closest('[data-edit]'); if (ed && A.edit) A.edit[ed.dataset.edit] = ed.value;
   });
   document.addEventListener('pointerdown', () => { A.pressing = true; }, true);
   document.addEventListener('pointerup', () => { A.pressing = false; }, true);
