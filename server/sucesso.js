@@ -4,6 +4,7 @@
 // (sucesso/scripts/sqlite-db.mjs). A identidade do apresentador, que lá vinha da
 // conta ChatGPT, aqui vem do login do Painel do Doc (cookie assinado com a senha de admin).
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const { pathToFileURL } = require('url');
 
@@ -88,6 +89,18 @@ function createSucesso({ dbPath, adminPassword }) {
     if (hasBody && result.status < 300) for (const fn of listeners) fn();
   }
 
+  // O painel do Lucas é servido como está, com uma única linha a mais no fim: o script que troca o
+  // carro de polígonos pelo DeLorean 3D realista (public/painel-carro.js). O arquivo dele não muda.
+  let painelCache = null;
+  function painelHtml() {
+    if (!painelCache || process.env.NODE_ENV !== 'production') {
+      const html = fs.readFileSync(path.join(PUBLIC, 'painel.html'), 'utf8');
+      const at = html.lastIndexOf('</body>'); // o último: há outro "</body>" dentro do script de exportar para Word
+      painelCache = html.slice(0, at) + '<script src="/delorean3d.js"></script><script src="/painel-carro.js"></script>\n' + html.slice(at);
+    }
+    return painelCache;
+  }
+
   /* ---------- rotas ---------- */
   function mount(app, { isAdmin }) {
     isPresenter = req => hasCookie(req) || isAdmin(req);
@@ -100,7 +113,7 @@ function createSucesso({ dbPath, adminPassword }) {
     });
     // Painel do apresentador: o login é o mesmo do Painel do Doc.
     app.get(['/painel', '/painel.html'], (req, res, next) => {
-      if (hasCookie(req) || isAdmin(req)) { if (!hasCookie(req)) setCookie(req, res); return send('painel.html')(req, res, next); }
+      if (hasCookie(req) || isAdmin(req)) { if (!hasCookie(req)) setCookie(req, res); return res.set('Cache-Control', 'no-store').type('html').send(painelHtml()); }
       res.redirect(302, '/admin.html?next=' + encodeURIComponent('/painel' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '')));
     });
     // O painel original manda "entrar de novo" para o login do ChatGPT: aqui vira o login do Doc.

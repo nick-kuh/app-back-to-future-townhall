@@ -1,5 +1,6 @@
 // Servidor: Express (API + estáticos) + Socket.IO (tempo real).
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
@@ -22,6 +23,19 @@ const io = new Server(server, { cors: { origin: '*' }, pingInterval: 10000, ping
 const sucesso = createSucesso({ dbPath: process.env.SUCESSO_DB_PATH || path.join(DATA_DIR, 'sucesso.db'), adminPassword: ADMIN_PASSWORD });
 
 app.disable('x-powered-by');
+app.use(require('compression')()); // gzip: páginas e scripts chegam mais rápido no Wi-Fi do evento
+// Fontes dos mostradores de LED (DSEG, licença OFL), servidas da própria instalação
+const DSEG = path.join(__dirname, '..', 'node_modules', 'dseg', 'fonts');
+app.get('/fonts/dseg14.woff2', (req, res) => res.sendFile(path.join(DSEG, 'DSEG14-Classic', 'DSEG14Classic-Bold.woff2'), { maxAge: '7d', immutable: true }));
+app.get('/fonts/dseg7.woff2', (req, res) => res.sendFile(path.join(DSEG, 'DSEG7-Classic', 'DSEG7Classic-Bold.woff2'), { maxAge: '7d', immutable: true }));
+// Fonte do logo: se houver um arquivo de fonte em public/fonts (ex.: "Back to the Future 2002"), o logo passa a usá-lo.
+app.get('/fonts/logo.css', (req, res) => {
+  let file = null;
+  try { file = fs.readdirSync(path.join(__dirname, '..', 'public', 'fonts')).find(f => /\.(woff2?|ttf|otf)$/i.test(f)) || null; } catch { /* pasta ausente */ }
+  res.type('css').set('Cache-Control', 'no-cache').send(file ? `@font-face{font-family:"BTTF Logo";src:url("/fonts/${encodeURIComponent(file)}");font-display:swap}` : '/* sem fonte própria em public/fonts: o logo usa a fonte padrão */');
+});
+// Three.js (carro 3D) servido da própria instalação, sem CDN
+app.get('/vendor/three/three.module.min.js', (req, res) => res.sendFile(path.join(__dirname, '..', 'node_modules', 'three', 'build', 'three.module.min.js'), { maxAge: '7d', immutable: true }));
 app.set('trust proxy', true); // Render/HTTPS: req.protocol correto para a checagem de origem da API do Sucesso
 // Admin: senha no cabeçalho (Painel do Doc) ou cookie do login (Painel do Sucesso, /painel).
 const isAdmin = req => (req.get('x-admin-key') || req.query.key) === ADMIN_PASSWORD || sucesso.hasCookie(req);

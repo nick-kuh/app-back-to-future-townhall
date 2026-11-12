@@ -6,6 +6,9 @@
  *
  *   Delorean3D.background(canvas)            → céu + sol + montanhas + estrada em movimento
  *   Delorean3D.car(canvas, {camPos, camLook}) → cena do carro: .charge(e) .spark() .doWarp() .reset(e) .setEnergy(e)
+ *
+ * O carro em si é o modelo WebGL de delorean-model.js (Three.js), desenhado numa camada por cima do
+ * cenário com a mesma câmera. Se o WebGL não estiver disponível, cai no desenho simples em polígonos.
  */
 (function () {
   'use strict';
@@ -104,6 +107,7 @@
   }
   Scene.prototype.size = function () {
     const dpr = Math.min(devicePixelRatio || 1, this.dprMax || 1.25), w = this.cv.clientWidth, h = this.cv.clientHeight; if (!w || !h) return false;
+    this.dpr = dpr;
     if (this.cv.width !== Math.round(w * dpr) || this.cv.height !== Math.round(h * dpr)) { this.cv.width = Math.round(w * dpr); this.cv.height = Math.round(h * dpr); }
     this.c.setTransform(dpr, 0, 0, dpr, 0, 0); this.cam.view(w, h); return true;
   };
@@ -125,20 +129,43 @@
   Scene.prototype.doWarp = function () { if (this.warp < 0) this.warp = 0; this.dirty = true; };
   Scene.prototype.reset = function (e) { this.warp = -1; this.pos = V(0, 0, 0); this.e = e || 0; this.bolts = []; this.parts = []; this.rings = []; this.speed = 7; this.scale = 1; this.dirty = true; };
 
+  /* ----- carro realista (WebGL) por cima do cenário: delorean-model.js ----- */
+  let modelPromise = null;
+  const pool = []; // contexto WebGL reaproveitado quando a tela troca de cena
+  Scene.prototype.initGL = function () {
+    this.glState = 'loading';
+    (modelPromise || (modelPromise = import('/delorean-model.js'))).then(m => {
+      if (this.disposed) return;
+      const slot = pool.pop() || (() => { const gl = document.createElement('canvas'); return { gl, view: m.createCarView(gl) }; })();
+      const fx = document.createElement('canvas');
+      slot.gl.className = fx.className = this.cv.className; slot.gl.setAttribute('aria-hidden', 'true'); fx.setAttribute('aria-hidden', 'true');
+      this.cv.after(slot.gl, fx);
+      this.slot = slot; this.view = slot.view; this.fxc = fx; this.fx = fx.getContext('2d'); this.glState = 'ready'; this.dirty = true;
+    }).catch(err => { console.warn('Carro 3D indisponível; usando o desenho simples.', err); this.glState = 'failed'; this.dirty = true; });
+  };
+  Scene.prototype.dispose = function () {
+    this.disposed = true;
+    if (this.slot) { this.slot.gl.remove(); if (this.slot.view.lost || pool.length >= 2) this.slot.view.dispose(); else pool.push(this.slot); this.slot = this.view = null; }
+    if (this.fxc) this.fxc.remove();
+  };
+  const ANCHORS = [[2.1, .5, .9], [2.1, .5, -.9], [-2.1, .6, .9], [-2.1, .6, -.9], [0, 1.15, .6], [0, 1.15, -.6], [-1.9, 1.2, .5], [-1.9, 1.2, -.5], [1.3, .7, 1], [1.3, .7, -1], [-1.2, .8, 1], [-1.2, .8, -1], [-1.4, 1.25, 0]];
+
   Scene.prototype.frame = function (dt) {
     if (!this.size()) return; this.dirty = false; if (reducedMotion) { dt = 0; this.flash = 0; this.shake = 0; this.bolts = []; this.parts = []; this.rings = []; }
+    if (!this.glState && !this.o.flat) this.initGL();
     if (this.bolts.length > 24) this.bolts.splice(0, this.bolts.length - 24); if (this.parts.length > 260) this.parts.splice(0, this.parts.length - 260); if (this.rings.length > 6) this.rings.splice(0, this.rings.length - 6);
-    const c = this.c, cam = this.cam; this.t += dt; const t = this.t;
+    let c = this.c; const cam = this.cam; this.t += dt; const t = this.t;
     // estado
     let carVis = true, tw = 0;
     if (this.warp >= 0) {
       this.warp += dt; tw = Math.max(0, this.warp - .9); this.speed = 7 + tw * 90;
-      const k = Math.min(1, tw / 1.4); this.pos = V(0, .15 + tw * .6, -34 * k * k); this.ry += (Math.PI / 2 - this.ry) * .1; this.shake = Math.max(this.shake, .06);
+      const k = Math.min(1, tw / 1.4); this.pos = V(0, tw * .55, -34 * k * k); this.ry += (Math.PI / 2 - this.ry) * .1; this.shake = Math.max(this.shake, .06);
       if (R() < .6) this.bolt(1.5 + R() * 2, .18); if (this.pos.z < -32.5) carVis = false; this.e = 1;
-    } else { this.pos = V(0, .18 + (reducedMotion ? 0 : Math.sin(t * 2.2) * .09), 0); this.ry = Math.PI / 2 + (reducedMotion ? 0 : .32 * Math.sin(t * .45)); this.speed = 7 + this.e * 10; }
+    } else { this.pos = V(0, reducedMotion ? 0 : .012 + Math.sin(t * 9) * .006, 0); this.ry = Math.PI / 2 + (reducedMotion ? 0 : .26 * Math.sin(t * .45)); this.speed = 7 + this.e * 10; }
     this.travel += dt * this.speed;
     const sh = this.shake; this.shake *= .88; this.flash *= .9;
     const base = this.o.camPos; cam.set(add(base, V((R() - .5) * sh, (R() - .5) * sh, 0)), this.o.camLook); cam.view(cam.W, cam.H);
+    this.wv = ANCHORS.map(a => this.T(V(a[0], a[1], a[2])));
     // cenário
     sky(c, cam, t); terrain(c, cam, this.travel, { xw: 44, dx: 2.2, zFar: -110, zNear: 6 }); road(c, cam, this.travel, -110, 7);
     // portal
@@ -152,7 +179,7 @@
       });
       this.swirl.forEach(s => { const a = s.a + t * s.s * (2.2 - s.r), r = rad * s.r; const p = cam.p(add(C, V(Math.cos(a) * r, Math.sin(a) * r, (s.r - .5) * 2))); if (p) { c.fillStyle = rgba(s.c, .9); c.fillRect(p.x - 1.5, p.y - 1.5, 3, 3); } }); c.restore();
     }
-    // rastros de fogo
+    // rastros de fogo (as duas linhas de fogo que o carro deixa na estrada)
     if (this.warp > .9) {
       c.save(); c.globalCompositeOperation = 'lighter'; [-.85, .85].forEach(x => {
         for (let k = 0; k < 3; k++) {
@@ -161,19 +188,31 @@
         }
       }); c.restore();
     }
-    // brilho no chão (underglow) + ondas de choque
-    const e = this.e, ug = []; for (let i = 0; i < 32; i++) { const a = i / 32 * Math.PI * 2; const p = cam.p(add(this.T(V(Math.cos(a) * 2.6, 0, Math.sin(a) * 1.25)), V(0, -this.pos.y + .02, 0))); if (p) ug.push(p); }
-    if (carVis && ug.length > 3) { c.beginPath(); ug.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)); c.closePath(); c.fillStyle = rgba(CY, .06 + .3 * e + .25 * this.flash); c.shadowColor = '#22d3ee'; c.shadowBlur = 30; c.fill(); c.shadowBlur = 0; }
+    // sombra de contato, brilho no chão (underglow) e ondas de choque
+    const e = this.e, ground = (rx, rz) => { const pts = []; for (let i = 0; i < 32; i++) { const a = i / 32 * Math.PI * 2; const p = cam.p(add(this.T(V(Math.cos(a) * rx, 0, Math.sin(a) * rz)), V(0, -this.pos.y + .02, 0))); if (p) pts.push(p); } return pts; };
+    const path = pts => { c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)); c.closePath(); };
+    if (carVis) {
+      const lift = Math.max(0, 1 - this.pos.y / 1.2), sd = ground(2.45, 1.12);
+      if (sd.length > 3 && lift > 0) { c.save(); path(sd); c.fillStyle = `rgba(2,2,8,${.78 * lift})`; c.shadowColor = `rgba(2,2,8,${.8 * lift})`; c.shadowBlur = 22; c.fill(); c.restore(); }
+      const ug = ground(2.7, 1.3);
+      if (ug.length > 3 && (e > 0 || this.flash > .02)) { c.save(); c.globalCompositeOperation = 'lighter'; path(ug); c.fillStyle = rgba(CY, .22 * e + .25 * this.flash); c.shadowColor = '#22d3ee'; c.shadowBlur = 30; c.fill(); c.restore(); }
+    }
     c.save(); c.globalCompositeOperation = 'lighter'; this.rings = this.rings.filter(r => {
       r.t += dt; if (r.t < 0) return true; const k = r.t / .9; if (k >= 1) return false; const rad = .8 + k * 6.5;
       c.beginPath(); for (let i = 0; i <= 48; i++) { const a = i / 48 * Math.PI * 2; const p = cam.p(V(this.pos.x + Math.cos(a) * rad, .03, this.pos.z + Math.sin(a) * rad)); if (p) i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y); }
       c.strokeStyle = rgba(r.col, 1 - k); c.lineWidth = 4 * (1 - k) + 1; c.shadowColor = rgba(r.col, 1); c.shadowBlur = 18; c.stroke(); return true;
     }); c.restore();
     // carro
-    if (carVis) {
-      const L = nrm(V(-.4, 1, .6)), polys = []; this.wv = []; const pulse = e >= 1 ? .5 + .5 * Math.sin(t * 6) : 0;
+    const pulse = e >= 1 ? .5 + .5 * Math.sin(t * 6) : 0;
+    if (this.view && !this.view.lost) {
+      this.view.resize(cam.W, cam.H, Math.min(devicePixelRatio || 1, 2));
+      this.view.setCamera(cam.pos, this.o.camLook, cam.fov);
+      this.view.update({ pos: this.pos, ry: this.ry, e, flash: this.flash, pulse, spin: this.travel, visible: carVis });
+      this.view.render();
+    } else if (carVis) {
+      const L = nrm(V(-.4, 1, .6)), polys = [];
       this.car.forEach(P => {
-        const wv = P.v.map(v => this.T(v)), wc = this.T(P.c); if (P.body) this.wv = wv.filter((_, i) => i % 2 === 0);
+        const wv = P.v.map(v => this.T(v)), wc = this.T(P.c);
         P.f.forEach(f => {
           const pts = f.i.map(i => wv[i]); let n = nrm(cross(sub(pts[1], pts[0]), sub(pts[2], pts[0])));
           let fc = V(0, 0, 0); pts.forEach(p => { fc = add(fc, p); }); fc = mul(fc, 1 / pts.length); if (dot(n, sub(fc, wc)) < 0) n = mul(n, -1);
@@ -192,7 +231,11 @@
         }
       });
     }
-    // raios + partículas
+    // raios + partículas (na camada da frente quando o carro é WebGL)
+    if (this.fx && this.view) {
+      const f = this.fxc; if (f.width !== this.cv.width || f.height !== this.cv.height) { f.width = this.cv.width; f.height = this.cv.height; }
+      c = this.fx; c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); c.clearRect(0, 0, cam.W, cam.H);
+    }
     c.save(); c.globalCompositeOperation = 'lighter'; this.bolts = this.bolts.filter(b => {
       b.l -= dt; if (b.l <= 0) return false; if (R() < .35) return true;
       [[CY, 6, .5], [[200, 250, 255], 2, 1]].forEach(([col, w, a]) => { c.beginPath(); for (let i = 0; i < b.pts.length - 1; i++) cam.seg(c, b.pts[i], b.pts[i + 1]); c.strokeStyle = rgba(col, a * (b.l / b.m + .3)); c.lineWidth = w; c.shadowColor = '#22d3ee'; c.shadowBlur = 20; c.stroke(); }); return true;
@@ -225,7 +268,7 @@
     if (now - last < 1000 / fps) return;
     const dt = Math.min(.1, (now - last) / 1000); last = now;
     for (const it of items) {
-      if (!it.cv.isConnected) { items.delete(it); continue; }
+      if (!it.cv.isConnected) { items.delete(it); if (it.dispose) it.dispose(); continue; }
       try { if (!reducedMotion || !painted || it.dirty) it.frame(reducedMotion ? 0 : dt); } catch (err) { console.error(err); }
     }
     painted = true;
@@ -237,10 +280,10 @@
   window.Delorean3D = {
     background(canvas, opts) { const b = new BG(canvas, opts); b.dirty = true; items.add(b); return b; },
     car(canvas, opts) {
-      const o = Object.assign({ camPos: V(3.3, 2.0, 6.3), camLook: V(-.2, .9, -3) }, opts || {});
+      const o = Object.assign({ camPos: V(2.7, 1.45, 4.9), camLook: V(-.15, .78, -2.6) }, opts || {});
       if (Array.isArray(o.camPos)) o.camPos = V(...o.camPos);
       if (Array.isArray(o.camLook)) o.camLook = V(...o.camLook);
-      const s = new Scene(canvas, o); items.add(s); return s;
+      const s = new Scene(canvas, o); if (!o.manual) items.add(s); return s; // manual: quem chama cuida do laço (painel do Sucesso)
     },
     setFps(n) { fps = Math.max(10, Math.min(60, n)); },
     get reducedMotion() { return reducedMotion; },
