@@ -7,7 +7,8 @@ const { buildQueues, ERAS, eraOfRound } = require('./queues');
 const { computeResults, POINTS } = require('./results');
 
 const TOTAL_ROUNDS = 3;
-const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing'];
+const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing', 'stage'];
+const AUDIO_MODES = ['off', 'music', 'ambient'];
 const PHASES = ['idle', 'ready', 'matching', 'talk', 'roundEnd', 'ranking', 'results'];
 
 const DEFAULT_SETTINGS = {
@@ -22,6 +23,16 @@ const DEFAULT_SETTINGS = {
   welcomeText: 'Aguarde: a viagem começa em breve.',
   closingText: 'Obrigado por viajar com a gente. Marque aquele café com a sua conexão!',
   standbyText: 'Agora você não precisa do celular.',
+  // Blocos do evento (falas): o Doc exibe um bloco e os celulares mostram o tema; o telão fica calmo.
+  stages: [
+    { title: 'Bloco 1', theme: '', speaker: '' },
+    { title: 'Bloco 2', theme: '', speaker: '' },
+    { title: 'Bloco 3', theme: '', speaker: '' },
+  ],
+  stageText: 'Agora a atenção é no palco.',
+  stageMutes: true,       // exibir um bloco de fala desliga o som do telão
+  musicUrl: '',           // opcional: arquivo de áudio próprio para "Música" (senão, toca a trilha gerada no navegador)
+  ambientUrl: '',         // opcional: arquivo de áudio próprio para "Trilha sonora"
   agenda: [
     { time: '', title: 'Boas-vindas e check-in' },
     { time: '', title: 'Conexões · 3 viagens no tempo' },
@@ -60,6 +71,9 @@ class Engine {
       screen: Object.assign({}, DEFAULT_SCREEN, saved.screen || {}),
       // Dinâmica do "De Volta para o Sucesso" em exibição no telão e nos celulares (null = townhall)
       presentation: saved.presentation && saved.presentation.roomId ? saved.presentation : null,
+      stage: Number.isInteger(saved.stage) ? saved.stage : 0,        // bloco de fala em exibição (índice em settings.stages)
+      audio: Object.assign({ mode: 'off', volume: 60, out: 'telao' }, saved.audio || {}), // som: off | music | ambient · sai do telão ou do painel
+      drawn: saved.drawn && typeof saved.drawn === 'object' ? saved.drawn : {}, // respostas já sorteadas por dinâmica/rodada
     };
     delete this.state.conn.talk; // modelo antigo
     this.settings = Object.assign({}, DEFAULT_SETTINGS, kvGet('settings', {}));
@@ -527,6 +541,7 @@ class Engine {
     if (!BLOCKS.includes(block)) throw new Error('Bloco inválido.');
     const wasOff = this.state.block === 'standby';
     this.state.block = block;
+    if (block === 'stage' && this.settings.stageMutes) this.state.audio.mode = 'off';
     const notices = {
       message: { title: this.state.message.title, body: this.state.message.body },
       welcome: wasOff ? { title: 'Circuitos ligados', body: 'Estamos de volta. Olhe para o seu celular.' } : null,
@@ -549,7 +564,14 @@ class Engine {
     if (partial.autoFlow !== undefined) s.autoFlow = !!partial.autoFlow;
     if (partial.showMutualOnScreen !== undefined) s.showMutualOnScreen = !!partial.showMutualOnScreen;
     if (partial.showFormHints !== undefined) s.showFormHints = !!partial.showFormHints;
-    for (const k of ['eventName', 'welcomeText', 'closingText', 'standbyText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
+    for (const k of ['eventName', 'welcomeText', 'closingText', 'standbyText', 'stageText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
+    if (partial.stageMutes !== undefined) s.stageMutes = !!partial.stageMutes;
+    // áudio próprio: só endereços http(s) ou caminhos do próprio site
+    for (const k of ['musicUrl', 'ambientUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
+    if (Array.isArray(partial.stages)) {
+      const list = partial.stages.slice(0, 12).map((x, i) => ({ title: String((x && x.title) || '').trim().slice(0, 60) || `Bloco ${i + 1}`, theme: String((x && x.theme) || '').trim().slice(0, 200), speaker: String((x && x.speaker) || '').trim().slice(0, 80) }));
+      if (list.length) { s.stages = list; this.state.stage = Math.min(this.state.stage || 0, list.length - 1); }
+    }
     if (Array.isArray(partial.agenda)) s.agenda = partial.agenda.map(a => ({ time: String(a.time || ''), title: String(a.title || '') })).filter(a => a.title);
     this.commit();
   }
@@ -618,10 +640,61 @@ class Engine {
   }
   presentation() {
     const p = this.state.presentation;
-    return p ? { roomId: p.roomId, activityId: p.activityId, title: p.title, question: p.question } : null;
+    if (!p) return null;
+    const d = p.draw; // o texto da resposta sorteada não vai no estado público (só telão logado e o próprio sorteado)
+    return { roomId: p.roomId, activityId: p.activityId, title: p.title, question: p.question, draw: d ? { name: d.name, at: d.at, talk: d.talk } : null };
+  }
+  // Sorteio de viajante (dinâmicas com tempo de fala): o estado fica aqui para o Painel do Doc,
+  // o telão e o celular do sorteado mostrarem a mesma coisa.
+  drawKey(roundId) { const p = this.state.presentation; return `${p.roomId}:${p.activityId}:${roundId}`; }
+  drawnIds(roundId) { return this.state.presentation ? (this.state.drawn[this.drawKey(roundId)] || []).slice() : []; }
+  setDraw(winner, roundId, talkSeconds) {
+    const p = this.state.presentation;
+    if (!p) throw new Error('Nenhuma dinâmica em exibição.');
+    const key = this.drawKey(roundId), keys = Object.keys(this.state.drawn);
+    if (keys.length > 40) for (const k of keys.slice(0, keys.length - 40)) delete this.state.drawn[k];
+    (this.state.drawn[key] = this.state.drawn[key] || []).push(winner.id);
+    const s = Math.max(10, Number(talkSeconds) || 120);
+    p.draw = { responseId: winner.id, name: winner.name, answer: winner.answer, personId: winner.personId || null, at: now(), talk: { duration: s, remaining: s, endsAt: null } };
+    this.commit({ title: 'Viajante sorteado', body: winner.name });
+    return p.draw;
+  }
+  drawTalk(action) {
+    const d = this.state.presentation && this.state.presentation.draw;
+    if (!d) throw new Error('Nenhum sorteio em andamento.');
+    const t = d.talk, running = t.endsAt !== null && t.endsAt > now();
+    if (action === 'start') { if (!running) { const left = t.endsAt === null && t.remaining > 0 ? t.remaining : t.duration; t.remaining = left; t.endsAt = now() + left * 1000; } }
+    else if (action === 'pause') { if (t.endsAt !== null) { t.remaining = Math.max(0, Math.ceil((t.endsAt - now()) / 1000)); t.endsAt = null; } }
+    else if (action === 'reset') { t.remaining = t.duration; t.endsAt = null; }
+    else throw new Error('Comando inválido.');
+    this.commit();
+  }
+  closeDraw() {
+    const p = this.state.presentation;
+    if (!p || !p.draw) return;
+    p.draw = null; this.commit();
+  }
+
+  /* ---------------- blocos do evento (falas) e som ---------------- */
+  stageInfo() {
+    const list = this.settings.stages || [], i = Math.max(0, Math.min(list.length - 1, this.state.stage || 0)), st = list[i] || { title: 'Bloco', theme: '', speaker: '' };
+    return { index: i, count: list.length, title: st.title, theme: st.theme, speaker: st.speaker };
+  }
+  setStage(index) {
+    const list = this.settings.stages || [], i = Number(index);
+    if (!Number.isInteger(i) || i < 0 || i >= list.length) throw new Error('Bloco inválido.');
+    this.state.stage = i; this.state.block = 'stage';
+    if (this.settings.stageMutes) this.state.audio.mode = 'off';
+    this.commit({ title: list[i].title, body: list[i].theme || this.settings.stageText });
+  }
+  setAudio({ mode, volume, out } = {}) {
+    if (mode !== undefined) { if (!AUDIO_MODES.includes(mode)) throw new Error('Modo de som inválido.'); this.state.audio.mode = mode; }
+    if (out !== undefined) this.state.audio.out = out === 'painel' ? 'painel' : 'telao';
+    if (volume !== undefined) this.state.audio.volume = Math.max(0, Math.min(100, Math.round(Number(volume) || 0)));
+    this.commit();
   }
   requireJourney() {
-    if (this.state.presentation) throw Object.assign(new Error('Volte ao Townhall antes de alterar a viagem ou a avaliação.'), { status: 409 });
+    if (this.state.presentation) throw Object.assign(new Error('Há uma dinâmica do Sucesso no telão. Volte ao Townhall antes de mudar o evento.'), { status: 409 });
   }
 
   /* ---------------- snapshots ---------------- */
@@ -634,7 +707,7 @@ class Engine {
     const rankingTotal = c.played ? new Set(this.allGroups().filter(g => g.round <= c.played).flatMap(g => g.members).filter(id => exists.has(id))).size : 0;
     const rankingDone = db.prepare('SELECT COUNT(DISTINCT person_id) AS n FROM rankings').get().n;
     return {
-      event: { name: this.settings.eventName, agenda: this.settings.agenda, welcomeText: this.settings.welcomeText, closingText: this.settings.closingText, standbyText: this.settings.standbyText },
+      event: { name: this.settings.eventName, agenda: this.settings.agenda, welcomeText: this.settings.welcomeText, closingText: this.settings.closingText, standbyText: this.settings.standbyText, stageText: this.settings.stageText },
       block: this.state.block,
       message: this.state.message,
       counts: { checkedIn: checked.length, total: active.length },
@@ -647,6 +720,8 @@ class Engine {
       },
       screen: this.state.screen,
       presentation: this.presentation(),
+      stage: this.stageInfo(),
+      audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
       settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints },
       now: now(),
     };

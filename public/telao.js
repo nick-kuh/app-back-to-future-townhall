@@ -38,7 +38,10 @@
   ];
 
   const S = { state: null, offset: 0, socket: null, key: '', people: null, eraIdx: 0, quoteIdx: 0,
-    car: null, energy: 0, checked: null, live: null, liveCount: null, ended: false, pollT: null, replies: '' };
+    car: null, energy: 0, checked: null, pollT: null,
+    // De Volta para o Sucesso em exibição
+    responses: null, auth: false, drawAnswer: null, seen: new Set(), roundId: null, liveCount: null, prevPhase: null, endStage: null, endTok: 0,
+    cloud: null, drawAt: null, reelT: null, revealed: false, talkDone: null, firstLoad: true };
   // De Volta para o Sucesso: as quatro dinâmicas (mesmas cores do painel do Lucas)
   const DYN = { d1: { n: '01', c: 'var(--cyan)' }, d2: { n: '02', c: 'var(--yellow)' }, d3: { n: '03', c: 'var(--magenta)' }, d4: { n: '04', c: 'var(--orange)' } };
   const TARGET = 20; // respostas para energia máxima (igual ao painel)
@@ -55,19 +58,29 @@
     S.socket.on('connect', () => S.socket.emit('hello', {}, res => { if (res && res.state) { S.state = res.state; S.offset = res.now - Date.now(); render(); } }));
     S.socket.on('state', st => { S.state = st; S.offset = st.now - Date.now(); render(); });
     S.socket.on('sucesso:pulse', () => pollScreen());
+    S.socket.on('connect', () => { pollScreen(); checkAuth(); });
   }
-  // Dinâmica do Sucesso no telão: contagem, cronômetro e últimas respostas (estas só com o login do Doc neste navegador).
+  // Avisa o Painel do Doc como este telão está: logado (pode mostrar respostas) e com o som liberado.
+  function report() { if (S.socket && S.socket.connected) S.socket.emit('telao:status', { locked: !!(window.Trilha && Trilha.locked), auth: S.auth }); }
+  async function checkAuth() {
+    try { const d = await (await fetch('/api/sucesso/screen', { cache: 'no-store', credentials: 'same-origin' })).json(); S.auth = !!d.authenticated; } catch { /* segue */ }
+    report();
+  }
+  // Textos das respostas (nuvem, feed, resposta do sorteado): só chegam se este navegador estiver
+  // logado no Painel do Doc. Fase, contagem, cronômetro e nome do sorteado vêm no estado público.
   async function pollScreen() {
     clearTimeout(S.pollT);
-    const p = S.state && S.state.presentation;
-    if (!p) { S.live = null; return; }
+    if (!S.state || !S.state.presentation) { S.responses = null; S.drawAnswer = null; return; }
     try {
       const d = await (await fetch('/api/sucesso/screen', { cache: 'no-store', credentials: 'same-origin' })).json();
-      const a = d.liveActivity;
-      S.live = a && a.roomId === p.roomId && a.activityId === p.activityId ? a : null;
-      patchProjection();
+      const p = S.state && S.state.presentation;
+      if (p && d.presentation && d.presentation.roomId === p.roomId && d.presentation.activityId === p.activityId) {
+        if (S.auth !== !!d.authenticated) { S.auth = !!d.authenticated; report(); }
+        S.responses = Array.isArray(d.responses) ? d.responses : null; S.drawAnswer = d.drawAnswer || null;
+        patchProjection();
+      }
     } catch { /* tenta de novo */ }
-    S.pollT = setTimeout(pollScreen, document.hidden ? 5000 : 1500);
+    S.pollT = setTimeout(pollScreen, document.hidden ? 6000 : 2500);
   }
   async function loadPeople() { try { S.people = await (await fetch('/api/people')).json(); } catch { S.people = []; } }
 
@@ -130,65 +143,119 @@
     if (!S.car) return;
     if (key === 'welcome') setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), false);
     if (key === 'roundEnd') { setEnergy(1, false); setTimeout(() => S.car && S.car.doWarp(), 500); }
-    if (key === 'projection') { S.liveCount = null; S.ended = false; S.replies = ''; patchProjection(); }
+    if (key === 'projection') { resetProjection(); patchProjection(); }
   }
   // faíscas contínuas no carro (mais energia, mais faíscas)
   setInterval(() => { if (S.car && !document.hidden && S.energy > 0 && Math.random() < S.energy * .7) S.car.spark(); }, 700);
 
+  /* ---------- De Volta para o Sucesso ----------
+   * Mesmo roteiro do painel 3D do Lucas, agora no telão: enquanto recebe, o carro carrega a cada
+   * resposta; ao encerrar ele entra no portal e aparece a nuvem de palavras; nas dinâmicas 2 e 3 o
+   * Doc sorteia um viajante (nome, resposta, guia e tempo de fala). Dinâmica 1 é só a nuvem, ao vivo. */
   function projectionScene(p) {
     const d = DYN[p.activityId] || DYN.d1;
-    const url = new URL('/participar/' + encodeURIComponent(p.roomId), location.origin);
-    url.searchParams.set('d', p.activityId);
+    const url = location.origin + '/';
     let svg = '';
-    try { const q = qrcode(0, 'M'); q.addData(url.href); q.make(); svg = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch { svg = ''; }
+    try { const q = qrcode(0, 'M'); q.addData(url); q.make(); svg = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch { svg = ''; }
+    const guide = p.live && p.live.guide;
     return `<section class="live-projection" style="--c:${d.c}">
       <div class="kicker">DE VOLTA PARA O SUCESSO · DINÂMICA ${d.n} · ${esc(String(p.title).toUpperCase())}</div>
       <h1 class="pq">${esc(p.question)}</h1>
       <div class="projection-body">
         <div class="projection-entry">
-          ${svg ? `<div class="qr">${svg}</div>` : `<a class="url" href="${esc(url.href)}">${esc(url.href)}</a>`}
-          <div class="scan">▲ ESCANEIE E RESPONDA ▲</div>
+          ${svg ? `<div class="qr">${svg}</div>` : ''}
+          <div class="scan">▲ RESPONDA PELO APP ▲</div>
+          <div class="url">${esc(url.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</div>
           <div class="tcbox"><b id="pCount">000</b><span>RESPOSTAS</span></div>
         </div>
-        ${carBox('wide', `<div class="feed" id="pFeed"></div>
+        <div class="carbox wide" id="pStage" data-mode="car">
+          <div class="layer car-layer"><canvas class="car3d" data-car></canvas>
+            <div class="energy"><div class="lbl"><span><svg class="fluxi" viewBox="0 0 24 24"><line x1="4" y1="4" x2="12" y2="12"/><line x1="20" y1="4" x2="12" y2="12"/><line x1="12" y1="12" x2="12" y2="21"/></svg>FLUX CAPACITOR</span><span id="gw">0.00 / 1.21 GIGAWATTS</span></div><div class="ebar" id="ebarW"><i id="ebar"></i></div></div>
+          </div>
+          <div class="layer cloud-layer"><canvas id="pCloud"></canvas></div>
+          <div class="feed" id="pFeed"></div>
           <div class="phase" id="pPhase">SINCRONIZANDO…</div>
           <div class="tcbox timer" id="pTimerW" hidden><b id="pTimer">--:--</b><span>RECEBIMENTO</span></div>
-          <div class="portal-msg" id="pDone">${p.activityId === 'd4' ? 'DESTINO: 2027 ⚡' : p.activityId === 'd1' ? 'PRONTOS PARA PARTIR ⚡' : 'MISSÃO CUMPRIDA ⚡'}</div>`)}
+          <div class="portal-msg" id="pDone">${p.activityId === 'd4' ? 'DESTINO: 2027 ⚡' : 'MISSÃO CUMPRIDA ⚡'}</div>
+          <div class="draw" id="pDraw" hidden>
+            <div class="dk">VIAJANTE SORTEADO</div>
+            <div class="reel" id="pReel">???</div>
+            <div class="ans" id="pAns" hidden></div>
+            ${guide ? `<div class="guide">${guide.map(g => `<span>${esc(g)}</span>`).join('<i>→</i>')}</div>` : ''}
+            <div class="tcbox big" id="pTalkW"><b id="pTalk">--:--</b><span>TEMPO DE FALA</span></div>
+          </div>
+        </div>
       </div>
     </section>`;
   }
+  const sucPhase = l => (l ? (l.phase === 'run' && l.endsAt && l.endsAt <= serverNow() ? 'done' : l.phase) : null);
+  function resetProjection() {
+    clearInterval(S.reelT);
+    Object.assign(S, { seen: new Set(), roundId: null, liveCount: null, prevPhase: null, endStage: null, drawAt: null, revealed: false, talkDone: null, firstLoad: true, cloud: null });
+    S.endTok++;
+  }
+  function feedPush(r) {
+    const f = $('#pFeed'); if (!f) return;
+    const el = document.createElement('div'), b = document.createElement('b');
+    b.textContent = r.name || 'Anônimo'; el.append(b, document.createTextNode(' · ' + r.answer)); f.prepend(el);
+    setTimeout(() => el.remove(), 5200); while (f.children.length > 3) f.lastChild.remove();
+  }
   function patchProjection() {
-    const cnt = $('#pCount'); if (!cnt) return;
-    const a = S.live, n = a && Number.isSafeInteger(a.responseCount) ? a.responseCount : null;
-    cnt.textContent = n === null ? '---' : String(n).padStart(3, '0');
-    const ph = $('#pPhase'); ph.textContent = a ? PHASES[a.phase] || '' : 'SINCRONIZANDO…'; ph.dataset.phase = a ? a.phase : '';
-    if (n !== null) { setEnergy(n / TARGET, S.liveCount !== null && n > S.liveCount); S.liveCount = n; }
-    if (a && a.phase === 'done' && !S.ended) {
-      S.ended = true;
-      if (S.car) { S.car.doWarp(); setTimeout(() => { if (S.ended) { flash(); $('.carbox') && $('.carbox').classList.add('arrived'); } }, 2300); }
-      else $('.carbox') && $('.carbox').classList.add('arrived');
-    } else if (a && a.phase !== 'done' && S.ended) {
-      S.ended = false; $('.carbox') && $('.carbox').classList.remove('arrived'); if (S.car) S.car.reset(S.energy);
+    const box = $('#pStage'), p = S.state && S.state.presentation; if (!box || !p) return;
+    const l = p.live, ph = sucPhase(l), n = l ? l.responseCount : null, texts = Array.isArray(S.responses) ? S.responses : null, carDyn = p.activityId !== 'd1';
+    if (!S.cloud && window.NuvemDePalavras) S.cloud = new NuvemDePalavras($('#pCloud'), { scale: 1.25, wide: true });
+    // rodada nova (o Doc limpou as respostas): zera nuvem e energia
+    if (l && S.roundId !== l.roundId) { if (S.roundId !== null) { S.seen = new Set(); S.liveCount = null; if (S.cloud) S.cloud.reset(); $('#pFeed').replaceChildren(); S.firstLoad = true; } S.roundId = l.roundId; }
+    // respostas novas: nuvem + feed
+    if (texts) {
+      for (const r of texts) if (!S.seen.has(r.id)) { S.seen.add(r.id); if (S.cloud) S.cloud.add(r.answer); if (!S.firstLoad && ph !== 'done') feedPush(r); }
+      S.firstLoad = false;
     }
-    const replies = a && Array.isArray(a.latestResponses) ? a.latestResponses.map(r => r && r.answer).filter(x => typeof x === 'string' && x.trim()).slice(0, 3) : [];
-    const key = JSON.stringify(replies);
-    if (key !== S.replies) {
-      const fresh = S.replies !== '' && replies[0] && replies[0] !== (JSON.parse(S.replies || '[]')[0]);
-      S.replies = key;
-      $('#pFeed').innerHTML = replies.map((r, i) => `<div class="${i === 0 && fresh ? 'new' : ''}">${esc(r)}</div>`).join('');
-    }
+    $('#pCount').textContent = n === null ? '---' : String(n).padStart(3, '0');
+    const phEl = $('#pPhase'); phEl.textContent = ph ? PHASES[ph] || '' : 'SINCRONIZANDO…'; phEl.dataset.phase = ph || '';
+    if (n !== null) { const grew = S.liveCount !== null && n > S.liveCount; setEnergy(n / TARGET, grew && ph !== 'done'); if (grew && window.Trilha) Trilha.sfx('blip'); S.liveCount = n; }
+    // encerramento: o carro entra no portal e a tela troca para a nuvem
+    if (carDyn && ph === 'done' && S.endStage === null) {
+      if (S.prevPhase && S.prevPhase !== 'done' && S.car) {
+        S.endStage = 'warp'; S.car.doWarp(); const tok = ++S.endTok;
+        setTimeout(() => { if (tok === S.endTok) flash(); }, 2300);
+        setTimeout(() => { if (tok === S.endTok) { S.endStage = 'shown'; patchProjection(); } }, 2700);
+      } else S.endStage = 'shown';
+    } else if (ph && ph !== 'done' && S.endStage !== null) { S.endStage = null; S.endTok++; if (S.car) S.car.reset(S.energy); }
+    if (ph) S.prevPhase = ph;
+    const ended = carDyn && S.endStage === 'shown';
+    box.dataset.mode = texts && (!carDyn || ended) ? 'cloud' : ended ? 'arrived' : 'car';
+    box.classList.toggle('final', ended && p.activityId === 'd4');
+    if (S.cloud) S.cloud.dim = ended && p.activityId === 'd4';
+    // sorteio
+    const d = p.draw, ov = $('#pDraw');
+    if (d && S.drawAt !== d.at) {
+      S.drawAt = d.at; S.revealed = false; S.talkDone = null; clearInterval(S.reelT);
+      const reel = $('#pReel'), ans = $('#pAns'); ov.hidden = false; ans.hidden = true;
+      const reveal = () => { clearInterval(S.reelT); S.revealed = true; reel.classList.remove('spin'); reel.textContent = d.name; if (window.Trilha) Trilha.sfx('reveal'); patchProjection(); };
+      const wait = 2400 - (serverNow() - d.at);
+      if (wait > 150) {
+        const names = texts && texts.length ? texts.map(r => r.name) : ['• • •', '• •', '•'];
+        reel.classList.add('spin'); S.reelT = setInterval(() => { reel.textContent = names[Math.floor(Math.random() * names.length)]; }, 90);
+        const at = d.at; setTimeout(() => { if (S.drawAt === at) reveal(); }, wait);
+      } else reveal();
+    } else if (!d && S.drawAt !== null) { S.drawAt = null; clearInterval(S.reelT); ov.hidden = true; }
+    if (d && S.revealed) { const ans = $('#pAns'); if (S.drawAnswer) { ans.textContent = `“${S.drawAnswer}”`; ans.hidden = false; } else ans.hidden = true; }
     tickProjection();
   }
   function tickProjection() {
-    const w = $('#pTimerW'); if (!w) return;
-    const a = S.live;
-    const running = a && a.phase === 'run' && Number.isFinite(a.endsAt);
-    const paused = a && a.phase === 'paused' && a.activityId !== 'd1' && Number.isFinite(a.remainingSeconds);
+    const w = $('#pTimerW'), p = S.state && S.state.presentation; if (!w || !p) return;
+    const l = p.live, ph = sucPhase(l);
+    if (l && ph !== S.prevPhase && S.prevPhase !== null) return patchProjection(); // o prazo acabou entre dois avisos do servidor
+    const running = ph === 'run' && l.endsAt, paused = ph === 'paused' && p.activityId !== 'd1';
     w.hidden = !running && !paused;
-    if (w.hidden) return;
-    const sec = running ? Math.max(0, Math.ceil((a.endsAt - serverNow()) / 1000)) : a.remainingSeconds;
-    $('#pTimer').textContent = fmt(sec);
-    w.classList.toggle('alert', running && sec <= 30);
+    if (!w.hidden) { const sec = running ? Math.max(0, Math.ceil((l.endsAt - serverNow()) / 1000)) : l.remainingSeconds; $('#pTimer').textContent = fmt(sec); w.classList.toggle('alert', !!running && sec <= 30); }
+    const t = p.draw && p.draw.talk, tk = $('#pTalk');
+    if (t && tk) {
+      const left = t.endsAt ? Math.max(0, Math.ceil((t.endsAt - serverNow()) / 1000)) : t.remaining;
+      tk.textContent = fmt(left); $('#pTalkW').classList.toggle('alert', !!t.endsAt && left > 0 && left <= 30);
+      if (t.endsAt && left === 0 && S.talkDone !== t.endsAt) { S.talkDone = t.endsAt; if (window.Trilha) Trilha.sfx('timeup'); }
+    }
   }
 
   /* ---------- cenas ---------- */
@@ -201,6 +268,10 @@
     const b = st.block;
     if (b === 'welcome') return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox()}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div></div></div>`];
     if (b === 'standby') return ['clock', sceneClock()];
+    if (b === 'stage') { // bloco de fala: tela calma, só o nome e o tema do bloco
+      const g = st.stage || {}, theme = (g.theme || '').trim();
+      return ['stage', `<div class="stage-calm">${theme ? `<div class="sk">${esc(g.title)}</div>` : ''}<div class="st">${esc(theme || g.title || '')}</div>${g.speaker ? `<div class="ss">${esc(g.speaker)}</div>` : ''}</div>`];
+    }
     if (b === 'message') { const m = st.message; return ['message', `<div class="msg"><div class="e">${esc(m.emoji || '📣')}</div></div><div class="title">${esc(m.title)}</div><div class="msg"><p>${linkify(m.body)}</p></div>`]; }
     if (b === 'closing') return ['closing', `<div class="title">FIM DA VIAGEM</div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
     // conexões
@@ -229,9 +300,10 @@
   /* ---------- render / tick ---------- */
   function render() {
     if (!S.state) return;
+    applyAudio();
     const [key, html] = sceneFor();
     const pr = S.state.presentation;
-    const k = `${key}|${pr ? pr.roomId + pr.activityId : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
+    const k = `${key}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
     if (k !== S.key) {
       S.key = k; $('#scene').innerHTML = html;
       $('#scene').classList.toggle('projection-scene', key === 'projection');
@@ -239,9 +311,12 @@
       mountCar(key);
       if (key === 'roundEnd' || key === 'results') { flash(); if (key === 'results') drive(); }
       if (key === 'matching') drive();
-      if (key === 'projection') pollScreen(); else { clearTimeout(S.pollT); S.live = null; }
+      if (key === 'projection') pollScreen(); else { clearTimeout(S.pollT); S.responses = null; }
+      // telas calmas (bloco de fala): fundo parado e escurecido, sem raios nem carro passando
+      S.calm = key === 'stage'; document.body.classList.toggle('calm', S.calm); if (window.Delorean3D) Delorean3D.pause(S.calm);
     } else {
       const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), S.checked !== null && S.state.counts.checkedIn > S.checked); }
+      if (key === 'projection') patchProjection();
       const rd = $('#rankDone'); if (rd) { rd.textContent = S.state.conn.rankingDone; const b = $('#rankBar'); if (b) b.style.width = Math.round(100 * S.state.conn.rankingDone / Math.max(1, S.state.conn.rankingTotal)) + '%'; }
     }
     S.checked = S.state.counts.checkedIn;
@@ -267,8 +342,20 @@
   setInterval(tick, 500);
   // letreiro de frases
 
-  setInterval(() => { if (Math.random() < .35) drive(); }, 40000);
-  setInterval(() => { if (Math.random() < .2) flash(); }, 9000);
+  setInterval(() => { if (!S.calm && Math.random() < .35) drive(); }, 40000);
+  setInterval(() => { if (!S.calm && Math.random() < .2) flash(); }, 9000);
+  // som do telão (música, trilha de fundo ou silêncio, escolhido no Painel do Doc)
+  function applyAudio() {
+    if (!window.Trilha || !S.state || !S.state.audio) return;
+    const a = S.state.audio;
+    Trilha.apply({ mode: a.out === 'painel' ? 'off' : a.mode, volume: a.volume, musicUrl: a.musicUrl, ambientUrl: a.ambientUrl });
+  }
+  if (window.Trilha) {
+    const chip = $('#soundChip');
+    Trilha.onChange(locked => { chip.hidden = !locked; report(); });
+    const unlock = () => Trilha.unlock();
+    document.addEventListener('pointerdown', unlock); document.addEventListener('keydown', unlock);
+  }
   // fundo 3D: o mesmo céu e a mesma estrada do painel do Sucesso
   if (window.Delorean3D) Delorean3D.background($('#bg3d'), { dprMax: 1 });
   connect();

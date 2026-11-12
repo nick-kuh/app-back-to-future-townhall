@@ -13,34 +13,52 @@ cálculo automático de quem cada pessoa deve procurar depois.
 
 As quatro dinâmicas ao vivo do projeto do Lucas
 ([`LucasBarbosaMelo/de-volta-para-o-sucesso-townhall`](https://github.com/LucasBarbosaMelo/de-volta-para-o-sucesso-townhall))
-agora rodam **dentro deste mesmo app**, no mesmo servidor e com a mesma senha:
+rodam **dentro deste mesmo app**, no mesmo servidor e com a mesma senha:
 
-| Dinâmica | Pergunta |
-|---|---|
-| 01 · Antes de Partir | O que você considera um sucesso? |
-| 02 · Look Back | Olhando para 2026, o que fez você pensar: "isso foi um sucesso"? |
-| 03 · Uso de IA | O que você fez (projeto, agente ou aprendizado) em 2026 com a ajuda da IA? |
-| 04 · Look Ahead | O que precisaria ter acontecido para você dizer: "2027 foi um sucesso"? |
+| Dinâmica | Pergunta | Depois de encerrar |
+|---|---|---|
+| 01 · Antes de Partir | O que você considera um sucesso? | nuvem de palavras ao vivo |
+| 02 · Look Back | Olhando para 2026, o que fez você pensar: "isso foi um sucesso"? | nuvem + sorteio com 2 min de fala |
+| 03 · Uso de IA | O que você fez (projeto, agente ou aprendizado) em 2026 com a ajuda da IA? | nuvem + sorteio com 3 min de fala (desafio → IA → impacto) |
+| 04 · Look Ahead | O que precisaria ter acontecido para você dizer: "2027 foi um sucesso"? | nuvem + "Destino: 2027" (a pessoa pode enviar sem nome) |
 
-- **Painel do Doc → aba 🚀 Sucesso**: cria a sala do evento, mostra as quatro dinâmicas com contagem de
-  respostas e cronômetro, e tem **📺 Liberar no telão e celulares**, iniciar/pausar/encerrar/reiniciar o
-  recebimento, copiar o link e **Voltar ao Townhall**. Enquanto uma dinâmica está liberada, a viagem do
-  bloco Conexões fica pausada e os blocos travados; ao voltar, tudo continua de onde parou.
-- **Painel 3D** (`/painel`): o painel original do Lucas, sem alterações: carro que se energiza a cada
-  resposta (flux capacitor, 1,21 gigawatts), portal, nuvem de palavras 3D, sorteio de viajante, tempo de
-  fala e download das respostas (.txt/Word). Entra com a senha do Painel do Doc.
-- **Celulares**: quando o Doc libera, todos os celulares mostram a pergunta e o botão **Responder agora**,
-  que abre o formulário do Lucas (`/participar/<sala>`, sem login).
-- **Telão**: pergunta + QR + contagem + cronômetro + o carro 3D carregando a cada resposta e entrando no
-  portal quando o recebimento termina. As últimas respostas aparecem quando o telão está aberto no
-  navegador logado no Painel do Doc.
+- **Um login só.** A pessoa escolhe o nome uma vez, no check-in, e esse nome vale para tudo: nas
+  dinâmicas do Sucesso ela responde direto no app, sem digitar o nome de novo. Quem cai e volta no
+  meio do evento entra de novo pelo nome e cai no momento atual.
+- **Painel do Doc → aba 🚀 Sucesso**: cria a sala do evento e, para cada dinâmica: **📺 Liberar no
+  telão e celulares**, iniciar/pausar/encerrar/reiniciar o recebimento, **🎲 Sortear viajante** e o
+  **tempo de fala** (dinâmicas 2 e 3), ver e **baixar as respostas** (.txt/Word) e **Voltar ao
+  Townhall**. Enquanto uma dinâmica está liberada, a viagem do bloco Conexões fica pausada e os
+  blocos travados; ao voltar, tudo continua de onde parou.
+- **Celulares**: pergunta + campo de resposta (200 caracteres) + prazo. Depois do envio, a pessoa vê a
+  própria resposta. Quem é sorteado recebe o aviso "É você!" com a resposta e o tempo de fala.
+- **Telão**: pergunta + QR do app + contagem + prazo + o carro 3D carregando a cada resposta; ao
+  encerrar, o carro entra no portal e aparece a **nuvem de palavras**; no sorteio, roleta de nomes,
+  resposta, guia e cronômetro de fala. Os **textos das respostas só aparecem no telão aberto no
+  navegador logado no Painel do Doc** (a aba Sucesso avisa se o telão está aberto e logado).
+- **Painel 3D** (`/painel`): o painel original do Lucas continua disponível, com a mesma senha. O QR
+  dele abre o formulário original (`/participar/<sala>`), que também usa o nome do check-in.
 
-**Mesmo visual nos dois:** o motor 3D do painel do Lucas virou `public/delorean3d.js` e é usado no
-townhall também: céu synthwave com montanhas e estrada no fundo do telão e dos celulares, e o carro
-carregando o flux capacitor a cada check-in (telão e celular) e entrando no portal no "88 MPH!".
+**Mesmo visual nos dois:** o motor 3D do painel do Lucas virou `public/delorean3d.js` e a nuvem de
+palavras virou `public/nuvem.js`; o carro realista está em `public/delorean-model.js` (Three.js).
 
-O código do Lucas está em [`sucesso/`](sucesso/) (API, banco, páginas e testes originais); a ponte com
-este servidor está em `server/sucesso.js`. As respostas ficam em `data/sucesso.db` (SQLite).
+O código do Lucas está em [`sucesso/`](sucesso/) (API, banco, páginas e testes originais, sem
+alterações); a ponte com este servidor está em `server/sucesso.js`. As respostas ficam em
+`data/sucesso.db` (SQLite).
+
+## 🎤 Blocos do evento, telão calmo e som
+
+- **Blocos do evento** (aba Controle): Bloco 1, 2, 3… com **nome, tema e quem fala**, editáveis a
+  qualquer momento. Ao **▶ Exibir** um bloco, os celulares mostram o nome e o tema dele e o telão
+  entra no **modo calmo**: fundo parado e escurecido, sem raios, sem carro passando, só o tema.
+- **Som** (três botões no topo do Painel do Doc, sempre à mão): **🎵 Música** (animada),
+  **🎼 Trilha sonora** (fundo calmo) e **🔇 Sem áudio**, mais o volume. A música é original, gerada
+  no navegador (`public/trilha.js`, Web Audio), sem arquivos. Exibir um bloco de fala desliga o som
+  (dá para mudar em Config).
+  - O som sai do **computador do telão**; na primeira vez é preciso **clicar uma vez na tela do
+    telão** (os navegadores só liberam áudio depois de um gesto). O painel avisa se falta esse clique.
+    Em "SOM · telão ⇄" dá para trocar para o som sair do computador do painel.
+  - Em Config dá para informar o endereço de um **arquivo de áudio próprio** para cada botão.
 
 ## Como rodar
 
@@ -110,9 +128,10 @@ Os viajantes nunca veem área, WL ou time uns dos outros: esses dados ficam só 
 2. **Perguntas** · banco inicial com 42 perguntas em três eras (presente · 1985, passado · 1955, futuro · 2015).
    Edite, desative ou substitua em massa (uma por linha, com prefixo `[presente]`, `[passado]` ou `[futuro]`;
    `[off]` marca uma desativada).
-3. **Controle** · organizado por blocos; cada um tem o botão **Exibir nos celulares**:
-   - **Check-in**: cada pessoa escolhe o próprio nome; quem já escolheu some da lista. Quem errou usa
-     "voltar e escolher outro nome". Se alguém pegou o seu nome, "Meu nome não aparece" permite assumir.
+3. **Controle** · os **blocos do evento** (falas) e as telas/dinâmicas; cada um tem o botão **Exibir**:
+   - **Check-in**: a pessoa digita o próprio nome e a lista aparece já filtrada (ela fica oculta até
+     começar a digitar). Quem errou usa "trocar". Quem já embarcou e voltou (celular novo, navegador
+     limpo) acha o nome marcado como "já embarcou" e entra de novo no lugar dele.
    - **Olhos no telão**: tela apagada ("neste momento você não precisa do celular").
    - **Mensagem**: aviso livre (intervalo, link de fotos etc.).
    - **Conexões**: `▶ Iniciar viagens` sorteia as duplas (se ainda não sorteou) e dispara o fluxo
@@ -152,7 +171,9 @@ server/db.js         SQLite (node:sqlite) e esquema
 server/seed/         lista de pessoas e banco de perguntas iniciais
 server/sucesso.js    ponte com o De Volta para o Sucesso (API do Lucas sem alterações, login do Doc)
 public/              app do viajante (index.html, app.*), telão (telao.*), Painel do Doc (admin.*)
-public/delorean3d.js motor 3D (céu, estrada, carro) extraído do painel do Sucesso
+public/delorean3d.js motor 3D (céu, estrada, raios, portal) extraído do painel do Sucesso
+public/delorean-model.js  DeLorean realista (Three.js) · public/nuvem.js  nuvem de palavras
+public/trilha.js     música e trilha de fundo geradas no navegador (Web Audio)
 sucesso/             projeto do Lucas: server/api.js, drizzle/, public/ (painel, participar), tests/
 scripts/             testes
 ```

@@ -168,7 +168,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .projection-entry .qr{width:min(34vh,100%,340px);height:auto;aspect-ratio:1;box-shadow:0 0 30px var(--c)}
 .projection-entry .scan{font:700 clamp(11px,1.2vw,18px) var(--led);letter-spacing:3px;color:var(--cyan);text-shadow:0 0 10px var(--cyan)}
 .projection-entry .tcbox{--c:var(--cyan)}
-.carbox .feed{position:absolute;left:14px;top:14px;z-index:4;display:flex;flex-direction:column;gap:6px;max-width:48%;pointer-events:none;text-align:left}
+.carbox .feed{position:absolute;left:14px;top:14px;z-index:4;display:flex;flex-direction:column;gap:6px;max-width:44%;pointer-events:none;text-align:left}
 .carbox .feed div{background:rgba(23,20,46,.92);border-left:3px solid var(--magenta);padding:6px 10px;font:600 clamp(13px,1.3vw,20px) Inter;line-height:1.25;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .carbox .feed div.new{animation:feedin .6s ease-out}
 @keyframes feedin{from{opacity:0;transform:translateX(-30px) rotateY(40deg)}to{opacity:1;transform:none}}
@@ -177,7 +177,45 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .carbox .timer{position:absolute;top:14px;right:14px;z-index:4;--c:var(--yellow)}
 .carbox .timer[hidden]{display:none}
 .carbox .portal-msg{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;font:900 italic clamp(34px,5vw,80px) var(--display);color:var(--yellow);text-shadow:0 0 30px #ff6b1a;opacity:0;pointer-events:none;transition:opacity .6s}
-.carbox.arrived .portal-msg{opacity:1}
-.carbox.arrived .feed,.carbox.arrived .energy{opacity:.25}
+.carbox[data-mode=arrived] .portal-msg,.carbox.final .portal-msg{opacity:1}
+.carbox[data-mode=arrived] .energy{opacity:.25}
 @media (max-aspect-ratio:4/3){.projection-body{grid-template-columns:1fr}.carbox.wide{min-height:46vh}}
 @media (prefers-reduced-motion:reduce){.gwplus,.carbox .feed div.new{animation:none}}
+
+/* ===== Sucesso no telão: camadas (carro → nuvem de palavras), respostas, sorteio e tempo de fala ===== */
+.carbox .layer{position:absolute;inset:0}
+.carbox .cloud-layer{display:none;background:radial-gradient(ellipse at 50% 40%,rgba(29,20,64,.75),rgba(5,4,9,.9) 75%)}
+.carbox .cloud-layer canvas{width:100%;height:100%;display:block}
+.carbox[data-mode=cloud] .car-layer{display:none}
+.carbox[data-mode=cloud] .cloud-layer{display:block}
+.carbox[data-mode=cloud] .feed{display:none}
+.carbox .feed div b{color:var(--yellow)}
+.projection-entry .url{font:400 clamp(10px,1vw,15px) var(--pixel);max-width:100%;text-align:center;line-height:1.7}
+.carbox .draw{position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.8vh;text-align:center;padding:2vh 2vw;background:rgba(11,10,31,.93)}
+.carbox .draw[hidden]{display:none}
+.draw .dk{font:700 clamp(12px,1.3vw,20px) var(--led);letter-spacing:5px;color:var(--cyan);text-shadow:0 0 10px rgba(46,230,214,.6)}
+.draw .reel{font:900 clamp(34px,5.2vw,88px) var(--display);line-height:1.08;color:var(--yellow);text-shadow:0 0 24px #ff6b1a;overflow-wrap:anywhere}
+.draw .reel.spin{animation:reelroll .12s linear infinite}
+@keyframes reelroll{50%{transform:rotateX(70deg);opacity:.5}}
+.draw .ans{max-width:86%;font:600 clamp(18px,2.3vw,38px)/1.3 Inter;color:var(--txt);background:#17142e;border:2px solid var(--magenta);padding:1.2vh 1.8vw;overflow-wrap:anywhere}
+.draw .guide{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;font:700 clamp(11px,1.2vw,18px) var(--led);letter-spacing:1px}
+.draw .guide span{border:2px solid var(--cyan);color:var(--cyan);padding:6px 12px}
+.draw .guide i{color:var(--muted);font-style:normal}
+.tcbox.big{--c:var(--orange)}
+.tcbox.big b{font-size:clamp(40px,6vw,104px);padding:2px 24px}
+.tcbox[hidden]{display:none}
+
+/* ===== bloco de fala: telão calmo (fundo parado e escuro, nada piscando) ===== */
+.stage-calm{display:flex;flex-direction:column;align-items:center;gap:2.6vh;max-width:82vw}
+.stage-calm .sk{font:400 clamp(13px,1.5vw,24px) var(--pixel);letter-spacing:5px;color:var(--amber);text-transform:uppercase}
+.stage-calm .st{font:800 clamp(38px,6vw,104px)/1.08 Inter;color:var(--txt);overflow-wrap:anywhere}
+.stage-calm .ss{font:600 clamp(18px,2.2vw,36px) Inter;color:var(--yellow)}
+body.calm .sky{filter:brightness(.34) saturate(.65);transition:filter 1.2s}
+body.calm .crt{animation:none}
+body.calm .delorean{display:none}
+body.calm .osd{opacity:.45}
+
+/* aviso para liberar o som (os navegadores exigem um clique) */
+.sound-chip{position:fixed;left:50%;bottom:3vh;transform:translateX(-50%);z-index:40;border:2px solid var(--yellow);background:rgba(5,4,9,.92);color:var(--yellow);font:700 clamp(13px,1.3vw,20px) Inter;padding:12px 22px;border-radius:99px;cursor:pointer;animation:chip 1.6s ease-in-out infinite}
+.sound-chip[hidden]{display:none}
+@keyframes chip{50%{box-shadow:0 0 0 10px rgba(255,210,31,.12)}}

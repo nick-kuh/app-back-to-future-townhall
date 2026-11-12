@@ -261,10 +261,10 @@
 
   /* ---------- laço único de animação ---------- */
   const items = new Set();
-  let last = performance.now(), fps = 30, painted = false;
+  let last = performance.now(), fps = 30, painted = false, paused = false;
   function loop(now) {
     requestAnimationFrame(loop);
-    if (document.hidden) { last = now; return; }
+    if (document.hidden || (paused && painted)) { last = now; return; }
     if (now - last < 1000 / fps) return;
     const dt = Math.min(.1, (now - last) / 1000); last = now;
     for (const it of items) {
@@ -286,6 +286,7 @@
       const s = new Scene(canvas, o); if (!o.manual) items.add(s); return s; // manual: quem chama cuida do laço (painel do Sucesso)
     },
     setFps(n) { fps = Math.max(10, Math.min(60, n)); },
+    pause(on) { paused = !!on; }, // telas calmas (bloco de fala, olhos no telão): o cenário fica parado
     get reducedMotion() { return reducedMotion; },
   };
 })();

@@ -12,8 +12,9 @@
   const WLS = ['Estag', 'WL1', 'WL2', 'WL3'];
   const PHASE_LABEL = { idle: 'sem duplas', ready: 'duplas prontas', matching: 'duplas se encontrando', talk: 'conversa em andamento', roundEnd: '88 MPH (intervalo)', ranking: 'avaliação aberta', results: 'resultados publicados' };
   const TIMER_LABEL = { matching: 'encontro', talk: 'conversa', break: 'intervalo', ranking: 'avaliação' };
-  const BLOCK_LABEL = { standby: 'Olhos no telão', welcome: 'Check-in', message: 'Mensagem', connections: 'Conexões', closing: 'Encerramento' };
-  const BLOCK_ICON = { standby: '📺', welcome: '🚪', message: '📣', connections: '⚡', closing: '🏁' };
+  const BLOCK_LABEL = { standby: 'Olhos no telão', welcome: 'Check-in', message: 'Mensagem', connections: 'Conexões', closing: 'Encerramento', stage: 'Bloco de fala' };
+  const BLOCK_ICON = { standby: '📺', welcome: '🚪', message: '📣', connections: '⚡', closing: '🏁', stage: '🎤' };
+  const AUDIO_LABEL = { music: '🎵 Música', ambient: '🎼 Trilha sonora', off: '🔇 Sem áudio' };
 
   const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'control', round: 1, offset: 0, socket: null, peopleQ: '', connected: false, lastHtml: '', pressing: false };
 
@@ -61,7 +62,7 @@
   /* ---------- render ---------- */
   function render(force) {
     if (!A.O) return;
-    renderStatus();
+    renderStatus(); renderAudio();
     if (A.pressing) { clearTimeout(A.renderLater); A.renderLater = setTimeout(() => render(force), 250); return; }
     const live = ['control', 'people', 'questions', 'sucesso'].includes(A.tab);
     if (A.tab === 'sucesso') sucStart(); else sucStop();
@@ -83,12 +84,29 @@
     const c = O.state.conn, t = c.timer, left = timerLeft(t);
     $('#status').innerHTML = `
       <span class="pill ${A.connected ? 'on' : 'off'}">${A.connected ? '● conectado' : '○ desconectado'}</span>
-      <span class="pill hot ${O.state.presentation ? 'suc' : ''}">Celulares: ${O.state.presentation ? '🚀 Sucesso · ' + esc(O.state.presentation.title) : BLOCK_LABEL[O.state.block]}</span>
+      <span class="pill hot ${O.state.presentation ? 'suc' : ''}">Celulares: ${O.state.presentation ? '🚀 Sucesso · ' + esc(O.state.presentation.title) : O.state.block === 'stage' ? '🎤 ' + esc(stageNow().title) : BLOCK_LABEL[O.state.block]}</span>
       <span class="pill">Conexões: ${PHASE_LABEL[c.phase] || c.phase}${c.round ? ` · viagem ${c.round}/3` : ''}</span>
       ${t ? `<span class="pill led ${t.paused ? 'paused' : ''}">${TIMER_LABEL[t.kind] || t.kind} ${fmt(left)}${t.paused ? ' ⏸' : ''}</span>` : ''}
       <span class="pill">A bordo: ${O.counts.checkedIn}/${O.counts.total}</span>`;
   }
   setInterval(renderStatus, 500);
+
+  /* ---------- som: três botões sempre à mão (música animada, trilha de fundo, sem áudio) ---------- */
+  function renderAudio() {
+    const O = A.O; if (!O) return;
+    const a = O.state.audio || { mode: 'off', volume: 60, out: 'telao' }, key = JSON.stringify([a, O.telao]);
+    if (window.Trilha) Trilha.apply({ mode: a.out === 'painel' ? a.mode : 'off', volume: a.volume, musicUrl: O.settings.musicUrl, ambientUrl: O.settings.ambientUrl });
+    if (key === A.audioKey || A.pressing) return;
+    A.audioKey = key;
+    const tl = O.telao || { count: 0 };
+    const warn = a.out === 'painel' || a.mode === 'off' ? '' : !tl.count ? 'abra o telão' : !tl.sound ? 'clique na tela do telão para liberar o som' : '';
+    $('#audioCtl').innerHTML = `<button type="button" class="k" data-act="audioOut" data-out="${a.out === 'painel' ? 'telao' : 'painel'}" title="Clique para trocar: o som pode sair do computador do telão ou deste painel">SOM · ${a.out === 'painel' ? 'este painel' : 'telão'} ⇄</button>
+      ${warn ? `<span class="warn">⚠ ${warn}</span>` : ''}
+      ${['music', 'ambient', 'off'].map(m => `<button type="button" class="${a.mode === m ? 'on' : ''}" data-act="audio" data-mode="${m}">${AUDIO_LABEL[m]}</button>`).join('')}
+      <input type="range" min="0" max="100" step="5" value="${a.volume}" data-act="audioVol" title="Volume" aria-label="Volume">`;
+  }
+  document.addEventListener('pointerdown', () => { if (window.Trilha) Trilha.unlock(); });
+  const stageNow = () => { const O = A.O, list = O.settings.stages || []; return list[Math.min(list.length - 1, O.state.stage || 0)] || { title: 'Bloco', theme: '', speaker: '' }; };
 
   function blockCard(key, body, extra = '') {
     const on = !A.O.state.presentation && A.O.state.block === key;
@@ -103,9 +121,9 @@
   const SUC = { rooms: null, roomId: localStorage.getItem('bttf.sucessoRoom') || '', states: {}, resp: new Map(), cursor: 0, offset: 0, timer: null, error: '', loading: false };
   const DYN = {
     d1: { n: '01', c: 'var(--cyan)', hint: 'Abre recebendo · nuvem de palavras ao vivo' },
-    d2: { n: '02', c: 'var(--yellow)', hint: '2 min · carro carrega 1,21 GW · sorteio + 2 min de fala' },
-    d3: { n: '03', c: 'var(--magenta)', hint: '2 min · carro · sorteio + 3 min de fala (desafio → IA → impacto)' },
-    d4: { n: '04', c: 'var(--orange)', hint: '2 min · carro · nome opcional · baixar .txt / Word' },
+    d2: { n: '02', c: 'var(--yellow)', hint: '2 min · carro carrega 1,21 GW · depois nuvem + sorteio com 2 min de fala' },
+    d3: { n: '03', c: 'var(--magenta)', hint: '2 min · carro · depois nuvem + sorteio com 3 min de fala (desafio → IA → impacto)' },
+    d4: { n: '04', c: 'var(--orange)', hint: '2 min · carro · a pessoa pode enviar sem nome · nuvem + "Destino: 2027"' },
   };
   const SUC_PHASE = { idle: 'aguardando abertura', run: 'recebendo respostas', paused: 'recebimento pausado', done: 'recebimento encerrado' };
   function sucStart() { if (!SUC.timer && !SUC.loading) sucPoll(); }
@@ -121,7 +139,7 @@
         const d = await api('GET', `/api/rooms/${SUC.roomId}/snapshot?after=${SUC.cursor}`);
         SUC.offset = d.serverNow - Date.now();
         for (const a of d.activities) SUC.states[a.id] = a;
-        for (const x of d.responses || []) SUC.resp.set(x.id, { a: x.activityId, r: x.roundId });
+        for (const x of d.responses || []) SUC.resp.set(x.id, { a: x.activityId, r: x.roundId, n: x.name, t: x.answer, at: x.createdAt });
         SUC.cursor = d.cursor || SUC.cursor;
       }
       SUC.error = '';
@@ -129,7 +147,23 @@
     SUC.loading = false;
     if (A.tab === 'sucesso') { SUC.timer = setTimeout(sucPoll, document.hidden ? 6000 : 2000); render(); }
   }
-  const sucCount = k => { const st = SUC.states[k]; let n = 0; if (st) for (const v of SUC.resp.values()) if (v.a === k && v.r === st.roundId) n++; return n; };
+  const sucAnswers = k => { const st = SUC.states[k], out = []; if (st) for (const v of SUC.resp.values()) if (v.a === k && v.r === st.roundId) out.push(v); return out; };
+  const sucCount = k => sucAnswers(k).length;
+  const TALK = { d2: 120, d3: 180 }; // dinâmicas com sorteio e tempo de fala (como no painel do Lucas)
+  function talkLeft(t) { return t ? (t.endsAt ? Math.max(0, Math.ceil((t.endsAt - Date.now() - A.offset) / 1000)) : t.remaining) : 0; }
+  // Registro das respostas (.txt ou Word), como o botão de download do painel 3D
+  function sucDownload(k, type) {
+    const st = SUC.states[k], list = sucAnswers(k), date = new Date().toLocaleString('pt-BR');
+    if (!st || !list.length) return toast('Nenhuma resposta para baixar.', true);
+    const title = `De Volta para o Sucesso | Dinâmica ${k.slice(1)}: ${st.title}`;
+    let blob, name = `Respostas_${st.title.replace(/[^\p{L}\p{N}]+/gu, '')}`;
+    if (type === 'txt') { blob = new Blob([`${title.toUpperCase()}\nPergunta: ${st.question}\nData: ${date}\nTotal: ${list.length}\n\n` + list.map((r, i) => `${i + 1}. ${r.n}: ${r.t}`).join('\n')], { type: 'text/plain;charset=utf-8' }); name += '.txt'; }
+    else {
+      const h = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"></head><body style="font-family:Calibri"><h1 style="color:#FF6B1A">${esc(title)}</h1><p><b>Pergunta:</b> ${esc(st.question)}</p><p><b>Data:</b> ${date} &nbsp; <b>Total:</b> ${list.length}</p><table border="1" cellpadding="6" style="border-collapse:collapse;width:100%"><tr style="background:#17142E;color:#fff"><th>#</th><th>Nome</th><th>Resposta</th></tr>${list.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.n)}</td><td>${esc(r.t)}</td></tr>`).join('')}</table></body></html>`;
+      blob = new Blob(['\ufeff', h], { type: 'application/msword' }); name += '.doc';
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); toast('Download iniciado');
+  }
   function sucLeft(st) {
     if (!st) return null;
     if (st.phase === 'run' && st.endsAt) return Math.max(0, Math.ceil((st.endsAt - Date.now() - SUC.offset) / 1000));
@@ -150,7 +184,7 @@
     const rooms = SUC.rooms || [];
     const cards = Object.keys(DYN).map(k => {
       const d = DYN[k], st = SUC.states[k], live = pres && pres.roomId === SUC.roomId && pres.activityId === k;
-      const n = sucCount(k), left = sucLeft(st), ph = st ? st.phase : null;
+      const answers = sucAnswers(k), n = answers.length, left = sucLeft(st), ph = st ? st.phase : null, draw = live ? pres.draw : null;
       return `<div class="suc-card ${live ? 'live' : ''}" style="--c:${d.c}">
         <div class="suc-head"><span class="n">${d.n}</span><div><div class="t">Dinâmica ${+d.n}: ${esc(st ? st.title : '')}</div><div class="small">${esc(d.hint)}</div></div>${live ? '<span class="pill hot">● no telão</span>' : ''}</div>
         <p class="q">${esc(st ? st.question : 'Carregando…')}</p>
@@ -162,6 +196,13 @@
           <button class="btn sm ghost" data-act="sucCmd" data-cmd="end" data-k="${k}" ${st && ph !== 'done' ? '' : 'disabled'}>⏭ Encerrar</button>
           <button class="btn sm ghost" data-act="sucCmd" data-cmd="reset" data-k="${k}" ${ph === 'done' || ph === 'paused' ? '' : 'disabled'}>↺ Reiniciar</button>
         </div>
+        ${live && TALK[k] ? (draw ? `<div class="suc-draw on"><div class="small">🎲 VIAJANTE SORTEADO${draw.personId ? ' · avisado no celular' : ''}</div><div class="who">${esc(draw.name)}</div><div class="what">“${esc(draw.answer)}”</div>
+            <div class="suc-stats"><div class="tcx ${draw.talk.endsAt && talkLeft(draw.talk) <= 30 ? 'alert' : ''}" style="--c:var(--orange)"><b class="suc-talk">${fmt(talkLeft(draw.talk))}</b><span>TEMPO DE FALA</span></div>
+              <div class="actions">${draw.talk.endsAt && talkLeft(draw.talk) > 0 ? '<button class="btn sm ghost" data-act="sucDraw" data-cmd="talkPause">❚❚ Pausar</button>' : '<button class="btn sm cyan" data-act="sucDraw" data-cmd="talkStart">▶ Iniciar fala</button>'}<button class="btn sm ghost" data-act="sucDraw" data-cmd="talkReset">↺ Reiniciar</button></div></div>
+            <div class="actions"><button class="btn sm" data-act="sucDraw" data-cmd="draw">🎲 Sortear outro</button><button class="btn sm ghost" data-act="sucDraw" data-cmd="close">Voltar para a nuvem</button></div></div>`
+          : `<div class="suc-draw"><button class="btn sm" data-act="sucDraw" data-cmd="draw" ${ph === 'done' && n ? '' : 'disabled'}>🎲 Sortear viajante</button><span class="small">${ph === 'done' ? (n ? `${fmt(TALK[k])} de fala para quem for sorteado` : 'sem respostas para sortear') : 'disponível depois de encerrar o recebimento'}</span></div>`) : ''}
+        ${n ? `<details class="suc-answers"><summary>Ver respostas (${n})</summary><div class="list">${answers.slice().reverse().map(r => `<p><b>${esc(r.n)}</b> · ${esc(r.t)}</p>`).join('')}</div>
+            <div class="actions"><button class="btn ghost xs" data-act="sucDownload" data-k="${k}" data-type="txt">⬇ Baixar .txt</button><button class="btn ghost xs" data-act="sucDownload" data-k="${k}" data-type="doc">⬇ Baixar Word</button></div></details>` : ''}
         <div class="actions suc-links"><a href="/painel?sala=${encodeURIComponent(SUC.roomId)}&d=${k}" target="_blank" ${SUC.roomId ? '' : 'aria-disabled="true"'}>🚗 Abrir no painel 3D ↗</a><a href="#" data-act="sucCopy" data-k="${k}">🔗 Copiar link de resposta</a><a href="#" class="danger" data-act="sucCmd" data-cmd="clear" data-k="${k}">🗑 Limpar respostas</a></div>
       </div>`;
     }).join('');
@@ -169,7 +210,8 @@
       <div class="card suc-hero">
         <div class="suc-circuits"><div class="tcx" style="--c:var(--yellow)"><b>2026</b><span>LAST TIME DEPARTED</span></div><div class="tcx" style="--c:var(--cyan)"><b>${clock}</b><span>PRESENT TIME</span></div><div class="tcx" style="--c:var(--orange)"><b>2027</b><span>DESTINATION TIME</span></div></div>
         <h1 class="suc-title">DE VOLTA PARA O SUCESSO</h1>
-        <p class="small center">As quatro dinâmicas do painel do Lucas. <b>Liberar</b> põe a pergunta + QR no telão e o botão "Responder agora" em todos os celulares; <b>Voltar ao Townhall</b> devolve o evento de onde parou. O carro, a nuvem de palavras, o sorteio e o tempo de fala ficam no <a href="/painel${SUC.roomId ? '?sala=' + encodeURIComponent(SUC.roomId) : ''}" target="_blank">painel 3D ↗</a> (mesma senha).</p>
+        <p class="small center">As quatro dinâmicas do Lucas, agora no fluxo do evento. <b>Liberar</b> põe a pergunta no telão e abre a resposta no app de cada pessoa, já com o nome do check-in. Ao <b>encerrar</b>, o carro entra no portal e o telão mostra a nuvem de palavras; nas dinâmicas 2 e 3 você <b>sorteia</b> um viajante e controla o tempo de fala por aqui. <b>Voltar ao Townhall</b> devolve o evento de onde parou.</p>
+        <p class="small center">${(A.O.telao || {}).count ? ((A.O.telao || {}).auth ? '<span class="ok">✔ Telão aberto e logado: mostra respostas, nuvem e sorteio.</span>' : '<span class="warn">⚠ O telão está aberto sem login: não vai mostrar as respostas, a nuvem nem o texto do sorteado.</span>') : '<span class="warn">⚠ Nenhum telão aberto.</span>'} As respostas só aparecem no telão aberto <b>neste navegador</b> (logado): <a href="/telao.html" target="_blank">abrir telão ↗</a>. O <a href="/painel${SUC.roomId ? '?sala=' + encodeURIComponent(SUC.roomId) : ''}" target="_blank">painel 3D ↗</a> original continua disponível.</p>
         <div class="actions suc-room">
           ${rooms.length ? `<label class="small">Sala <select class="input" data-act="sucRoom">${rooms.map(r => `<option value="${esc(r.id)}" ${r.id === SUC.roomId ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></label>` : `<span class="small">${SUC.rooms ? 'Nenhuma sala ainda.' : 'Carregando salas…'}</span>`}
           <button class="btn sm ${rooms.length ? 'ghost' : ''}" data-act="sucNewRoom">＋ ${rooms.length ? 'Nova sala' : 'Criar a sala do evento'}</button>
@@ -179,7 +221,12 @@
       </div>
       <div class="suc-grid">${cards}</div>`;
   }
-  setInterval(() => { if (A.tab !== 'sucesso') return; document.querySelectorAll('.suc-left').forEach(b => { const left = sucLeft(SUC.states[b.dataset.k]); if (left !== null && left !== undefined) b.textContent = fmt(left); }); }, 500);
+  setInterval(() => {
+    if (A.tab !== 'sucesso') return;
+    document.querySelectorAll('.suc-left').forEach(b => { const left = sucLeft(SUC.states[b.dataset.k]); if (left !== null && left !== undefined) b.textContent = fmt(left); });
+    const d = A.O && A.O.state.presentation && A.O.state.presentation.draw, tk = $('.suc-talk');
+    if (d && tk) { const left = talkLeft(d.talk); if (tk.textContent !== fmt(left)) { tk.textContent = fmt(left); if (left === 0 || left === 30) render(); } }
+  }, 500);
 
   function vControl() {
     const O = A.O, s = O.state, c = s.conn, ph = c.phase, t = c.timer, S = O.settings;
@@ -250,8 +297,23 @@
       <div class="actions" style="margin-top:10px">${[['auto', '🔁 Automático'], ['clock', '🕰 Relógio'], ['logo', '⚡ Logo']].map(([k, l]) => `<button class="btn sm ${scene === k ? '' : 'ghost'}" data-act="setScene" data-scene="${k}">${l}</button>`).join('')}</div>
       <label class="sw" style="margin-top:10px"><input type="checkbox" data-act="toggleMutual" ${S.showMutualOnScreen ? 'checked' : ''}> Mostrar os nomes das conexões mútuas no telão (só primeiros nomes)</label></div>`;
 
+    // Blocos do evento (falas): rascunho local para não perder o que está sendo digitado quando o painel atualiza
+    const stages = A.stageDraft || S.stages || [], dirty = !!A.stageDraft, stageOn = !s.presentation && s.block === 'stage';
+    const stagesCard = `<div class="card"><h2>🎤 Blocos do evento</h2>
+        <p class="small">Para os momentos de fala: ao exibir um bloco, os celulares mostram o nome e o tema dele, o telão fica calmo (sem animação)${S.stageMutes ? ' e o som desliga' : ''}. Edite os textos à vontade.</p>
+        <div class="stages">${stages.map((g, i) => { const on = stageOn && !dirty && (s.stage || 0) === i; return `<div class="stage-row ${on ? 'active' : ''}">
+            <input class="input" data-stage="${i}" data-f="title" id="stg-t-${i}" value="${esc(g.title)}" placeholder="Bloco ${i + 1}" aria-label="Nome do bloco">
+            <input class="input" data-stage="${i}" data-f="theme" id="stg-h-${i}" value="${esc(g.theme)}" placeholder="Tema do bloco (aparece no celular e no telão)" aria-label="Tema">
+            <input class="input" data-stage="${i}" data-f="speaker" id="stg-s-${i}" value="${esc(g.speaker)}" placeholder="Quem fala (opcional)" aria-label="Quem fala">
+            <button class="btn sm ${on ? 'ghost' : 'cyan'}" data-act="showStage" data-i="${i}" ${on || s.presentation ? 'disabled' : ''}>${on ? '● Exibindo' : '▶ Exibir'}</button>
+            <button class="btn ghost xs" data-act="delStage" data-i="${i}" title="Remover bloco" ${stages.length <= 1 ? 'disabled' : ''}>✕</button>
+          </div>`; }).join('')}</div>
+        <div class="actions" style="margin-top:10px"><button class="btn ghost sm" data-act="addStage" ${stages.length >= 12 ? 'disabled' : ''}>＋ Adicionar bloco</button>${dirty ? '<button class="btn sm" data-act="saveStages">Salvar blocos</button><button class="btn ghost sm" data-act="discardStages">Descartar</button><span class="warn">alterações não salvas</span>' : ''}</div>
+      </div>`;
+
     return `${sucBanner()}
-      <div class="card"><h2>Blocos do townhall</h2>
+      ${stagesCard}
+      <div class="card"><h2>Telas e dinâmicas</h2>
         ${blockCard('welcome', welcome)}
         ${blockCard('standby', standby)}
         ${blockCard('message', message)}
@@ -354,6 +416,14 @@
           <label class="f">Encerramento<textarea class="input" id="cfgClosing">${esc(s.closingText)}</textarea></label>
           <label class="f">Roteiro (uma linha por item: <span class="mono">horário | título</span>)<textarea class="input" id="cfgAgenda">${esc((s.agenda || []).map(a => `${a.time}${a.time ? ' | ' : ''}${a.title}`).join('\n'))}</textarea></label>
           <label class="sw"><input type="checkbox" id="cfgHints" ${s.showFormHints ? 'checked' : ''}> Mostrar respostas do forms na tela da dupla ("para puxar assunto")</label>
+          <div class="actions"><button class="btn" data-act="saveSettings">Salvar</button></div>
+        </div></div>
+        <div class="card"><h2>Som e blocos de fala</h2><div class="form">
+          <label class="f">Onde o som toca<select class="input" id="cfgAudioOut"><option value="telao" ${(O.state.audio || {}).out !== 'painel' ? 'selected' : ''}>No computador do telão (página /telao.html)</option><option value="painel" ${(O.state.audio || {}).out === 'painel' ? 'selected' : ''}>Neste computador (Painel do Doc)</option></select><span class="small">No telão, clique uma vez na tela para o navegador liberar o som.</span></label>
+          <label class="f">Música própria (opcional)<input class="input" id="cfgMusicUrl" value="${esc(s.musicUrl || '')}" placeholder="https://… .mp3"><span class="small">Endereço de um arquivo de áudio para o botão "Música". Vazio = música original do app.</span></label>
+          <label class="f">Trilha de fundo própria (opcional)<input class="input" id="cfgAmbientUrl" value="${esc(s.ambientUrl || '')}" placeholder="https://… .mp3"></label>
+          <label class="f">Texto dos blocos de fala (celular)<input class="input" id="cfgStageText" value="${esc(s.stageText || '')}"></label>
+          <label class="sw"><input type="checkbox" id="cfgStageMutes" ${s.stageMutes ? 'checked' : ''}> Desligar o som ao exibir um bloco de fala</label>
           <div class="actions"><button class="btn" data-act="saveSettings">Salvar</button></div>
         </div></div>
         <div class="card"><h2>Acesso</h2><p class="small">A senha do painel é definida pela variável de ambiente <span class="mono">ADMIN_PASSWORD</span> no servidor. Link do app para os viajantes: <span class="mono">${esc(location.origin)}/</span> · Telão: <span class="mono">${esc(location.origin)}/telao.html</span></p>
@@ -489,10 +559,20 @@
         const secs = num('#cfgSeconds', 10, 3600), find = num('#cfgFind', 0, 600), brk = num('#cfgBreak', 0, 120), rk = num('#cfgRanking', 0, 1800);
         if ([secs, find, brk, rk].some(v => v === null)) return toast('Confira os tempos: conversa 10–3600 s, encontro 0–600 s, intervalo 0–120 s, avaliação 0–1800 s.', true);
         const agenda = $('#cfgAgenda').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const i = l.indexOf('|'); return i >= 0 ? { time: l.slice(0, i).trim(), title: l.slice(i + 1).trim() } : { time: '', title: l }; });
-        return run(async () => { await act('settings', { settings: { autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda } }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
+        return run(async () => { await act('settings', { settings: { autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda, stageText: $('#cfgStageText').value, stageMutes: $('#cfgStageMutes').checked, musicUrl: $('#cfgMusicUrl').value, ambientUrl: $('#cfgAmbientUrl').value } }); await act('setAudio', { out: $('#cfgAudioOut').value }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
       }
       case 'saveMessage': case 'showMessage': return run(() => act('setMessage', { message: { emoji: $('#msgEmoji').value, title: $('#msgTitle').value, body: $('#msgBody').value }, show: act_ === 'showMessage' }), act_ === 'showMessage' ? 'Mensagem exibida nos celulares' : 'Mensagem salva');
       case 'logout': localStorage.removeItem('bttf.admin'); api('POST', '/api/admin/logout').finally(() => location.reload()); return;
+      case 'audio': return run(() => act('setAudio', { mode: el.dataset.mode }), el.dataset.mode === 'off' ? 'Som desligado' : `${AUDIO_LABEL[el.dataset.mode]} ligada · o som sai ${(O.state.audio || {}).out === 'painel' ? 'deste computador' : 'do telão'}`);
+      case 'audioOut': return run(() => act('setAudio', { out: el.dataset.out }), el.dataset.out === 'painel' ? 'O som agora sai deste computador' : 'O som agora sai do telão');
+      case 'audioVol': return run(() => act('setAudio', { volume: +el.value }));
+      case 'addStage': A.stageDraft = (A.stageDraft || O.settings.stages || []).map(x => ({ ...x })).concat({ title: `Bloco ${(A.stageDraft || O.settings.stages || []).length + 1}`, theme: '', speaker: '' }); return render(true);
+      case 'delStage': A.stageDraft = (A.stageDraft || O.settings.stages || []).map(x => ({ ...x })).filter((_, i) => i !== +el.dataset.i); return render(true);
+      case 'discardStages': A.stageDraft = null; return render(true);
+      case 'saveStages': return run(async () => { await act('settings', { settings: { stages: A.stageDraft } }); A.stageDraft = null; }, 'Blocos salvos');
+      case 'showStage': return run(async () => { if (A.stageDraft) { await act('settings', { settings: { stages: A.stageDraft } }); A.stageDraft = null; } await act('setStage', { index: +el.dataset.i }); }, 'Bloco exibido nos celulares e no telão');
+      case 'sucDraw': return run(() => api('POST', '/api/admin/sucesso/draw', { action: el.dataset.cmd }));
+      case 'sucDownload': return sucDownload(el.dataset.k, el.dataset.type);
       case 'sucShow': return run(async () => { await api('POST', '/api/admin/presentation', { roomId: SUC.roomId, activityId: el.dataset.k }); sucPoll(); }, 'Dinâmica no telão e nos celulares 🚀');
       case 'sucStop': return run(async () => { await api('POST', '/api/admin/presentation', { roomId: null }); sucPoll(); }, 'De volta ao townhall');
       case 'sucCmd': {
@@ -558,7 +638,12 @@
     const el = e.target.closest('[data-act]'); if (el && el.tagName !== 'INPUT' && el.tagName !== 'SELECT') { if (el.tagName === 'A') e.preventDefault(); onAction(el); }
   });
   document.addEventListener('change', e => { const el = e.target.closest('input[data-act],select[data-act]'); if (el) onAction(el); });
-  document.addEventListener('input', e => { if (e.target.id === 'peopleQ') { A.peopleQ = e.target.value; render(true); } });
+  document.addEventListener('pointerup', () => setTimeout(renderAudio, 300), true);
+  document.addEventListener('input', e => {
+    if (e.target.id === 'peopleQ') { A.peopleQ = e.target.value; render(true); }
+    const st = e.target.closest('[data-stage]'); // rascunho dos blocos do evento
+    if (st) { const first = !A.stageDraft; A.stageDraft = A.stageDraft || (A.O.settings.stages || []).map(x => ({ ...x })); A.stageDraft[+st.dataset.stage][st.dataset.f] = st.value; if (first) render(true); }
+  });
   document.addEventListener('pointerdown', () => { A.pressing = true; }, true);
   document.addEventListener('pointerup', () => { A.pressing = false; }, true);
   document.addEventListener('pointercancel', () => { A.pressing = false; }, true);

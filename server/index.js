@@ -1,6 +1,7 @@
 // Servidor: Express (API + estáticos) + Socket.IO (tempo real).
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
@@ -44,6 +45,22 @@ sucesso.mount(app, { isAdmin });
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { etag: true, maxAge: 0 }));
 
+// Estado público + situação da dinâmica do Sucesso em exibição (fase, cronômetro, quantidade de respostas)
+function publicState() {
+  const s = engine.publicState();
+  if (s.presentation) s.presentation.live = sucesso.ready() ? sucesso.live(engine.state.presentation) : null;
+  return s;
+}
+// Estado da pessoa + o que ela já respondeu na dinâmica em exibição e se foi a sorteada
+function meState(pid) {
+  const m = engine.meState(pid), p = engine.state.presentation;
+  if (m && p && sucesso.ready()) {
+    const d = p.draw, drawn = !!(d && d.personId === pid);
+    m.sucesso = { answers: sucesso.mine(p, pid), drawn, drawnAnswer: drawn ? d.answer : null };
+  }
+  return m;
+}
+
 const wrap = fn => (req, res) => {
   try { const out = fn(req, res); if (out !== undefined) res.json(out); }
   catch (e) { res.status(e.status && e.status >= 400 && e.status < 500 ? e.status : 400).json({ error: e.message || String(e) }); }
@@ -61,13 +78,28 @@ app.post('/api/checkout', wrap(req => engine.checkout(req.body.token)));
 app.get('/api/me', wrap(req => {
   const p = engine.personByToken(req.query.token);
   if (!p) return { ok: false };
-  return { ok: true, me: engine.meState(p.id), state: engine.publicState() };
+  return { ok: true, me: meState(p.id), state: publicState() };
 }));
-app.get('/api/state', wrap(() => engine.publicState()));
-// Telão: dinâmica do Sucesso em exibição (contagem, cronômetro; respostas só para o apresentador logado).
-app.get('/api/sucesso/screen', wrapAsync(async req => {
+app.get('/api/state', wrap(() => publicState()));
+// Telão: dinâmica do Sucesso em exibição. Fase, cronômetro e contagem são públicos; os textos das
+// respostas (nuvem de palavras, sorteio) só vão para o telão aberto no navegador logado no Painel do Doc.
+app.get('/api/sucesso/screen', wrap(req => {
+  const p = engine.state.presentation, admin = isAdmin(req), ready = sucesso.ready();
+  const out = { now: Date.now(), authenticated: admin, presentation: p ? { ...engine.presentation(), live: ready ? sucesso.live(p) : null } : null };
+  if (p && admin && ready) {
+    out.responses = sucesso.responses(p).map(r => ({ id: r.id, name: r.name, answer: r.answer }));
+    if (p.draw) out.drawAnswer = p.draw.answer;
+  }
+  return out;
+}));
+// Resposta de uma dinâmica do Sucesso enviada pelo app: o nome vem do check-in, não de um formulário.
+app.post('/api/sucesso/answer', wrapAsync(async req => {
+  const b = req.body || {}, person = engine.personByToken(b.token);
+  if (!person || !person.checkedInAt || !person.active) throw Object.assign(new Error('Seu check-in não está mais ativo. Escolha seu nome de novo.'), { status: 401 });
   const p = engine.state.presentation;
-  return { now: Date.now(), presentation: engine.presentation(), liveActivity: p && sucesso.ready() ? await sucesso.screen(p, isAdmin(req)) : null };
+  if (!p || !sucesso.ready()) throw Object.assign(new Error('Nenhuma dinâmica está aberta agora.'), { status: 409 });
+  const r = await sucesso.answer(p, person, { answer: b.answer, anonymous: !!b.anonymous, clientRequestId: String(b.clientRequestId || '') });
+  return { ok: true, duplicate: r.duplicate, me: meState(person.id) };
 }));
 app.get('/health', (req, res) => res.json({ ok: true, db: DB_PATH, phase: engine.state.conn.phase, block: engine.state.block }));
 
@@ -79,11 +111,11 @@ app.post('/api/admin/login', wrap((req, res) => {
 }));
 app.post('/api/admin/logout', wrap((req, res) => { sucesso.clearCookie(res); return { ok: true }; }));
 app.use('/api/admin', adminOnly);
-app.get('/api/admin/overview', wrap(() => engine.adminOverview()));
+app.get('/api/admin/overview', wrap(() => adminOverview()));
 
 // Enquanto uma dinâmica do Sucesso está no telão, a viagem fica congelada (como no projeto do Lucas).
 const JOURNEY_ACTIONS = new Set(['setBlock', 'generate', 'reveal', 'startTalk', 'pause', 'resume', 'addTime', 'endTalk', 'skip',
-  'startJourney', 'openRanking', 'computeResults', 'resetConnections', 'resetEvent', 'testRandomRankings']);
+  'startJourney', 'openRanking', 'computeResults', 'resetConnections', 'resetEvent', 'testRandomRankings', 'setStage']);
 app.post('/api/admin/action', wrap(req => {
   const a = req.body || {};
   if (JOURNEY_ACTIONS.has(a.type) || (a.type === 'setMessage' && a.show)) engine.requireJourney();
@@ -101,6 +133,8 @@ app.post('/api/admin/action', wrap(req => {
     case 'skip': engine.skip(); break;
     case 'startJourney': engine.startJourney(); break;
     case 'setScene': engine.setScene(a.scene); break;
+    case 'setStage': engine.setStage(a.index); break;
+    case 'setAudio': engine.setAudio({ mode: a.mode, volume: a.volume, out: a.out }); break;
     case 'openRanking': engine.openRanking(); break;
     case 'computeResults': engine.computeResults(); break;
     case 'resetConnections': engine.resetConnections(); break;
@@ -115,11 +149,30 @@ app.post('/api/admin/action', wrap(req => {
 // Exibir uma dinâmica do Sucesso no telão e nos celulares ({roomId, activityId}) ou voltar ao townhall ({roomId: null}).
 app.post('/api/admin/presentation', wrapAsync(async req => {
   const { roomId = null, activityId = null } = req.body || {};
-  if (roomId === null) { engine.setPresentation(null); sucesso.storePresentation(null); return { presentation: null }; }
+  if (roomId === null) { engine.setPresentation(null); sucesso.storePresentation(null); armExpiry(); return { presentation: null }; }
   const selection = await sucesso.prepare(roomId, activityId);
   engine.setPresentation(selection);
   sucesso.storePresentation(engine.state.presentation);
+  armExpiry();
   return { presentation: engine.presentation() };
+}));
+// Sorteio de viajante e tempo de fala (dinâmicas 2 e 3, depois de encerrar o recebimento), como no painel do Lucas.
+app.post('/api/admin/sucesso/draw', wrap(req => {
+  const action = (req.body || {}).action, p = engine.state.presentation;
+  const fail = (message, status = 409) => { throw Object.assign(new Error(message), { status }); };
+  if (!p) fail('Libere uma dinâmica no telão antes de sortear.');
+  if (action === 'draw') {
+    const l = sucesso.live(p);
+    if (!l) fail('Dinâmica não encontrada.', 404);
+    if (!l.talkSeconds) fail('Esta dinâmica não tem sorteio.', 400);
+    if (l.phase !== 'done') fail('Encerre o recebimento antes de sortear.');
+    const all = sucesso.responses(p), drawn = new Set(engine.drawnIds(l.roundId)), pool = all.filter(r => !drawn.has(r.id));
+    if (!pool.length) fail(all.length ? 'Todos já foram sorteados.' : 'Nenhuma resposta recebida.');
+    engine.setDraw(pool[crypto.randomInt(pool.length)], l.roundId, l.talkSeconds);
+  } else if (action === 'close') engine.closeDraw();
+  else if (['talkStart', 'talkPause', 'talkReset'].includes(action)) engine.drawTalk(action.slice(4).toLowerCase());
+  else fail('Comando inválido.', 400);
+  return { ok: true };
 }));
 
 app.post('/api/admin/people', wrap(req => engine.addPerson(req.body || {})));
@@ -138,12 +191,12 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Rota não encontrad
 
 /* ---------- tempo real ---------- */
 function pushAll(notice) {
-  const state = engine.publicState();
+  const state = publicState();
   io.emit('state', state);
   for (const [, socket] of io.of('/').sockets) {
     if (!socket.data.token && !socket.data.personId) continue;
     const pid = bind(socket); // revalida o token a cada push (check-in desfeito, reset, outro aparelho assumiu o nome)
-    socket.emit('me', pid ? engine.meState(pid) : null);
+    socket.emit('me', pid ? meState(pid) : null);
   }
   if (notice) io.emit('notify', notice);
   pushAdmin();
@@ -151,12 +204,36 @@ function pushAll(notice) {
 let adminTimer = null;
 function pushAdmin() {
   if (adminTimer) return;
-  adminTimer = setTimeout(() => { adminTimer = null; io.to('admin').emit('admin:overview', engine.adminOverview()); }, 500);
+  adminTimer = setTimeout(() => { adminTimer = null; io.to('admin').emit('admin:overview', adminOverview()); }, 500);
 }
 engine.onChange(pushAll);
-// Resposta nova ou comando numa dinâmica do Sucesso: o telão atualiza na hora (além da consulta periódica).
-let pulseTimer = null;
-sucesso.onChange(() => { if (pulseTimer) return; pulseTimer = setTimeout(() => { pulseTimer = null; io.emit('sucesso:pulse'); }, 250); });
+// Resposta nova ou comando numa dinâmica do Sucesso: celulares, telão e painel atualizam na hora.
+let pulseTimer = null, expiryTimer = null;
+function armExpiry() { // o prazo de recebimento acaba sem nenhum comando: avisa os aparelhos nessa hora
+  clearTimeout(expiryTimer); expiryTimer = null;
+  const p = engine.state.presentation, l = p && sucesso.ready() ? sucesso.live(p) : null;
+  if (l && l.phase === 'run' && l.endsAt) expiryTimer = setTimeout(sucessoChanged, Math.max(50, l.endsAt - l.serverNow + 150));
+}
+function sucessoChanged() {
+  if (pulseTimer) return;
+  pulseTimer = setTimeout(() => {
+    pulseTimer = null;
+    const p = engine.state.presentation, l = p && sucesso.ready() ? sucesso.live(p) : null;
+    if (p && p.draw && (!l || l.phase !== 'done')) engine.closeDraw(); // dinâmica reiniciada ou limpa: o sorteio sai da tela
+    else pushAll();
+    io.emit('sucesso:pulse'); armExpiry();
+  }, 150);
+}
+sucesso.onChange(sucessoChanged);
+
+// Estado dos telões abertos (a página /telao.html avisa se está logada e se o navegador já liberou o som),
+// para o Painel do Doc mostrar antes do evento se falta algum clique.
+function telaoStatus() {
+  const list = [];
+  for (const [, s] of io.of('/').sockets) if (s.data.telao) list.push(s.data.telao);
+  return { count: list.length, sound: list.some(t => !t.locked), auth: list.some(t => t.auth) };
+}
+const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus() });
 
 // Liga o socket à pessoa dona do token (do evento ou guardado no socket) e revalida sempre:
 // se o token foi trocado (outro aparelho assumiu o nome) ou o check-in foi desfeito, desliga.
@@ -177,8 +254,8 @@ io.on('connection', socket => {
   socket.on('hello', (payload, ack) => {
     try {
       const pid = bind(socket, payload && payload.token);
-      safeAck(ack, { ok: !!pid, state: engine.publicState(), me: pid ? engine.meState(pid) : null, now: Date.now() });
-    } catch (e) { console.error('[hello]', e); safeAck(ack, { ok: false, error: 'Erro no servidor.', state: engine.publicState(), me: null, now: Date.now() }); }
+      safeAck(ack, { ok: !!pid, state: publicState(), me: pid ? meState(pid) : null, now: Date.now() });
+    } catch (e) { console.error('[hello]', e); safeAck(ack, { ok: false, error: 'Erro no servidor.', state: publicState(), me: null, now: Date.now() }); }
   });
   socket.on('group:step', (payload, ack) => {
     try {
@@ -204,9 +281,11 @@ io.on('connection', socket => {
     try {
       const ok = !!payload && payload.key === ADMIN_PASSWORD;
       if (ok) socket.join('admin');
-      safeAck(ack, ok ? { ok: true, overview: engine.adminOverview() } : { ok: false, error: 'Senha inválida.' });
+      safeAck(ack, ok ? { ok: true, overview: adminOverview() } : { ok: false, error: 'Senha inválida.' });
     } catch (e) { console.error('[admin:hello]', e); safeAck(ack, { ok: false, error: 'Erro no servidor.' }); }
   });
+  socket.on('telao:status', payload => { socket.data.telao = { locked: !!(payload && payload.locked), auth: !!(payload && payload.auth) }; pushAdmin(); });
+  socket.on('disconnect', () => { if (socket.data.telao) pushAdmin(); });
   socket.on('time', (payload, ack) => safeAck(ack, { now: Date.now() }));
   socket.on('error', err => console.error('[socket error]', err && err.message));
 });
@@ -215,6 +294,7 @@ server.on('error', err => { console.error('[listen]', err.message); process.exit
 sucesso.init().then(() => {
   // mantém a API do Sucesso alinhada com o que está em exibição (sobrevive a reinícios)
   sucesso.storePresentation(engine.state.presentation);
+  armExpiry();
 }).catch(err => console.error('[sucesso] falhou ao iniciar:', err)).finally(() => server.listen(PORT, () => {
   console.log(`⚡ De Volta ao Futuro · townhall rodando em http://localhost:${PORT}`);
   console.log(`   Painel do Doc: http://localhost:${PORT}/admin.html  (senha: ${ADMIN_PASSWORD === 'doc1985' ? 'doc1985 · defina ADMIN_PASSWORD para trocar' : 'definida via ADMIN_PASSWORD'})`);

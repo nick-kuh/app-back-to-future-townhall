@@ -293,3 +293,27 @@ body.off .sky .bg3d{opacity:.3}
 .presentation-card .app-switch{display:block;margin-top:20px;text-decoration:none;text-align:center}
 .app-switch:focus-visible{outline:3px solid var(--cyan);outline-offset:4px}
 @media (prefers-reduced-motion:reduce){.gwplus{animation:none;opacity:0}}
+
+/* ===== respostas do Sucesso dentro do app (nome do check-in) ===== */
+textarea.input{resize:none;line-height:1.4;font-size:16px;font-weight:500;min-height:108px;display:block}
+.who{font-size:13px;color:var(--muted);margin-bottom:10px}
+.who b{color:var(--txt)}
+.ansmeta{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:8px 0 12px;font:700 12px var(--led);color:var(--muted)}
+.suc-timer{color:var(--amber)}
+.suc-timer b{font-size:16px;letter-spacing:1px}
+.sw{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin:0 0 12px}
+.sw input{width:18px;height:18px;accent-color:var(--orange)}
+.myans{font:600 16px/1.4 Inter;color:var(--txt);margin-top:10px;overflow-wrap:anywhere}
+.drawn{text-align:center}
+.drawn h2{margin-top:8px;font-size:24px;color:var(--yellow)}
+.drawn .countdown{margin-top:14px;min-width:0}
+.drawn .countdown.hurry{animation:blink .5s steps(2) infinite}
+.guide{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center;margin-top:12px;font:700 10px var(--led);letter-spacing:1px}
+.guide span{border:2px solid var(--cyan);color:var(--cyan);padding:5px 8px}
+.guide i{color:var(--muted);font-style:normal}
+.plist-hint{padding:22px 8px}
+/* ===== bloco de fala: tela calma com o nome e o tema do bloco ===== */
+.stage{text-align:center;padding:10px 8px}
+.stage .kicker{font-size:9px;color:var(--amber)}
+.stage .st-theme{font:900 30px/1.15 var(--display);margin:14px 0 8px;color:var(--txt);overflow-wrap:anywhere}
+.stage .st-speaker{font:600 15px Inter;color:var(--yellow);margin-bottom:12px}

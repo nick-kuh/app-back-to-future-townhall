@@ -156,3 +156,32 @@ pre.code{background:#090a14;border:1px solid var(--line);border-radius:10px;padd
 .suc-live-row{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 .suc-live h2{color:var(--c)}
 a.btn{text-decoration:none;display:inline-block}
+
+/* ===== som: três botões no topo ===== */
+.audio{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.audio .k{font:900 10px Orbitron;letter-spacing:2px;color:var(--muted);white-space:nowrap}
+.audio button{background:#14162a;border:1px solid var(--line2);color:var(--muted);font:700 12px Inter;padding:7px 11px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.audio button:hover{border-color:var(--cyan);color:var(--txt)}
+.audio button.on{background:linear-gradient(135deg,#ffd000,#ff7a1a);border-color:transparent;color:#1a0700}
+.audio button[data-mode=off].on{background:#2a2d44;color:var(--txt);border-color:var(--line2)}
+.audio input[type=range]{width:96px;accent-color:var(--orange)}
+
+/* ===== blocos do evento (falas) ===== */
+.stages{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.stage-row{display:grid;grid-template-columns:minmax(90px,.7fr) minmax(160px,2.2fr) minmax(120px,1fr) auto auto;gap:8px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:12px;background:#0b0c16}
+.stage-row.active{border-color:var(--orange);box-shadow:0 0 18px rgba(255,122,26,.25)}
+.stage-row .input{padding:9px 10px}
+@media (max-width:760px){.stage-row{grid-template-columns:1fr 1fr}.stage-row .input:nth-child(2){grid-column:1/-1}}
+
+/* ===== Sucesso: sorteio, tempo de fala e respostas ===== */
+.suc-draw{display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px dashed #3a3560;padding-top:10px}
+.suc-draw.on{flex-direction:column;align-items:stretch;background:#17142e;border:2px solid var(--magenta);border-radius:10px;padding:12px}
+.suc-draw .who{font:900 20px Orbitron,Inter;color:var(--yellow)}
+.suc-draw .what{font-weight:600;line-height:1.35;overflow-wrap:anywhere}
+.suc-answers summary{cursor:pointer;font:700 12px Inter;color:var(--cyan)}
+.suc-answers .list{max-height:220px;overflow:auto;margin:8px 0;display:flex;flex-direction:column;gap:6px}
+.suc-answers .list p{font-size:13px;line-height:1.35;overflow-wrap:anywhere}
+.suc-answers .list b{color:var(--yellow)}
+.audio button.k{background:none;border:0;padding:4px 2px;font:900 10px Orbitron;letter-spacing:2px;color:var(--muted);border-radius:6px}
+.audio button.k:hover{color:var(--cyan)}
+.audio .warn{font:700 11px Inter;color:var(--amber);white-space:nowrap}

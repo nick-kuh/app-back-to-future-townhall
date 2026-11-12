@@ -14,6 +14,15 @@ const PRESENTER_ID = 'painel-do-doc';
 const COOKIE = 'bttf_admin';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_BODY = 16384;
+const SQL_NOW = "CAST((julianday('now')-2440587.5)*86400000 AS INTEGER)";
+// Como no painel do Lucas: depois de encerrar, as dinâmicas 2 e 3 têm sorteio e tempo de fala.
+const TALK_SECONDS = { d2: 120, d3: 180 };
+const GUIDE = { d3: ['DESAFIO', 'COMO USOU IA', 'IMPACTO'] };
+// Quem responde pelo app entra na API do Lucas com um "participantId" derivado do check-in:
+// assim cada resposta fica ligada à pessoa (nome certo, sorteio avisa o celular dela).
+const PERSON_PREFIX = 'b77f0000-0000-4000-8000-';
+const personUuid = id => PERSON_PREFIX + Number(id).toString(16).padStart(12, '0');
+const personOfUuid = uuid => (typeof uuid === 'string' && uuid.startsWith(PERSON_PREFIX) ? parseInt(uuid.slice(PERSON_PREFIX.length), 16) : null);
 
 function createSucesso({ dbPath, adminPassword }) {
   let mod = null, DB = null, worker = null;
@@ -58,8 +67,48 @@ function createSucesso({ dbPath, adminPassword }) {
     return mod.preparePresentation(DB, roomId, activityId, PRESENTER_ID);
   }
   const publicPresentation = setting => (mod ? mod.publicPresentation(setting) : null);
-  async function screen(setting, presenter) {
-    return mod.readScreenActivity(DB, mod.publicPresentation(setting), presenter ? PRESENTER_ID : null);
+
+  /* ---------- leitura direta (síncrona) da dinâmica em exibição ---------- */
+  const valid = setting => !!(mod && setting && UUID.test(String(setting.roomId || '')) && Object.hasOwn(mod.DEFINITIONS, setting.activityId));
+  // Estado público da dinâmica: fase, cronômetro e quantidade de respostas (nunca nomes nem textos).
+  function live(setting) {
+    if (!valid(setting)) return null;
+    const row = DB.prepare(`SELECT a.*, ${SQL_NOW} AS read_at,
+      (SELECT COUNT(*) FROM responses p WHERE p.room_id = a.room_id AND p.activity_id = a.id AND p.round_id = a.round_id) AS n
+      FROM activities a WHERE a.room_id = ? AND a.id = ?`).bind(setting.roomId, setting.activityId).first();
+    if (!row) return null;
+    const expired = row.phase === 'run' && row.ends_at !== null && row.ends_at <= row.read_at; // mesma regra da API original
+    return {
+      phase: expired ? 'done' : row.phase,
+      endsAt: expired ? null : row.ends_at,
+      remainingSeconds: expired ? 0 : row.ends_at !== null ? Math.max(0, Math.ceil((row.ends_at - row.read_at) / 1000)) : row.remaining_seconds,
+      roundId: row.round_id, responseCount: row.n, serverNow: row.read_at,
+      nameRequired: !!mod.DEFINITIONS[row.id].nameRequired,
+      talkSeconds: TALK_SECONDS[row.id] || 0, guide: GUIDE[row.id] || null,
+    };
+  }
+  // Respostas da rodada atual (só para o apresentador logado e para o próprio servidor).
+  function responses(setting) {
+    if (!valid(setting)) return [];
+    return DB.prepare(`SELECT r.id, r.name, r.answer, r.participant_id, r.created_at FROM responses r
+      JOIN activities a ON a.room_id = r.room_id AND a.id = r.activity_id AND a.round_id = r.round_id
+      WHERE r.room_id = ? AND r.activity_id = ? ORDER BY r.sequence`).bind(setting.roomId, setting.activityId).all().results
+      .map(r => ({ id: r.id, name: r.name, answer: r.answer, personId: personOfUuid(r.participant_id), createdAt: r.created_at }));
+  }
+  const mine = (setting, personId) => responses(setting).filter(r => r.personId === personId).map(r => ({ id: r.id, answer: r.answer, anonymous: r.name === 'Anônimo' }));
+  // Resposta enviada pelo app: passa pela API original (fase, prazo, limite de 200 caracteres,
+  // 2 s entre envios, reenvio sem duplicar), com o nome do check-in.
+  async function answer(setting, person, { answer: text, anonymous, clientRequestId }) {
+    if (!valid(setting)) throw Object.assign(new Error('Nenhuma dinâmica está aberta agora.'), { status: 409 });
+    const state = live(setting);
+    if (!state) throw Object.assign(new Error('Dinâmica não encontrada.'), { status: 404 });
+    const name = anonymous && !state.nameRequired ? '' : String(person.name).slice(0, 80);
+    const body = JSON.stringify({ activityId: setting.activityId, roundId: state.roundId, clientRequestId, participantId: personUuid(person.id), name, answer: String(text ?? '') });
+    const result = await worker.fetch(new Request(`http://townhall.local/api/rooms/${setting.roomId}/responses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }), { DB });
+    const data = await result.json().catch(() => ({}));
+    if (!result.ok) throw Object.assign(new Error(data.error || 'Não foi possível enviar agora. Tente de novo.'), { status: result.status });
+    for (const fn of listeners) fn();
+    return { id: data.response.id, duplicate: !!data.duplicate };
   }
 
   /* ---------- API /api/rooms (sem alterações, via Request/Response) ---------- */
@@ -101,6 +150,17 @@ function createSucesso({ dbPath, adminPassword }) {
     return painelCache;
   }
 
+  // O formulário do Lucas também é servido como está, com um script no começo que preenche o nome
+  // com o do check-in (public/participar-login.js) antes de o formulário carregar.
+  let participarCache = null;
+  function participarHtml() {
+    if (!participarCache || process.env.NODE_ENV !== 'production') {
+      const html = fs.readFileSync(path.join(PUBLIC, 'participar.html'), 'utf8'), at = html.indexOf('<body>') + 6;
+      participarCache = html.slice(0, at) + '\n<script src="/participar-login.js"></script>' + html.slice(at);
+    }
+    return participarCache;
+  }
+
   /* ---------- rotas ---------- */
   function mount(app, { isAdmin }) {
     isPresenter = req => hasCookie(req) || isAdmin(req);
@@ -121,13 +181,15 @@ function createSucesso({ dbPath, adminPassword }) {
       const back = String(req.query.return_to || '/painel');
       res.redirect(302, '/admin.html?next=' + encodeURIComponent(back.startsWith('/') && !back.startsWith('//') ? back : '/painel'));
     });
-    app.get('/participar/:roomId', (req, res, next) => (UUID.test(req.params.roomId) ? send('participar.html')(req, res, next) : next()));
+    // Formulário original de resposta (QR do painel 3D): entra com o nome do check-in do app.
+    app.get('/participar/:roomId', (req, res, next) => (UUID.test(req.params.roomId) ? res.set('Cache-Control', 'no-store').type('html').send(participarHtml()) : next()));
     app.get('/ao-vivo', send('index.html'));
     for (const file of ['live-panel.js', 'live-panel.css', 'townhall-sync.js', 'vendor/qrcode.js']) app.get('/' + file, send(file));
   }
 
   return {
-    init, mount, prepare, storePresentation, publicPresentation, screen,
+    init, mount, prepare, storePresentation, publicPresentation,
+    live, responses, mine, answer,
     hasCookie, setCookie, clearCookie,
     onChange: fn => listeners.push(fn),
     ready: () => !!mod,
