@@ -137,20 +137,23 @@
   function currentReflexao() {
     return (S.screen === 'app' && S.me && S.state && !currentPresentation() && S.state.reflexao) || null;
   }
+  // Quem coordena um bloco faz o login (conta presença), mas não participa dele: nada de dupla, voto ou resposta.
+  const sitsOut = block => !!(S.me && S.me.skip && S.me.skip[block]);
+  const coordinating = what => `<div class="panel glow msgbox"><div class="e">🎬</div><h2>Você está na coordenação</h2><p>Você não participa ${what}. Acompanhe pelo telão.</p></div>`;
   function viewKey() {
     const pr = currentPresentation();
     if (pr) {
       const su = S.me.sucesso || {}, d = pr.draw;
-      return ['presentation', pr.roomId, pr.activityId, sucPhase(pr), (pr.live && pr.live.roundId) || '', (su.answers || []).length, su.drawn ? 'eu' : '', d ? d.at : '', S.another ? 'outra' : '', S.pendingAnswer ? 'pend' : ''].join('|');
+      return ['presentation', pr.roomId, pr.activityId, sucPhase(pr), (pr.live && pr.live.roundId) || '', (su.answers || []).length, su.drawn ? 'eu' : '', d ? d.at : '', S.another ? 'outra' : '', S.pendingAnswer ? 'pend' : '', sitsOut('sucesso') ? 'fora' : ''].join('|');
     }
     const rf = currentReflexao();
     if (rf) {
       const c = rf.cur, mine = (S.me.reflexao && S.me.reflexao.votes) || [], d = c && c.top;
-      return ['reflexao', rf.open === null ? 'menu' : rf.open, c ? rfPhase(c) : '', mine.filter(Boolean).length, d ? `${d.at}:${rfShown(d) ? 'ok' : 'suspense'}:${d.items.map(v => v.votes).join()}` : '', rf.rev, S.rfSending ? 'env' : '', S.rfProjects ? 'lista' : ''].join('|');
+      return ['reflexao', rf.open === null ? 'menu' : rf.open, c ? rfPhase(c) : '', mine.filter(Boolean).length, d ? `${d.at}:${rfShown(d) ? 'ok' : 'suspense'}:${d.items.map(v => v.votes).join()}` : '', rf.rev, S.rfSending ? 'env' : '', S.rfProjects ? 'lista' : '', sitsOut('reflexao') ? 'fora' : ''].join('|');
     }
     if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}`;
     const c = S.state.conn, g = S.me && S.me.group, t = c.timer;
-    const content = JSON.stringify([S.state.message, S.state.event, S.state.settings, S.state.block === 'stage' ? S.state.stage : '', S.me && S.me.person, g && g.partners, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result, t ? t.kind : '']);
+    const content = JSON.stringify([S.state.message, S.state.event, S.state.settings, S.state.block === 'stage' ? S.state.stage : '', S.me && S.me.person, S.me && S.me.skip, g && g.partners, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result, t ? t.kind : '']);
     let h = 0; for (let i = 0; i < content.length; i++) h = (h * 31 + content.charCodeAt(i)) >>> 0;
     return ['app', S.state.block, c.phase, c.round, '', g ? g.id : '', g && g.missing ? 'miss' : '', S.me && S.me.ranking ? 'ranked' : '', S.editing ? 'edit' : '', S.me && S.me.result ? 'res' : '', h].join('|');
   }
@@ -296,6 +299,8 @@
           <p class="muted" style="margin-top:10px">Conte para todo mundo. O telão está com você.</p></div>`;
     } else if (draw) {
       body = `<div class="panel center"><div class="kicker">Viajante sorteado</div><div class="pname" style="margin-top:8px">${esc(draw.name)}</div><p class="muted" style="margin-top:10px">Olhos no telão. 👀</p></div>${myAnswers}`;
+    } else if (sitsOut('sucesso')) {
+      body = coordinating('desta dinâmica');
     } else if (ph === 'run' && (!mine.length || S.another || S.pendingAnswer)) {
       body = `<div class="panel">
           <div class="who">Respondendo como <b>${esc(me.name)}</b></div>
@@ -356,6 +361,8 @@
       body = `<div class="panel glow msgbox"><div class="e">🥁</div><h2>E os mais votados são…</h2><p>Olhos no telão. 👀</p></div>${myVote}`;
     } else if (d) {
       body = `<div class="panel glow"><div class="kicker">Projetos mais votados</div>${d.items.map((v, k) => `<div class="rf-drawn"><small>${k + 1}º MAIS VOTADO${v.votes === undefined ? '' : ` · ${v.votes} ${v.votes === 1 ? 'VOTO' : 'VOTOS'}`}</small><b>${esc(v.name)}</b><span>${esc(v.owner)}</span></div>`).join('')}</div>${myVote}`;
+    } else if (sitsOut('reflexao')) {
+      body = coordinating('da votação');
     } else if (ph === 'run' && !my) {
       body = `<div class="panel">
           <div class="who">Votando como <b>${esc(me.name)}</b></div>
@@ -381,8 +388,8 @@
     return `<div class="spacer"></div>
       <div class="logo sm dim"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div></div>
       <div class="stage">
-        <div class="kicker">${esc(theme ? st.title : 'No palco agora')}</div>
-        <div class="st-theme">${esc(theme || st.title || 'Bloco')}</div>
+        <div class="kicker">${esc(theme ? st.title : 'No palco agora')}</div><i class="st-arrow"></i>
+        <div class="st-theme ${(theme || st.title || '').length > 22 ? 'long' : ''}"><span>${esc(theme || st.title || 'Bloco')}</span></div>
         ${st.speaker ? `<p class="st-speaker">com ${esc(st.speaker)}</p>` : ''}
         <p class="muted">${esc(S.state.event.stageText || 'Agora a atenção é no palco.')}</p>
       </div>
@@ -550,6 +557,7 @@
   function vConnections() {
     const c = S.state.conn, g = S.me.group, r = c.round, t = c.timer;
     const head = vHeader();
+    if (sitsOut('connections') && !(S.me.conversations || []).length && (!g || g.missing)) return `${head}${coordinating('das duplas deste bloco')}`; // coordena as Conexões: sem dupla
     if (c.phase === 'idle' || c.phase === 'ready') {
       return `${head}
         <div class="panel"><div class="wait"><div class="flux"><i></i><i></i><i></i><b></b></div>

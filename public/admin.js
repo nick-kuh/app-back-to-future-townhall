@@ -14,18 +14,18 @@
   const TIMER_LABEL = { matching: 'encontro', talk: 'conversa', break: 'intervalo', ranking: 'avaliação' };
   // roteiro do evento
   const STEP_ICON = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', reflexao: '💭', message: '📣', standby: '📺', closing: '🏁' };
-  const STEP_KIND = { checkin: 'Check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', reflexao: 'Dinâmica · Reflexão', message: 'Aviso', standby: 'Olhos no telão', closing: 'Encerramento' };
+  const STEP_KIND = { checkin: 'Check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', reflexao: 'Dinâmica · Reflexão', message: 'Aviso', standby: 'Olhos no telão', closing: 'Conclusão' };
   const STEP_HINT = { checkin: 'as pessoas entram pelo nome', connections: '3 viagens em duplas e avaliação', sucesso: 'pergunta ao vivo, nuvem de palavras', reflexao: 'paradas com votação em projetos e os 2 mais votados', standby: 'celulares em pausa, atenção no telão', closing: 'agradecimento e créditos' };
   const SUC_NAME = { d1: 'Antes de Partir', d2: 'Look Back', d3: 'Uso de IA', d4: 'Look Ahead' };
   const SUC_COLOR = { d1: 'var(--cyan)', d2: 'var(--yellow)', d3: 'var(--magenta)', d4: 'var(--orange)' };
   const SUC_PHASE = { idle: 'aguardando você iniciar', run: 'recebendo respostas', paused: 'recebimento pausado', done: 'recebimento encerrado' };
   const TALK = { d2: 120, d3: 180 }; // dinâmicas com sorteio e tempo de fala (como no painel do Lucas)
-  const stepTitle = x => (x.type === 'checkin' ? 'Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : x.type === 'reflexao' ? 'Reflexão' : 'Encerramento');
-  const DEFAULT_STEPS = () => [{ type: 'checkin' }, { type: 'stage', title: 'Bloco 1', theme: '', speaker: '' }, { type: 'reflexao' }, { type: 'connections' }, { type: 'stage', title: 'Bloco 2', theme: '', speaker: '' },
-    { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' }, { type: 'stage', title: 'Bloco 3', theme: '', speaker: '' }, { type: 'closing' }];
+  const stepTitle = x => (x.type === 'checkin' ? 'Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : x.type === 'reflexao' ? 'Reflexão' : 'Conclusão');
+  const DEFAULT_STEPS = () => [{ type: 'checkin' }, { type: 'connections' }, { type: 'stage', title: 'Bloco 1', theme: '', speaker: '' }, { type: 'reflexao' }, { type: 'stage', title: 'Bloco 2', theme: '', speaker: '' }, { type: 'stage', title: 'Bloco 3', theme: '', speaker: '' },
+    { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' }, { type: 'closing' }];
   const AUDIO_LABEL = { music: '🎵 Música', ambient: '🎼 Trilha', off: '🔇 Sem áudio' };
 
-  const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'live', prep: 'roteiro', open: new Set(), edit: null, stepsDraft: null, round: 1, offset: 0, socket: null, peopleQ: '', connected: false, lastHtml: '', pressing: false };
+  const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'live', prep: 'roteiro', sel: null, open: new Set(), edit: null, stepsDraft: null, round: 1, offset: 0, socket: null, peopleQ: '', connected: false, lastHtml: '', pressing: false };
 
   function toast(msg, err) {
     const t = $('#toast'); t.textContent = msg; t.classList.toggle('err', !!err); t.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 3500);
@@ -161,35 +161,68 @@
     if (x.type === 'reflexao' && O.reflexao) { const R = O.reflexao, done = R.paradas.filter(p => p.top.length).length, votes = R.paradas.reduce((a, p) => a + p.votes, 0); return votes || done ? `${done} de ${R.paradas.length} paradas reveladas · ${votes} votos` : `${R.paradas.length} paradas · votação em projetos`; }
     return STEP_HINT[x.type] || '';
   }
+  // Quem fica de fora de um bloco (coordenação): nomes e botão para editar a lista
+  const SKIP_OF = { connections: 'connections', reflexao: 'reflexao', sucesso: 'sucesso' };
+  const SKIP_LABEL = { connections: 'Conexões', reflexao: 'Reflexão', sucesso: 'Sucesso (as 4 dinâmicas)' };
+  const skipIds = block => ((A.O.settings.skip || {})[block] || []);
+  function skipLine(block) {
+    const ids = new Set(skipIds(block)), names = A.O.people.filter(p => ids.has(p.id)).map(p => p.name);
+    return `<div class="skipline"><span class="small">🚫 Não participam deste bloco: ${names.length ? `<b>${esc(names.join(', '))}</b>` : 'ninguém (todos participam)'}</span>${btn(names.length ? 'Editar' : 'Escolher quem fica de fora', 'skipEdit', { cls: 'ghost xs', data: { block } })}</div>`;
+  }
   function vLive() {
     const O = A.O, { steps, i, step, next, prev } = liveStep(), detour = O.state.detour, scene = (O.state.screen && O.state.screen.scene) || 'auto';
+    // clicar em um passo só abre o passo aqui no painel; o telão e os celulares mudam no botão "Mostrar"
+    const sel = A.sel && A.sel !== step.id ? steps.find(x => x.id === A.sel) : null;
+    if (A.sel && !sel && !detour) A.sel = null;
     // viagem interrompida no meio (o evento saiu do passo Conexões): fica marcada como em pausa, não como feita
     const held = x => x.type === 'connections' && ['matching', 'talk', 'roundEnd', 'ranking'].includes(O.state.conn.phase);
-    const road = steps.map((x, n) => `<button class="rs ${n === i ? 'now' : held(x) ? 'held' : n < i ? 'done' : ''}" data-act="jumpStep" data-id="${x.id}" title="Ir para este passo">
+    const road = steps.map((x, n) => `<button class="rs ${n === i ? 'now' : held(x) ? 'held' : n < i ? 'done' : ''} ${sel && sel.id === x.id ? 'sel' : ''}" data-act="jumpStep" data-id="${x.id}" title="${n === i ? 'Este passo está no ar' : 'Abrir este passo aqui no painel (o telão só muda quando você clicar em Mostrar)'}">
         <span class="n">${n === i ? n + 1 : held(x) ? '⏸' : n < i ? '✓' : n + 1}</span><span class="ic">${STEP_ICON[x.type]}</span>
-        <span class="tx"><b>${esc(stepTitle(x))}</b><small>${esc(stepSub(x))}</small></span></button>`).join('');
+        <span class="tx"><b>${esc(stepTitle(x))}</b><small>${esc(stepSub(x))}</small></span>${n === i ? `<span class="air">${detour ? 'pausado' : 'no ar'}</span>` : ''}</button>`).join('');
     const extras = `<div class="road-extra">
         <div class="small">Fora do roteiro</div>
         <div class="actions">${btn('📣 Aviso rápido', 'quickMessage', { cls: 'ghost sm' })}${btn('📺 Olhos no telão', 'standbyNow', { cls: 'ghost sm' })}</div>
-        ${det('telao', '📽 Tela do telão', `<div class="actions" style="margin-top:8px">${[['auto', 'Segue o roteiro'], ['clock', 'Relógio'], ['logo', 'Logo']].map(([k, l]) => `<button class="btn xs ${scene === k ? '' : 'ghost'}" data-act="setScene" data-scene="${k}">${l}</button>`).join('')}</div>
+        ${det('telao', '📽 Tela do telão', `<div class="actions" style="margin-top:8px">${[['auto', 'Segue o roteiro'], ['logo', 'Só o logo']].map(([k, l]) => `<button class="btn xs ${scene === k ? '' : 'ghost'}" data-act="setScene" data-scene="${k}">${l}</button>`).join('')}</div>
           <label class="sw" style="margin-top:8px"><input type="checkbox" data-act="toggleMutual" ${O.settings.showMutualOnScreen ? 'checked' : ''}> Mostrar no telão os nomes das conexões mútuas</label>`)}
         <a href="#" class="small" data-go="roteiro">✎ Editar roteiro</a>
       </div>`;
-    return `<div class="live"><aside class="road"><div class="road-title">Roteiro</div>${road}${extras}</aside>${detour ? panelDetour(detour, step) : panelStep(step, i, steps.length, next, prev)}</div>`;
+    const panel = sel ? panelPreview(sel, steps.indexOf(sel), steps.length, step, detour) : detour ? panelDetour(detour, step) : panelStep(step, i, steps.length, next, prev);
+    return `<div class="live"><aside class="road"><div class="road-title">Roteiro</div>${road}${extras}</aside>${panel}</div>`;
+  }
+  // Passo aberto no painel, mas ainda fora do ar: mostra o que ele é e o botão para colocar no telão e nos celulares
+  function panelPreview(x, n, total, live, detour) {
+    const ed = editing(x), O = A.O;
+    const what = { checkin: 'Celulares: cada pessoa digita o nome e embarca · Telão: QR do app', stage: 'Celulares: nome e tema do bloco · Telão calmo, com o título do bloco', connections: 'Celulares: dupla, perguntas e avaliação · Telão: cronômetros',
+      reflexao: 'Celulares: escolher 1 projeto por parada · Telão: Flux Capacitor e os 2 mais votados', sucesso: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar', message: 'Celulares e telão: este aviso', standby: 'Celulares em pausa · Telão: logo', closing: 'Celulares: agradecimento e a conexão de cada um · Telão: créditos' }[x.type];
+    let body = `<p class="lead">${esc(what)}</p>`;
+    if (x.type === 'stage') body += ed ? `<div class="form editstep">${editField('Nome do bloco', 'title', ed.title)}${editField('Tema (aparece no celular e no telão)', 'theme', ed.theme)}${editField('Quem fala (opcional)', 'speaker', ed.speaker)}${editActions}</div>`
+      : `<div class="theme">${esc(x.theme || 'Sem tema definido')}</div>${x.speaker ? `<div class="speaker">com ${esc(x.speaker)}</div>` : ''}<div class="actions">${btn('✎ Editar tema', 'editStep', { cls: 'ghost sm', data: { id: x.id } })}</div>`;
+    if (x.type === 'message') body += ed ? `<div class="form editstep">${editField('Emoji', 'emoji', ed.emoji)}${editField('Título', 'title', ed.title)}${editField('Texto (links viram clicáveis)', 'body', ed.body, 'textarea')}${editActions}</div>`
+      : `<div class="theme">${esc(x.body || 'Sem texto.')}</div><div class="actions">${btn('✎ Editar aviso', 'editStep', { cls: 'ghost sm', data: { id: x.id } })}</div>`;
+    if (x.type === 'sucesso') body += `<p class="question">${esc(sucAct(x.activity).question || '')}</p>`;
+    if (x.type === 'reflexao' && O.reflexao) body += `<p class="small">${O.reflexao.config.themes.length} paradas · ${O.reflexao.config.projects.length} projetos na lista · <a href="#" data-go="reflexao">editar</a></p>`;
+    if (SKIP_OF[x.type]) body += skipLine(SKIP_OF[x.type]);
+    return `<section class="stepbox preview t-${x.type}" ${x.type === 'sucesso' ? `style="--c:${SUC_COLOR[x.activity]}"` : ''}>
+      <div class="sb-head"><span class="kick">Passo ${n + 1} de ${total} · ${STEP_KIND[x.type]}</span><span class="offair">fora do ar · aberto só aqui no painel</span></div>
+      <h1>${STEP_ICON[x.type]} ${esc(stepTitle(x))}</h1>
+      ${body}
+      <div class="sb-actions">${btn('📺 Mostrar no telão e nos celulares', 'goStep', { cls: 'big', data: { id: x.id } })}</div>
+      <div class="sb-nav"><a href="#" data-act="jumpStep" data-id="${live.id}">← voltar para o que está no ar: ${esc(detour ? (detour === 'message' ? 'aviso' : 'olhos no telão') : stepTitle(live))}</a><span></span></div>
+    </section>`;
   }
   // Painel do passo atual: um botão principal por vez; quando o passo não pede mais nada, o principal é "Próximo".
   function panelStep(step, i, total, next, prev) {
     const p = ({ checkin: pCheckin, stage: pStage, connections: pConnections, sucesso: pSucesso, reflexao: pReflexao, message: pMessage, standby: pStandby, closing: pClosing })[step.type](step);
     // "Próximo" vira o botão principal quando o passo não pede mais nada; com algo em andamento ele fica discreto
     const nextBig = !p.primary && !p.busy;
-    const nextBtn = next ? btn(`Próximo: ${esc(stepTitle(next))} ▶`, 'goStep', { cls: nextBig ? 'big next' : 'ghost next', data: { id: next.id, guard: p.busy || '' } }) : '';
+    const nextBtn = next ? btn(`Mostrar o próximo: ${esc(stepTitle(next))} ▶`, 'goStep', { cls: nextBig ? 'big next' : 'ghost next', data: { id: next.id, guard: p.busy || '' } }) : '';
     return `<section class="stepbox t-${step.type}" ${step.type === 'sucesso' ? `style="--c:${SUC_COLOR[step.activity]}"` : p.color ? `style="--c:${p.color}"` : ''}>
       <div class="sb-head"><span class="kick">Passo ${i + 1} de ${total} · ${STEP_KIND[step.type]}</span><span class="onair">${esc(p.onair || '')}</span></div>
       <h1>${STEP_ICON[step.type]} ${esc(p.title || stepTitle(step))}</h1>
       ${p.body || ''}
       ${p.warn ? `<div class="sb-warn">${p.warn}</div>` : ''}
       <div class="sb-actions">${p.primary || (nextBig ? nextBtn : '')}${(p.secondary || []).join('')}${nextBig && !next ? '<span class="ok">✔ Último passo do roteiro</span>' : ''}</div>
-      <div class="sb-nav">${prev ? `<a href="#" data-act="jumpStep" data-id="${prev.id}">← voltar para ${esc(stepTitle(prev))}</a>` : '<span></span>'}${nextBig ? '' : nextBtn}</div>
+      <div class="sb-nav">${prev ? `<a href="#" data-act="jumpStep" data-id="${prev.id}">← abrir o passo anterior: ${esc(stepTitle(prev))}</a>` : '<span></span>'}${nextBig ? '' : nextBtn}</div>
       ${p.after || ''}
       ${p.more ? det('more-' + step.type, 'Mais opções', `<div class="sb-more-in">${p.more}</div>`, 'sb-more') : ''}
     </section>`;
@@ -227,7 +260,7 @@
       body: ed ? `<div class="form editstep">${editField('Emoji', 'emoji', ed.emoji)}${editField('Título', 'title', ed.title)}${editField('Texto (links viram clicáveis)', 'body', ed.body, 'textarea')}${editActions}</div>`
         : `<p class="lead">${esc(step.body || 'Sem texto.')}</p><div class="actions">${btn('✎ Editar aviso', 'editStep', { cls: 'ghost sm', data: { id: step.id } })}</div>` };
   }
-  const pStandby = () => ({ onair: 'Celulares em pausa · Telão: relógio', body: `<p class="lead">${esc(A.O.settings.standbyText || '')}</p>` });
+  const pStandby = () => ({ onair: 'Celulares em pausa · Telão: logo', body: `<p class="lead">${esc(A.O.settings.standbyText || '')}</p>` });
   function pClosing() {
     return { onair: 'Celulares: agradecimento e a conexão de cada um · Telão: créditos',
       body: `<p class="lead">${esc(A.O.settings.closingText || '')}</p>
@@ -246,6 +279,7 @@
     let body, primary = null, secondary = [];
     if (ph === 'idle' || ph === 'ready') {
       body = `<p class="lead">${O.counts.checkedIn} pessoas a bordo. O app sorteia as duplas (área e WL diferentes) e conduz as 3 viagens${S.autoFlow ? ' sozinho' : ''}: ${fmt(S.findSeconds)} para a dupla se encontrar, ${fmt(S.roundSeconds)} de conversa e, no fim, a avaliação.</p>`;
+      body += skipLine('connections');
       primary = btn('▶ Iniciar viagens', 'startJourney', { cls: 'big', disabled: O.counts.checkedIn < 2 });
     } else if (ph === 'ranking') {
       body = `<div class="phase">Avaliação aberta nos celulares</div>${clock}<p>${ranked} de ${rankTotal} avaliaram</p><div class="bar"><i style="width:${Math.round(100 * ranked / Math.max(1, rankTotal))}%"></i></div>
@@ -304,6 +338,7 @@
     }
     const warn = !onScreen ? '' : !tl.count ? '⚠ Nenhum telão aberto. <a href="/telao.html" target="_blank">Abrir telão ↗</a>' : !tl.auth ? '⚠ O telão está aberto sem login e não vai mostrar as respostas, a nuvem nem o sorteio. Abra-o neste navegador: <a href="/telao.html" target="_blank">abrir telão ↗</a>' : '';
     const more = `<div class="actions">${btn(`Ver e baixar as respostas (${n})`, 'sucAnswers', { cls: 'ghost sm', data: { k } })}${btn('↺ Reabrir o recebimento', 'sucCmd', { cls: 'ghost sm', data: { k, cmd: 'reset' }, disabled: !(ph === 'done' || ph === 'paused') })}${btn('🗑 Apagar as respostas', 'sucCmd', { cls: 'red sm', data: { k, cmd: 'clear' } })}</div>
+      ${skipLine('sucesso')}
       <p class="small" style="margin-top:8px"><a href="/painel?sala=${encodeURIComponent(room || '')}&d=${k}" target="_blank">Abrir o painel 3D original ↗</a></p>`;
     return { title: `Dinâmica ${k.slice(1)} · ${a.title || SUC_NAME[k]}`, body, primary, secondary, more, warn, busy, onair: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar' };
   }
@@ -319,6 +354,7 @@
     const state = q => (q.top.length ? '✓ revelada' : q.phase === 'done' ? 'encerrada' : q.phase === 'run' ? 'votando' : q.phase === 'paused' ? 'pausada' : '');
     const chips = `<div class="rfx-chips">${cfg.themes.map((t, k) => { const q = R.paradas[k]; return `<button type="button" class="chip ${k === i ? 'on' : ''} ${q.top.length ? 'done' : ''}" style="--c:${COLORS[k % 4]}" data-act="rfx" data-cmd="open" data-idx="${k}" title="${esc(t.q)}" ${on ? '' : 'disabled'}><b>${pad(k + 1)}</b><span>${esc(t.t)}<small>${q.votes} ${q.votes === 1 ? 'voto' : 'votos'}${state(q) ? ' · ' + state(q) : ''}</small></span></button>`; }).join('')}</div>`;
     const more = `<div class="actions">${cmd('🤖 +5 votos de teste', 'fake', 'ghost sm', { n: 5 })}${btn('Ver os votos', 'rfxVotes', { cls: 'ghost sm' })}${btn('⬇ Exportar votos (.csv)', 'rfxCsv', { cls: 'ghost sm' })}${cmd('↺ Reiniciar a votação desta parada', 'reset', 'ghost sm')}${cmd('🗑 Limpar os votos desta parada', 'clear', 'red sm')}${cmd('🗑 Limpar tudo', 'clearAll', 'red sm')}</div>
+      ${skipLine('reflexao')}
       <p class="small" style="margin-top:8px">Os votos de teste servem para ensaiar sem os celulares (os nomes saem marcados como "teste"). Paradas e projetos: <a href="#" data-go="reflexao">Preparar → Reflexão</a>.</p>`;
     const base = { title: cfg.title, more, onair: 'Celulares: escolher 1 projeto · Telão: Flux Capacitor e os 2 mais votados' };
     if (!on) return { ...base, body: `<p class="warn">A Reflexão não está na tela agora.</p>${chips}`, primary: btn('📺 Exibir no telão e nos celulares', 'goStep', { cls: 'big', data: { id: step.id } }) };
@@ -427,6 +463,22 @@
     }
     const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 5000); toast('Download iniciado');
   }
+  // Quem não participa de um bloco (ex.: quem coordena): continua fazendo o login, mas fica fora das duplas, da votação ou das respostas
+  function skipDialog(block) {
+    const O = A.O, on = new Set(skipIds(block)), people = O.people.filter(p => p.active).slice().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    const inGroups = block === 'connections' && O.state.conn.generatedAt;
+    dialog(`<h3>🚫 Quem não participa · ${esc(SKIP_LABEL[block])}</h3>
+      <p class="small">Marque quem coordena ou não vai participar deste bloco. A pessoa faz o login normalmente (conta presença), mas ${block === 'connections' ? 'não entra no sorteio das duplas' : block === 'reflexao' ? 'não vota nos projetos' : 'não envia respostas'} e vê no celular que está na coordenação.</p>
+      ${inGroups ? '<p class="warn" style="margin-top:6px">⚠ As duplas já foram sorteadas. Para tirar alguém agora, sorteie as duplas de novo depois de salvar (enquanto nenhuma viagem aconteceu).</p>' : ''}
+      <input class="input" id="skQ" placeholder="🔎 Buscar pelo nome…" style="margin-top:10px">
+      <div class="sklist" id="skList">${people.map(p => `<label class="sk" data-n="${esc(p.name.toLowerCase())}"><input type="checkbox" value="${p.id}" ${on.has(p.id) ? 'checked' : ''}> <span>${esc(p.name)} <small>${esc([p.area, p.wl].filter(Boolean).join(' · '))}</small></span></label>`).join('')}</div>
+      <div class="actions" style="margin-top:12px"><button class="btn" id="skSave">Salvar</button><button class="btn ghost" data-close>Cancelar</button><span class="small" id="skCount"></span></div>`, () => {
+      const count = () => { $('#skCount').textContent = `${document.querySelectorAll('#skList input:checked').length} fora deste bloco`; };
+      count(); $('#skList').addEventListener('change', count);
+      $('#skQ').addEventListener('input', e => { const q = e.target.value.trim().toLowerCase(); document.querySelectorAll('#skList .sk').forEach(l => { l.hidden = !!q && !l.dataset.n.includes(q); }); });
+      $('#skSave').onclick = () => run(async () => { await act('settings', { settings: { skip: { [block]: [...document.querySelectorAll('#skList input:checked')].map(i => +i.value) } } }); closeDialog(); }, 'Lista salva');
+    });
+  }
   function quickMessageDialog() {
     const m = A.O.state.message;
     dialog(`<h3>📣 Aviso rápido</h3><p class="small">Aparece na hora em todos os celulares e no telão, fora do roteiro (intervalo, recado, link). Depois é só voltar ao roteiro.</p>
@@ -444,13 +496,13 @@
       const f = (field, ph, cls) => `<input class="input ${cls}" data-rs="${i}" data-f="${field}" id="rs-${field}-${i}" value="${esc(x[field] || '')}" placeholder="${ph}" aria-label="${ph}">`;
       const fields = x.type === 'stage' ? `${f('title', 'Nome do bloco', 'w1')}${f('theme', 'Tema (aparece no celular e no telão)', 'w3')}${f('speaker', 'Quem fala (opcional)', 'w2')}`
         : x.type === 'message' ? `${f('emoji', '📣', 'w0')}${f('title', 'Título do aviso', 'w2')}${f('body', 'Texto do aviso', 'w3')}`
-        : `<span class="fixed">${esc(stepTitle(x))}<small>${x.type === 'sucesso' && TALK[x.activity] ? 'pergunta ao vivo, nuvem, sorteio e tempo de fala' : STEP_HINT[x.type]}</small></span>`;
+        : `<span class="fixed">${esc(stepTitle(x))}<small>${x.type === 'sucesso' && TALK[x.activity] ? 'pergunta ao vivo, nuvem, sorteio e tempo de fala' : STEP_HINT[x.type]}</small></span>${SKIP_OF[x.type] ? `<button class="btn ghost xs" data-act="skipEdit" data-block="${x.type}" title="Quem coordena ou não participa deste bloco">🚫 Fora deste bloco (${skipIds(x.type).length})</button>` : ''}`;
       return `<div class="rrow ${!dirty && x.id === O.state.step ? 'now' : ''}"><span class="n">${i + 1}</span><span class="ic" title="${STEP_KIND[x.type]}">${STEP_ICON[x.type]}</span><div class="rf">${fields}</div>
         <div class="rc">${!dirty && x.id === O.state.step ? '<span class="pill hot">no ar</span>' : ''}<button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'} title="Subir">↑</button><button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="1" ${i < list.length - 1 ? '' : 'disabled'} title="Descer">↓</button><button class="btn ghost xs" data-act="rsDel" data-i="${i}" ${list.length > 1 ? '' : 'disabled'} title="Remover">✕</button></div></div>`;
     };
     const add = (label, type, extra = '') => `<button class="btn ghost xs" data-act="rsAdd" data-type="${type}" ${extra}>＋ ${label}</button>`;
     return `<div class="card"><h2>Roteiro do evento</h2>
-      <p class="small">A ordem dos passos do evento. No <a href="#" data-go="live">Ao vivo</a> você percorre o roteiro com o botão "Próximo". Dá para mudar a qualquer momento, inclusive durante o evento.</p>
+      <p class="small">A ordem dos passos do evento. No <a href="#" data-go="live">Ao vivo</a> você abre cada passo e clica em "Mostrar" para ele ir para o telão e os celulares. Dá para mudar a qualquer momento, inclusive durante o evento. Em Conexões, Reflexão e Sucesso, o botão 🚫 marca quem coordena e não participa.</p>
       <div class="rlist">${list.map(row).join('')}</div>
       <div class="actions radd"><span class="small">Adicionar:</span>${add('Bloco de fala', 'stage')}${add('Aviso / intervalo', 'message')}${add('Olhos no telão', 'standby')}${add('Check-in', 'checkin')}${has('connections') ? '' : add('Conexões', 'connections')}${has('reflexao') ? '' : add('Reflexão', 'reflexao')}${['d1', 'd2', 'd3', 'd4'].filter(k => !hasAct(k)).map(k => add(`Sucesso ${k.slice(1).padStart(2, '0')}`, 'sucesso', `data-activity="${k}"`)).join('')}${add('Encerramento', 'closing')}</div>
       <div class="actions" style="margin-top:14px;align-items:center">${dirty ? '<button class="btn" data-act="rsSave">Salvar roteiro</button><button class="btn ghost" data-act="rsDiscard">Descartar alterações</button><span class="warn">alterações não salvas</span>' : '<span class="ok">✔ Roteiro salvo</span>'}<button class="btn ghost sm" data-act="rsDefault" style="margin-left:auto">Restaurar o roteiro padrão</button></div>
@@ -696,18 +748,17 @@
       case 'audioOut': return run(() => act('setAudio', { out: el.dataset.out }), el.dataset.out === 'painel' ? 'O som agora sai deste computador' : 'O som agora sai do telão');
       case 'audioVol': return run(() => act('setAudio', { volume: +el.value }));
       // --- roteiro: ao vivo ---
-      case 'goStep': {
+      case 'goStep': { // coloca o passo no ar: é aqui (e só aqui) que o telão e os celulares mudam
         if (el.dataset.guard && !confirm(el.dataset.guard)) return;
         A.edit = null;
-        return run(() => api('POST', '/api/admin/step', { id }));
+        return run(async () => { await api('POST', '/api/admin/step', { id }); A.sel = null; render(true); });
       }
-      case 'jumpStep': {
-        const { step } = liveStep(), target = O.settings.steps.find(x => x.id === id);
-        if (!target || (target.id === step.id && !O.state.detour)) return;
-        if (!confirm(`Ir para "${stepTitle(target)}" agora? Os celulares e o telão mudam na hora.`)) return;
-        A.edit = null;
-        return run(() => api('POST', '/api/admin/step', { id }));
+      case 'jumpStep': { // abre o passo no painel, sem mexer no telão
+        const { step } = liveStep();
+        A.edit = null; A.sel = id === step.id ? null : id;
+        render(true); window.scrollTo(0, 0); return;
       }
+      case 'skipEdit': return skipDialog(el.dataset.block);
       case 'standbyNow': return confirmRun('Colocar os celulares em "olhos no telão" agora? Depois é só voltar ao roteiro.', () => act('setBlock', { block: 'standby' }));
       case 'quickMessage': return quickMessageDialog();
       case 'editStep': { const x = O.settings.steps.find(y => y.id === id); if (x) { A.edit = { ...x }; render(true); const f = $('#ed-theme') || $('#ed-title'); if (f) f.focus(); } return; }

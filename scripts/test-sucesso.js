@@ -125,16 +125,17 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     const step = id => call('POST', '/api/admin/step', { id });
     const state = async () => (await call('GET', '/api/state')).json;
     let ov = (await call('GET', '/api/admin/overview')).json; const steps = ov.settings.steps;
-    assert.deepEqual(steps.map(x => x.type), ['checkin', 'stage', 'reflexao', 'connections', 'stage', 'sucesso', 'sucesso', 'sucesso', 'sucesso', 'stage', 'closing']);
+    assert.deepEqual(steps.map(x => x.type), ['checkin', 'connections', 'stage', 'reflexao', 'stage', 'stage', 'sucesso', 'sucesso', 'sucesso', 'sucesso', 'closing']);
+    const stage1 = steps.find(x => x.type === 'stage');
     const of = (type, activity) => steps.find(x => x.type === type && (!activity || x.activity === activity)).id;
     assert.equal(ov.state.step, of('connections'));                 // as viagens levaram o cursor para o passo Conexões
     assert.ok(ov.sucesso.roomId); assert.equal(ov.sucesso.acts.d3.responseCount, 3);
     // sair do passo Conexões segura a viagem; voltar solta
-    steps[1].title = 'Abertura'; steps[1].theme = 'O ano que passou'; steps[1].speaker = 'Diretoria';
+    stage1.title = 'Abertura'; stage1.theme = 'O ano que passou'; stage1.speaker = 'Diretoria';
     r = await call('POST', '/api/admin/action', { type: 'settings', settings: { steps } }); assert.equal(r.status, 200);
     r = await call('POST', '/api/admin/action', { type: 'setAudio', mode: 'music', volume: 70 }); assert.equal(r.status, 200);
     st = await state(); assert.equal(st.audio.mode, 'music'); assert.equal(st.audio.volume, 70);
-    r = await step(steps[1].id); assert.equal(r.status, 200);
+    r = await step(stage1.id); assert.equal(r.status, 200);
     st = await state();
     assert.equal(st.block, 'stage'); assert.deepEqual(st.stage, { title: 'Abertura', theme: 'O ano que passou', speaker: 'Diretoria' });
     assert.equal(st.audio.mode, 'off');                             // bloco de fala desliga o som
@@ -159,7 +160,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await vote(tokens[1], projects[1]); assert.equal(r.status, 200);
     r = await rf({ action: 'reveal' }); assert.equal(r.status, 409);                               // os mais votados só depois de encerrar
     // sair da Reflexão pausa a votação; ao voltar, o Doc retoma
-    r = await step(steps[1].id); st = await state(); assert.equal(st.reflexao, null);
+    r = await step(stage1.id); st = await state(); assert.equal(st.reflexao, null);
     ov = (await call('GET', '/api/admin/overview')).json; assert.equal(ov.reflexao.paradas[0].phase, 'paused');
     r = await vote(tokens[2], projects[2]); assert.equal(r.status, 409);                           // fora do ar
     r = await step(of('reflexao')); st = await state(); assert.equal(st.reflexao.cur.phase, 'paused');
@@ -200,6 +201,19 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     assert.deepEqual(ex.reflexao.paradas[0].top.map(x => [x.project, x.votes]), [[projects[3], 3], [projects[0], 1]]);
     assert.equal(ex.reflexao.paradas[0].votes.length, 8); assert.equal(ex.reflexao.paradas[0].tally[1].skipped, true); assert.equal(ex.reflexao.paradas[1].votes.every(v => v.test), true);
     const d3 = ex.sucesso.acts.find(a => a.id === 'd3'); assert.equal(d3.question.length > 10, true); assert.deepEqual(d3.responses.map(x => x.name).sort(), [people[0].name, people[1].name, 'Visitante'].sort()); assert.ok(d3.responses[0].answer && d3.responses[0].at);
+    // quem coordena um bloco fica de fora dele: não vota na Reflexão, não responde no Sucesso e não entra no sorteio das duplas
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { skip: { reflexao: [people[5].id, 999999, 'x'], sucesso: [people[6].id] } } }); assert.equal(r.status, 200);
+    ov = (await call('GET', '/api/admin/overview')).json; assert.deepEqual(ov.settings.skip, { connections: [], reflexao: [people[5].id, 999999], sucesso: [people[6].id] });
+    r = await step(of('reflexao')); r = await rf({ action: 'open', idx: 2 }); r = await rf({ action: 'start' });
+    r = await vote(tokens[5], projects[7]); assert.equal(r.status, 403); r = await vote(tokens[6], projects[7]); assert.equal(r.status, 200);
+    let me = (await call('GET', '/api/me?token=' + tokens[5], undefined, { auth: false })).json.me; assert.deepEqual(me.skip, { connections: false, reflexao: true, sucesso: false });
+    r = await rf({ action: 'end' });
+    r = await step(of('sucesso', 'd1')); r = await answer(tokens[6], 'não entra'); assert.equal(r.status, 403); r = await answer(tokens[5], 'Entregar valor'); assert.equal(r.status, 200);
+    r = await step(of('connections'));
+    // o modo "relógio" do telão não existe mais
+    r = await call('POST', '/api/admin/action', { type: 'setScene', scene: 'clock' }); st = await state(); assert.equal(st.screen.scene, 'auto');
+    r = await call('POST', '/api/admin/action', { type: 'setScene', scene: 'logo' }); st = await state(); assert.equal(st.screen.scene, 'logo');
+    r = await call('POST', '/api/admin/action', { type: 'setScene', scene: 'auto' });
     // bipes do cronômetro e transições: ligados por padrão, o Doc pode desligar
     st = await state(); assert.equal(st.audio.beeps, true); assert.equal(st.settings.transitions, true);
     r = await call('POST', '/api/admin/action', { type: 'setAudio', beeps: false }); r = await call('POST', '/api/admin/action', { type: 'settings', settings: { transitions: false } });
@@ -228,6 +242,14 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     ov = (await call('GET', '/api/admin/overview')).json;
     assert.equal(ov.counts.checkedIn, 0); assert.equal(ov.state.block, 'welcome'); assert.equal(ov.sucesso.acts.d3.responseCount, 0); assert.equal(ov.sucesso.acts.d4.responseCount, 0);
     assert.equal(ov.reflexao.open, null); assert.ok(ov.reflexao.paradas.every(p => p.votes === 0 && p.phase === 'idle' && !p.top.length));   // os votos da Reflexão também
+    const again = [];
+    for (const p of people.slice(0, 7)) again.push((await call('POST', '/api/checkin', { personId: p.id })).json.token);
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { skip: { connections: [people[0].id] } } });
+    r = await call('POST', '/api/admin/action', { type: 'generate' }); assert.equal(r.status, 200, JSON.stringify(r.json));
+    ov = (await call('GET', '/api/admin/overview')).json;
+    const paired = ov.rounds[0].groups.flatMap(g => g.members.map(m => m.id));
+    assert.equal(paired.length, 6); assert.ok(!paired.includes(people[0].id)); assert.equal(ov.people.find(p => p.id === people[0].id).late, false);
+    me = (await call('GET', '/api/me?token=' + again[0], undefined, { auth: false })).json.me; assert.equal(me.skip.connections, true); assert.equal(me.person.name, people[0].name);
     console.log('OK · townhall + De Volta para o Sucesso + Reflexão integrados');
   } catch (e) {
     console.error('FALHOU:', e); process.exitCode = 1;

@@ -201,7 +201,8 @@ assert.strictEqual(e.state.conn.phase, 'results', 'timer da avaliação → resu
 // blocos, telão e settings
 e.setBlock('standby');
 assert.strictEqual(e.publicState().block, 'standby', 'bloco de espera');
-e.setScene('clock'); assert.strictEqual(e.publicState().screen.scene, 'clock');
+e.setScene('logo'); assert.strictEqual(e.publicState().screen.scene, 'logo');
+e.setScene('clock'); assert.strictEqual(e.publicState().screen.scene, 'auto', 'o modo relógio saiu');
 e.setScene('x'); assert.strictEqual(e.publicState().screen.scene, 'auto');
 e.updateSettings({ standbyText: 'Já voltamos' });
 assert.strictEqual(e.publicState().event.standbyText, 'Já voltamos');

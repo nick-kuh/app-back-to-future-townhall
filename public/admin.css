@@ -310,3 +310,21 @@ textarea.mono{font:13px/1.5 'Share Tech Mono',Consolas,monospace;white-space:pre
 .prepnav .datalink:hover{border-color:var(--cyan)}
 a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .nowchip{min-width:150px}
+/* passo aberto no painel (fora do ar) × passo no ar; quem fica de fora de um bloco */
+.tabs .tablink{border:1px solid var(--line2);border-radius:999px;padding:8px 16px;font:800 13px Inter;color:var(--cyan);background:#14162a;text-decoration:none;white-space:nowrap}
+.tabs .tablink:hover{border-color:var(--cyan)}
+.rs{position:relative}
+.rs .air{margin-left:auto;font:900 8px Orbitron,Inter;letter-spacing:1.5px;text-transform:uppercase;color:#1a0700;background:var(--orange);border-radius:99px;padding:3px 7px;white-space:nowrap}
+.rs.sel{border-color:var(--cyan);background:#10222b;box-shadow:0 0 0 1px var(--cyan) inset}
+.rs.sel .n{background:#0f2f37;color:var(--cyan)}
+.stepbox.preview{border-style:dashed;border-color:var(--cyan)}
+.stepbox .offair{font:700 12px Inter;color:var(--cyan)}
+.skipline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:8px 12px;border:1px dashed var(--line2);border-radius:10px}
+.skipline b{color:var(--txt)}
+.sklist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;max-height:46vh;overflow:auto;margin-top:10px;padding-right:4px}
+.sklist .sk{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:14px}
+.sklist .sk:hover{background:#17142e}
+.sklist .sk[hidden]{display:none}
+.sklist .sk small{display:block;color:var(--muted);font-size:11px}
+.rrow .rf .btn{margin-left:auto;align-self:center;white-space:nowrap}
+@media (max-width:640px){.sklist{grid-template-columns:1fr}}

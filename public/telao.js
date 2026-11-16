@@ -91,11 +91,6 @@
   const flux = () => `<div class="flux"><i></i><i></i><i></i><b></b></div>`;
   const quoteBlock = i => { const q = QUOTES[i % QUOTES.length]; return `<div class="quote" id="quote">“${esc(q[0])}”<small>${esc(q[1])}</small></div>`; };
   const eras = () => `<div class="eras" id="eras">${ERAS_FILM.map((e, i) => `<div class="era ${i === S.eraIdx ? 'on' : ''}"><div class="y">${esc(e.y)}</div><div class="f">${esc(e.f)}</div><div class="d">${esc(e.d)}</div></div>`).join('')}</div>`;
-  const circuits = (dest, last) => `<div class="circuits">
-      <div class="tc r"><label>DESTINATION TIME</label><div class="led">${esc(dest)}</div></div>
-      <div class="tc g"><label>PRESENT TIME</label><div class="led" id="ledNow">${ledNow(true)}</div></div>
-      <div class="tc a"><label>LAST TIME DEPARTED</label><div class="led">${esc(last)}</div></div>
-    </div>`;
   const huge = (kind, cls = '') => `<div class="cdwrap" id="cdwrap" data-kind="${kind}"><div class="huge ${cls}" id="cd">--:--</div><div class="ptag">❚❚ PAUSADO</div></div>`;
   function gauge() {
     const cx = 125, cy = 112, R = 96;
@@ -384,7 +379,7 @@
       case 'connections': return { id: 'connections', type: 'connections', name: 'CONEXÕES' };
       case 'message': return { id: 'message:' + st.message.title, type: 'message', name: st.message.title || 'AVISO' };
       case 'standby': return { id: 'standby', type: 'standby', name: 'OLHOS NO TELÃO' };
-      case 'closing': return { id: 'closing', type: 'closing', name: 'ENCERRAMENTO' };
+      case 'closing': return { id: 'closing', type: 'closing', name: 'CONCLUSÃO' };
       default: return { id: 'welcome', type: 'checkin', name: 'CHECK-IN' };
     }
   }
@@ -410,16 +405,22 @@
   function sceneFor() {
     const st = S.state, c = st.conn, sc = (st.screen && st.screen.scene) || 'auto';
     if (st.presentation) return ['projection', projectionScene(st.presentation)];
-    if (sc === 'clock') return ['clock', sceneClock()];
     if (sc === 'logo') return ['logo', `${logo()}${flux()}`];
     if (st.reflexao) return ['reflexao', reflexaoScene(st.reflexao)];
 
     const b = st.block;
     if (b === 'welcome') return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox()}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div></div></div>`];
-    if (b === 'standby') return ['clock', sceneClock()];
-    if (b === 'stage') { // bloco de fala: tela calma, só o nome e o tema do bloco
-      const g = st.stage || {}, theme = (g.theme || '').trim();
-      return ['stage', `<div class="stage-calm">${theme ? `<div class="sk">${esc(g.title)}</div>` : ''}<div class="st">${esc(theme || g.title || '')}</div>${g.speaker ? `<div class="ss">${esc(g.speaker)}</div>` : ''}</div>`];
+    if (b === 'standby') return ['logo', `${logo()}${flux()}`]; // olhos no telão: só o logo
+    if (b === 'stage') { // bloco de fala: tela calma, com o título no estilo do logo do filme
+      const g = st.stage || {}, theme = (g.theme || '').trim(), title = (g.title || 'Bloco').trim();
+      // "BLOCO 1 ⟶" com a seta, como o "BACK TO THE" do logo; embaixo, em letras grandes, o tema (ou o próprio nome do bloco)
+      return ['stage', `<div class="stage-film">
+          <div class="sf-top"><span class="sf-kick bttf">${esc(theme ? title : 'No palco agora')}</span><i class="sf-arrow"></i></div>
+          <div class="sf-title ${(theme || title).length > 26 ? 'long' : ''}"><span class="bttf">${esc(theme || title)}</span></div>
+          <div class="sf-fire"><i></i><i></i></div>
+          ${g.speaker ? `<div class="sf-plate"><small>HILL VALLEY · NO PALCO</small><b>${esc(g.speaker)}</b></div>` : ''}
+          <div class="sf-circ"><span class="r"><small>DESTINATION TIME</small><b>OCT 21 2015 04:29</b></span><span class="g"><small>PRESENT TIME</small><b>OCT 26 1985 01:21</b></span><span class="a"><small>LAST TIME DEPARTED</small><b>NOV 05 1955 06:00</b></span></div>
+        </div>`];
     }
     if (b === 'message') { const m = st.message; return ['message', `<div class="msg"><div class="e">${esc(m.emoji || '📣')}</div></div><div class="title">${esc(m.title)}</div><div class="msg"><p>${linkify(m.body)}</p></div>`]; }
     if (b === 'closing') return ['closing', `<div class="title">FIM DA VIAGEM</div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
@@ -431,13 +432,7 @@
     if (c.phase === 'roundEnd') return ['roundEnd', `<div class="title">88 MPH!</div>${carBox('warp')}${t && t.kind === 'break' ? huge('break', 'amber') : ''}`];
     if (c.phase === 'ranking') return ['ranking', `<div class="kicker">AVALIAÇÃO</div><div class="title cy">AVALIE NO CELULAR</div><div class="count"><span id="rankDone">${c.rankingDone}</span><small> / ${c.rankingTotal} avaliaram</small></div><div class="bar"><i id="rankBar" style="width:${Math.round(100 * c.rankingDone / Math.max(1, c.rankingTotal))}%"></i></div>${t && t.kind === 'ranking' ? huge('ranking', 'green') : ''}`];
     if (c.phase === 'results') return ['results', `<div class="kicker">CONEXÕES CALCULADAS</div><div class="title">OLHE O CELULAR</div><div class="sub"><b>${c.mutualCount}</b> conexões mútuas</div>${c.mutualPairs && c.mutualPairs.length ? `<div class="mutual">${c.mutualPairs.map(p => `<span>${esc(p[0].split(' ')[0])} ⚡ ${esc(p[1].split(' ')[0])}</span>`).join('')}</div>` : ''}`];
-    return ['clock', sceneClock()];
-  }
-  function sceneClock() {
-    const c = S.state.conn, r = c.round || 0;
-    const dest = r ? roundEra(Math.min(3, r + (c.phase === 'results' ? 0 : 0))).led : 'OUT 26 1985 01:21';
-    const last = r > 1 ? roundEra(r - 1).led : '--- -- ---- --:--';
-    return `${circuits(dest, last)}`;
+    return ['logo', `${logo()}${flux()}`];
   }
   function credits() {
     if (!S.people) { loadPeople().then(render); return ''; }

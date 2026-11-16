@@ -315,7 +315,12 @@ textarea.input{resize:none;line-height:1.4;font-size:16px;font-weight:500;min-he
 /* ===== bloco de fala: tela calma com o nome e o tema do bloco ===== */
 .stage{text-align:center;padding:10px 8px}
 .stage .kicker{font-size:9px;color:var(--amber)}
-.stage .st-theme{font:900 30px/1.15 var(--display);margin:14px 0 8px;color:var(--txt);overflow-wrap:anywhere}
+/* título do bloco no estilo do logo do filme (mesmo desenho do telão) */
+.stage .st-theme{font:400 italic 40px/1.08 "BTTF Logo","Russo One",var(--display);text-transform:uppercase;letter-spacing:.02em;margin:16px 0 10px;overflow-wrap:anywhere}
+.stage .st-theme span{-webkit-box-decoration-break:clone;box-decoration-break:clone;padding:.04em .12em;background:linear-gradient(180deg,#ff2a12 0%,#ff6a0e 34%,#ffab12 62%,#ffe65c 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(1px 0 0 #2b6bff) drop-shadow(-1px 0 0 #2b6bff) drop-shadow(0 1px 0 #2b6bff) drop-shadow(0 -1px 0 #2b6bff) drop-shadow(.05em .07em 0 #0a1f6b)}
+.stage .st-theme.long{font-size:27px}
+.stage .st-arrow{display:block;width:62%;height:9px;margin:10px auto 0;background:linear-gradient(180deg,#ff3a14,#ffa012 60%,#ffe65c);clip-path:polygon(0 30%,calc(100% - 14px) 30%,calc(100% - 14px) 0,100% 50%,calc(100% - 14px) 100%,calc(100% - 14px) 70%,0 70%)}
 .stage .st-speaker{font:600 15px Inter;color:var(--yellow);margin-bottom:12px}
 
 /* ===== Reflexão: paradas e votação em projetos ===== */

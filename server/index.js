@@ -104,6 +104,7 @@ app.post('/api/sucesso/answer', wrapAsync(async req => {
   if (!person || !person.checkedInAt || !person.active) throw Object.assign(new Error('Seu check-in não está mais ativo. Escolha seu nome de novo.'), { status: 401 });
   const p = engine.state.presentation;
   if (!p || !sucesso.ready()) throw Object.assign(new Error('Nenhuma dinâmica está aberta agora.'), { status: 409 });
+  if (engine.skips('sucesso', person.id)) throw Object.assign(new Error('Você está na coordenação deste bloco e não participa das respostas.'), { status: 403 });
   const r = await sucesso.answer(p, person, { answer: b.answer, anonymous: !!b.anonymous, clientRequestId: String(b.clientRequestId || '') });
   return { ok: true, duplicate: r.duplicate, me: meState(person.id) };
 }));
@@ -113,6 +114,7 @@ app.post('/api/reflexao/vote', wrap(req => {
   const b = req.body || {}, person = engine.personByToken(b.token);
   if (!person || !person.checkedInAt || !person.active) throw Object.assign(new Error('Seu check-in não está mais ativo. Escolha seu nome de novo.'), { status: 401 });
   if (!reflexaoOnAir()) throw Object.assign(new Error('A Reflexão não está no ar agora.'), { status: 409 });
+  if (engine.skips('reflexao', person.id)) throw Object.assign(new Error('Você está na coordenação deste bloco e não participa da votação.'), { status: 403 });
   reflexao.vote(person, String(b.project || ''));
   return { ok: true, me: meState(person.id) };
 }));

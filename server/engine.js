@@ -19,14 +19,14 @@ const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 function defaultSteps(stages) {
   const st = i => Object.assign({ title: `Bloco ${i + 1}`, theme: '', speaker: '' }, (stages || [])[i] || {});
   return [
-    { type: 'checkin' },
+    { type: 'checkin' },                // a porta de entrada: é por aqui que todo mundo faz o login
+    { type: 'connections' },
     { type: 'stage', ...st(0) },
     { type: 'reflexao' },
-    { type: 'connections' },
     { type: 'stage', ...st(1) },
-    { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' },
     { type: 'stage', ...st(2) },
-    { type: 'closing' },
+    { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' },
+    { type: 'closing' },                // conclusão
   ].map((x, i) => ({ id: 'p' + (i + 1), ...x }));
 }
 // Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões, Reflexão
@@ -67,6 +67,8 @@ const DEFAULT_SETTINGS = {
   stageText: 'Agora a atenção é no palco.',
   stageMutes: true,       // exibir um bloco de fala desliga o som do telão
   transitions: true,      // transição do filme (alguns segundos) no telão e nos celulares ao trocar de bloco
+  // quem não participa de cada bloco (ex.: quem coordena): faz o login e conta presença, mas fica fora das duplas, da votação ou das respostas
+  skip: { connections: [], reflexao: [], sucesso: [] },
   musicUrl: '',           // opcional: arquivo de áudio próprio para "Música" (senão, toca a trilha gerada no navegador)
   ambientUrl: '',         // opcional: arquivo de áudio próprio para "Trilha sonora"
   agenda: [
@@ -116,6 +118,8 @@ class Engine {
     };
     delete this.state.conn.talk; // modelo antigo
     this.settings = Object.assign({}, DEFAULT_SETTINGS, kvGet('settings', {}));
+    this.settings.skip = this.cleanSkip(this.settings.skip);
+    if (this.state.screen.scene === 'clock') this.state.screen.scene = 'auto'; // o modo "relógio" do telão saiu
     const steps = cleanSteps(this.settings.steps);
     this.settings.steps = steps.length ? steps : defaultSteps(this.settings.stages); // versões antigas guardavam só os blocos de fala
     delete this.settings.stages;
@@ -155,7 +159,13 @@ class Engine {
     if (typeof token !== 'string' || !token || token.length > 128) return null;
     return this.rowToPerson(db.prepare('SELECT * FROM people WHERE token = ?').get(token));
   }
-  participants() { return this.listPeople().filter(p => p.active && p.checkedInAt); }
+  // quem entra nas duplas das Conexões: fez check-in e não está na lista de quem fica de fora desse bloco
+  participants() { const out = new Set(this.settings.skip.connections); return this.listPeople().filter(p => p.active && p.checkedInAt && !out.has(p.id)); }
+  cleanSkip(v) {
+    const ids = list => [...new Set((Array.isArray(list) ? list : []).map(Number).filter(n => Number.isInteger(n) && n > 0))].slice(0, 500);
+    return { connections: ids(v && v.connections), reflexao: ids(v && v.reflexao), sucesso: ids(v && v.sucesso) };
+  }
+  skips(block, personId) { return (this.settings.skip[block] || []).includes(Number(personId)); }
   // full=true só para o painel do admin: os viajantes não veem área, WL nem time uns dos outros.
   publicPerson(p, withHints = false, full = false) {
     if (!p) return null;
@@ -619,6 +629,7 @@ class Engine {
     for (const k of ['eventName', 'welcomeText', 'closingText', 'standbyText', 'stageText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
     if (partial.stageMutes !== undefined) s.stageMutes = !!partial.stageMutes;
     if (partial.transitions !== undefined) s.transitions = !!partial.transitions;
+    if (partial.skip !== undefined) s.skip = this.cleanSkip({ ...s.skip, ...(partial.skip && typeof partial.skip === 'object' ? partial.skip : {}) });
     // áudio próprio: só endereços http(s) ou caminhos do próprio site
     for (const k of ['musicUrl', 'ambientUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
     if (partial.steps !== undefined) {
@@ -639,7 +650,7 @@ class Engine {
     this.commit();
   }
   setScene(scene) {
-    const ok = ['auto', 'clock', 'logo', 'quote', 'countdown'];
+    const ok = ['auto', 'logo'];
     this.state.screen = { scene: ok.includes(scene) ? scene : 'auto' };
     this.commit();
   }
@@ -856,7 +867,8 @@ class Engine {
     const rk = db.prepare('SELECT round, rank FROM rankings WHERE person_id = ?').all(p.id);
     const ranking = rk.length ? Object.fromEntries(rk.map(r => [r.round, r.rank])) : null;
     const result = c.phase === 'results' ? this.resultOf(p.id) : null;
-    return { person: { ...this.publicPerson(p), checkedInAt: p.checkedInAt }, group, conversations, ranking, result };
+    const skip = { connections: this.skips('connections', p.id), reflexao: this.skips('reflexao', p.id), sucesso: this.skips('sucesso', p.id) };
+    return { person: { ...this.publicPerson(p), checkedInAt: p.checkedInAt }, group, conversations, ranking, result, skip };
   }
   // Extração de dados das Conexões: duplas de cada viagem com as perguntas que tiveram, a avaliação
   // (ranking) de cada pessoa e a conexão sugerida (match) de cada uma.
@@ -914,7 +926,7 @@ class Engine {
     })).filter(r => r.person);
     return {
       state: this.state, settings: this.settings, now: now(),
-      people: people.map(p => ({ id: p.id, name: p.name, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.active && p.checkedInAt && !inRounds.has(p.id)) })),
+      people: people.map(p => ({ id: p.id, name: p.name, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.active && p.checkedInAt && !inRounds.has(p.id) && !this.skips('connections', p.id)) })),
       rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, points: POINTS,
       counts: this.publicState().counts,
     };

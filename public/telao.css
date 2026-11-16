@@ -188,10 +188,37 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .tcbox[hidden]{display:none}
 
 /* ===== bloco de fala: telão calmo (fundo parado e escuro, nada piscando) ===== */
-.stage-calm{display:flex;flex-direction:column;align-items:center;gap:2.6vh;max-width:82vw}
-.stage-calm .sk{font:400 clamp(13px,1.5vw,24px) var(--pixel);letter-spacing:5px;color:var(--amber);text-transform:uppercase}
-.stage-calm .st{font:800 clamp(38px,6vw,104px)/1.08 Inter;color:var(--txt);overflow-wrap:anywhere}
-.stage-calm .ss{font:600 clamp(18px,2.2vw,36px) Inter;color:var(--yellow)}
+/* Título no estilo do logo de "De Volta para o Futuro": maiúsculas largas e inclinadas, gradiente do vermelho-alaranjado
+   ao amarelo, contorno azul fino e a seta que sai da primeira linha. Se houver um arquivo de fonte em public/fonts
+   (ex.: "Back to the Future 2002"), ele é usado; senão entra a Russo One inclinada. */
+.bttf{font-family:"BTTF Logo","Russo One",var(--display);font-weight:400;font-style:italic;text-transform:uppercase;letter-spacing:.02em;
+  background:linear-gradient(180deg,#ff2a12 0%,#ff6a0e 34%,#ffab12 62%,#ffe65c 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(1.5px 0 0 #2b6bff) drop-shadow(-1.5px 0 0 #2b6bff) drop-shadow(0 1.5px 0 #2b6bff) drop-shadow(0 -1.5px 0 #2b6bff) drop-shadow(.05em .07em 0 #0a1f6b) drop-shadow(0 0 26px rgba(255,120,20,.35))}
+.stage-film{display:flex;flex-direction:column;align-items:center;gap:2.4vh;width:min(90vw,1500px)}
+.sf-top{display:flex;align-items:center;gap:1.4vw;align-self:flex-start;padding-left:3vw;max-width:100%}
+.sf-kick{font-size:clamp(22px,3.6vw,62px);line-height:1.1;white-space:nowrap;padding:.1em .12em}
+.sf-arrow{flex:none;width:clamp(120px,30vw,520px);height:clamp(12px,2vh,22px);background:linear-gradient(180deg,#ff3a14,#ffa012 60%,#ffe65c);
+  clip-path:polygon(0 30%,calc(100% - 1.6em) 30%,calc(100% - 1.6em) 0,100% 50%,calc(100% - 1.6em) 100%,calc(100% - 1.6em) 70%,0 70%);font-size:clamp(12px,2vh,22px);
+  filter:drop-shadow(1px 0 0 #2b6bff) drop-shadow(-1px 0 0 #2b6bff) drop-shadow(0 1px 0 #2b6bff) drop-shadow(0 -1px 0 #2b6bff)}
+.sf-title{font-size:clamp(56px,11vw,200px);line-height:1.02;text-align:center;overflow-wrap:anywhere;max-width:100%}
+.sf-title.long{font-size:clamp(38px,6.2vw,112px);line-height:1.08}
+.sf-title .bttf{-webkit-box-decoration-break:clone;box-decoration-break:clone;padding:.04em .14em}  /* cada linha com o seu gradiente */
+/* rastros de fogo dos pneus */
+.sf-fire{display:flex;flex-direction:column;gap:1.1vh;width:min(70vw,1100px);margin-top:-.6vh}
+.sf-fire i{display:block;height:clamp(5px,.8vh,9px);border-radius:9px;background:linear-gradient(90deg,transparent,#ff2a00 18%,#ff9a12 55%,#ffe65c 82%,transparent);box-shadow:0 0 22px rgba(255,106,0,.7);opacity:.85}
+.sf-fire i:last-child{width:86%;align-self:flex-end}
+/* placa da DeLorean (Califórnia, anos 80: azul com letras amarelas) para quem está no palco */
+.sf-plate{display:inline-flex;flex-direction:column;align-items:center;gap:.4vh;margin-top:1.2vh;background:linear-gradient(180deg,#2444b8,#16308c);border:3px solid #f0cf3c;border-radius:12px;padding:1vh 2.4vw 1.2vh;box-shadow:0 6px 0 #0a1750,0 0 30px rgba(36,68,184,.5)}
+.sf-plate small{font:700 clamp(8px,.8vw,12px) Inter;letter-spacing:4px;color:#f0cf3c}
+.sf-plate b{font:400 clamp(20px,2.8vw,46px) Michroma,var(--display);letter-spacing:.12em;color:#f7d94a;text-transform:uppercase;text-shadow:0 2px 0 #0a1750}
+/* circuitos de tempo com as datas do filme */
+.sf-circ{display:flex;gap:1vw;margin-top:1.6vh;opacity:.9}
+.sf-circ span{display:flex;flex-direction:column;background:#07070b;border:2px solid #343846;border-radius:8px;overflow:hidden;min-width:clamp(150px,17vw,300px)}
+.sf-circ b{font:400 clamp(13px,1.5vw,25px) var(--led);letter-spacing:.1em;padding:.5vh .8vw;text-align:center;white-space:nowrap}
+.sf-circ small{font:400 clamp(6px,.6vw,9px) var(--pixel);letter-spacing:1px;color:#fff;padding:.4vh .4vw;text-align:center}
+.sf-circ .r b{color:var(--red);text-shadow:0 0 12px var(--red)}.sf-circ .r small{background:#8d1313}
+.sf-circ .g b{color:var(--green);text-shadow:0 0 12px var(--green)}.sf-circ .g small{background:#0f6d2a}
+.sf-circ .a b{color:var(--amber);text-shadow:0 0 12px var(--amber)}.sf-circ .a small{background:#8a5900}
 body.calm .sky{filter:brightness(.34) saturate(.65);transition:filter 1.2s}
 body.calm .crt{animation:none}
 body.calm .osd{opacity:.45}
