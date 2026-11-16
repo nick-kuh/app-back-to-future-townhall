@@ -1,8 +1,9 @@
 // Bloco "Reflexão" · Ato 1: O Combustível do Futuro (a partir do protótipo enviado pela organização).
 // São 6 paradas. Em cada uma o Doc abre uma votação de 1:30 e cada pessoa escolhe, pelo app, um
 // projeto da lista (o nome vem do check-in, um voto por parada). Cada voto carrega o Flux Capacitor
-// do telão. Encerrada a votação, o Doc sorteia 2 projetos entre os que receberam voto e o telão
-// mostra o projeto e o responsável. Tudo fica guardado no banco (sobrevive a reinícios).
+// do telão. Encerrada a votação, o Doc revela os 2 projetos mais votados (nunca dois do mesmo
+// responsável) e o telão mostra, com suspense, cada projeto e quem responde por ele.
+// Tudo fica guardado no banco (sobrevive a reinícios).
 const crypto = require('crypto');
 const { kvGet, kvSet } = require('./db');
 
@@ -24,6 +25,7 @@ const DEFAULT_CONFIG = () => ({
   subtitle: 'As 6 paradas da jornada',
   voteSeconds: 90,   // 1min30 de votação por parada
   fullVotes: 15,     // votos para carregar 100% do Flux Capacitor em uma parada
+  showCounts: false, // mostrar no telão e nos celulares quantos votos cada um dos mais votados teve
   themes: [
     { t: 'O Capacitor de Fluxo', q: 'Que ideias testamos e o que aprendemos?' },
     { t: 'Mudamos a Linha do Tempo', q: 'O que passou a funcionar de outro jeito?' },
@@ -42,6 +44,9 @@ const clip = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const pad = n => String(n).padStart(2, '0');
 const fail = (message, status = 409) => { throw Object.assign(new Error(message), { status }); };
+const norm = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+// "Fulano / Beltrano · Sicrano" são três responsáveis; o texto de "não identificado" não é ninguém
+const ownersOf = o => (!o || o === NO_OWNER ? [] : String(o).split(/[\/·;|]/).map(norm).filter(Boolean));
 
 function cleanConfig(c) {
   if (!c || typeof c !== 'object') return null;
@@ -55,7 +60,7 @@ function cleanConfig(c) {
   if (!themes.length || projects.length < 2) return null;
   const d = DEFAULT_CONFIG();
   return { title: clip(c.title, 80) || d.title, subtitle: clip(c.subtitle, 80) || d.subtitle,
-    voteSeconds: clamp(Math.round(Number(c.voteSeconds) || d.voteSeconds), 10, 900), fullVotes: clamp(Math.round(Number(c.fullVotes) || d.fullVotes), 1, 500), themes, projects };
+    voteSeconds: clamp(Math.round(Number(c.voteSeconds) || d.voteSeconds), 10, 900), fullVotes: clamp(Math.round(Number(c.fullVotes) || d.fullVotes), 1, 500), showCounts: !!c.showCounts, themes, projects };
 }
 
 function createReflexao() {
@@ -64,12 +69,12 @@ function createReflexao() {
   let rev = Number(saved.rev) || 1;
   const listeners = [];
   let timer = null;
-  const blank = () => ({ phase: 'idle', endsAt: null, remaining: config.voteSeconds, votes: [], drawn: [], cur: [], drawAt: null, swap: null, show: false, last: null });
+  const blank = () => ({ phase: 'idle', endsAt: null, remaining: config.voteSeconds, votes: [], top: [], topAt: null, show: false, last: null });
   const state = { open: null, paradas: [] };
   { // restaura o que estava guardado (votos, fases e sorteios)
     const old = saved.state && Array.isArray(saved.state.paradas) ? saved.state.paradas : [];
     state.paradas = config.themes.map((_, i) => Object.assign(blank(), old[i] && typeof old[i] === 'object' ? old[i] : {}));
-    for (const p of state.paradas) { if (!['idle', 'run', 'paused', 'done'].includes(p.phase)) p.phase = 'idle'; for (const k of ['votes', 'drawn', 'cur']) if (!Array.isArray(p[k])) p[k] = []; }
+    for (const p of state.paradas) { if (!['idle', 'run', 'paused', 'done'].includes(p.phase)) p.phase = 'idle'; for (const k of ['votes', 'top']) if (!Array.isArray(p[k])) p[k] = []; }
     const o = saved.state ? saved.state.open : null;
     state.open = Number.isInteger(o) && o >= 0 && o < state.paradas.length ? o : null;
   }
@@ -101,11 +106,22 @@ function createReflexao() {
     arm(); save();
     return true;
   }
-  // projetos que receberam voto na parada, na ordem em que apareceram
-  function pool(p) {
-    const seen = new Set(), out = [];
-    for (const v of p.votes) if (!seen.has(v.p)) { seen.add(v.p); out.push({ p: v.p, o: v.o || NO_OWNER }); }
-    return out;
+  // projetos votados na parada, do mais para o menos votado (empate: quem chegou antes a essa contagem)
+  function ranked(p) {
+    const m = new Map();
+    for (const v of p.votes) { const t = m.get(v.p) || { p: v.p, o: v.o || NO_OWNER, n: 0, at: 0 }; t.n++; t.at = v.at; m.set(v.p, t); }
+    return [...m.values()].sort((a, b) => b.n - a.n || a.at - b.at);
+  }
+  // os 2 mais votados sem repetir responsável: um projeto de quem já está entre os escolhidos é pulado
+  function topTwo(p) {
+    const list = ranked(p), picks = [], taken = new Set();
+    for (const x of list) {
+      if (picks.length === 2) break;
+      const own = ownersOf(x.o);
+      if (own.some(k => taken.has(k))) { x.skip = true; continue; }
+      x.pick = picks.length + 1; picks.push(x); own.forEach(k => taken.add(k));
+    }
+    return { list, picks };
   }
   const pick = list => list.splice(crypto.randomInt(list.length), 1)[0];
 
@@ -119,7 +135,7 @@ function createReflexao() {
       if (state.open !== i) hold();
       state.open = i;
       const p = P(i);
-      if (p.phase === 'done' && p.cur.length) p.show = true; // parada já sorteada: volta mostrando os cartões
+      if (p.phase === 'done' && p.top.length) p.show = true; // parada já revelada: volta mostrando os mais votados
       arm(); commit({ title: 'Reflexão', body: themeName(i) });
     },
     menu() { hold(); state.open = null; arm(); commit(); },
@@ -133,29 +149,20 @@ function createReflexao() {
     end() { need(); finish(state.open); },
     reset() { // abre a votação de novo, mantendo os votos já dados (como no protótipo)
       const p = need();
-      Object.assign(p, { phase: 'idle', endsAt: null, remaining: config.voteSeconds, cur: [], drawAt: null, swap: null, show: false });
+      Object.assign(p, { phase: 'idle', endsAt: null, remaining: config.voteSeconds, top: [], topAt: null, show: false });
       arm(); commit();
     },
-    draw() {
+    // Revela os 2 projetos mais votados da parada (o telão faz o suspense). Chamar de novo repete a revelação.
+    reveal() {
       const p = need();
-      if (p.phase !== 'done') fail('Encerre a votação antes do sorteio.');
-      const all = pool(p), used = new Set(p.drawn), free = all.filter(v => !used.has(v.p));
-      if (all.length < 2) fail('São necessários pelo menos 2 projetos diferentes votados para o sorteio.');
-      if (free.length < 2) fail('Não há projetos suficientes que ainda não foram sorteados.');
-      const a = pick(free), b = pick(free);
-      p.cur = [a, b]; p.drawn.push(a.p, b.p); p.drawAt = Date.now(); p.swap = null; p.show = true;
-      commit({ title: 'Projetos sorteados', body: 'Olhe para o telão.' });
+      if (p.phase !== 'done') fail('Encerre a votação antes de revelar os mais votados.');
+      const { picks } = topTwo(p);
+      if (!picks.length) fail('Nenhum voto nesta parada.');
+      p.top = picks.map(x => ({ p: x.p, o: x.o, n: x.n })); p.topAt = Date.now(); p.show = true;
+      commit({ title: 'Projetos mais votados', body: 'Olhe para o telão.' });
     },
-    swap(k) {
-      const p = need(); k = Number(k);
-      if (!p.cur[k]) fail('Sorteie os projetos antes de trocar.');
-      const used = new Set(p.drawn), free = pool(p).filter(v => !used.has(v.p));
-      if (!free.length) fail('Não há mais projetos para sortear.');
-      const v = pick(free);
-      p.cur[k] = v; p.drawn.push(v.p); p.swap = { k, at: Date.now() }; p.show = true;
-      commit();
-    },
-    showDraw(on) { const p = need(); if (!p.cur.length) return; p.show = !!on; commit(); },
+    showTop(on) { const p = need(); if (!p.top.length) return; p.show = !!on; commit(); },
+    setCounts(on) { config.showCounts = !!on; commit(); },
     clear() { const p = need(); Object.assign(p, blank()); arm(); commit(); },
     clearAll({ silent = false } = {}) {
       state.paradas = config.themes.map(blank); state.open = null;
@@ -202,7 +209,7 @@ function createReflexao() {
       if (state.open !== null && !P(state.open)) state.open = null;
       arm(); commit();
     },
-    resetConfig() { hold(); config = DEFAULT_CONFIG(); rev++; state.paradas = config.themes.map((_, i) => state.paradas[i] || blank()); if (state.open !== null && !P(state.open)) state.open = null; arm(); commit(); },
+    resetConfig() { hold(); config = { ...DEFAULT_CONFIG(), showCounts: config.showCounts }; rev++; state.paradas = config.themes.map((_, i) => state.paradas[i] || blank()); if (state.open !== null && !P(state.open)) state.open = null; arm(); commit(); },
     /* ---------- o que cada tela recebe ---------- */
     catalog: () => ({ rev, projects: config.projects.map(x => ({ name: x.name, owner: x.owner || NO_OWNER })) }),
     publicState() {
@@ -212,20 +219,29 @@ function createReflexao() {
       return {
         rev, title: config.title, subtitle: config.subtitle, voteSeconds: config.voteSeconds, fullVotes: config.fullVotes,
         open: i, votes: total, energy: Math.min(1, total / (config.fullVotes * n)),
-        themes: config.themes.map((t, k) => ({ n: pad(k + 1), t: t.t, q: t.q, c: COLORS[k % COLORS.length], votes: P(k).votes.length, gw: energy(P(k)) * 1.21 / n, phase: P(k).phase, drawn: P(k).drawn.length > 0 })),
+        themes: config.themes.map((t, k) => ({ n: pad(k + 1), t: t.t, q: t.q, c: COLORS[k % COLORS.length], votes: P(k).votes.length, gw: energy(P(k)) * 1.21 / n, phase: P(k).phase, revealed: P(k).top.length > 0 })),
         cur: p ? { idx: i, phase: p.phase, endsAt: p.endsAt, remaining: p.remaining, votes: p.votes.length, energy: energy(p), last: p.last,
-          hasDraw: p.cur.length > 0, draw: p.show && p.cur.length ? { at: p.drawAt, swap: p.swap, items: p.cur.map(v => ({ name: v.p, owner: v.o })) } : null } : null,
+          // os mais votados: 1º e 2º, com o responsável; a quantidade de votos só vai se o Doc ligar essa opção
+          top: p.show && p.top.length ? { at: p.topAt, items: p.top.map(v => ({ name: v.p, owner: v.o, ...(config.showCounts ? { votes: v.n } : {}) })) } : null } : null,
       };
     },
     // os votos da própria pessoa, parada por parada
     mine(pid) { return { votes: state.paradas.map(p => { const v = p.votes.find(x => x.pid === pid); return v ? { project: v.p, owner: v.o } : null; }) }; },
     adminState() {
       return { rev, config, open: state.open, paradas: state.paradas.map(p => {
-        const tally = new Map();
-        for (const v of p.votes) { const t = tally.get(v.p) || { p: v.p, o: v.o, n: 0 }; t.n++; tally.set(v.p, t); }
-        const used = new Set(p.drawn);
-        return { phase: p.phase, endsAt: p.endsAt, remaining: p.remaining, votes: p.votes.length, projects: tally.size, free: [...tally.keys()].filter(x => !used.has(x)).length,
-          tally: [...tally.values()].sort((a, b) => b.n - a.n), drawn: p.drawn, cur: p.cur, show: p.show };
+        const { list } = topTwo(p);
+        return { phase: p.phase, endsAt: p.endsAt, remaining: p.remaining, votes: p.votes.length, projects: list.length,
+          tally: list.map(x => ({ p: x.p, o: x.o, n: x.n, pick: x.pick || 0, skip: !!x.skip })), top: p.top, show: p.show };
+      }) };
+    },
+    // extração de dados: votos, contagem por projeto e os mais votados de cada parada
+    exportData() {
+      return { title: config.title, paradas: state.paradas.map((p, i) => {
+        const { list, picks } = topTwo(p);
+        return { n: pad(i + 1), title: config.themes[i].t, question: config.themes[i].q, phase: p.phase, revealed: p.top.length > 0,
+          votes: p.votes.map(v => ({ name: v.n, project: v.p, owner: v.o, at: v.at, test: v.pid === null })),
+          tally: list.map(x => ({ project: x.p, owner: x.o, votes: x.n, place: x.pick || 0, skipped: !!x.skip })),
+          top: (p.top.length ? p.top : picks).map(x => ({ project: x.p, owner: x.o, votes: x.n })) };
       }) };
     },
     votes: () => state.paradas.flatMap((p, i) => p.votes.map(v => ({ parada: i, name: v.n, project: v.p, owner: v.o, at: v.at }))),

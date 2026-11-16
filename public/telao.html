@@ -26,6 +26,23 @@
 
 <main id="scene" class="scene"></main>
 
+<!-- transição entre blocos: circuitos de tempo, mostrador (88 MPH · 1,21 GW · 10:04), raio e rastros de fogo -->
+<div class="tr" id="tr" aria-hidden="true">
+  <div class="tr-lines"></div>
+  <div class="tr-box">
+    <div class="circuits tr-circ">
+      <div class="tc r"><label>DESTINATION TIME</label><div class="led" id="trDest"></div></div>
+      <div class="tc g"><label>PRESENT TIME</label><div class="led" id="trNow"></div></div>
+      <div class="tc a"><label>LAST TIME DEPARTED</label><div class="led" id="trLast"></div></div>
+    </div>
+    <div class="tr-gauge"><b id="trNum">00</b><span id="trUnit">MPH</span></div>
+    <div class="tr-end">CONTINUA…</div>
+    <div class="tr-quote" id="trQuote"></div>
+  </div>
+  <div class="tr-fire"></div><div class="tr-fire f2"></div>
+  <div class="tr-flash"></div>
+</div>
+
 <button id="soundChip" class="sound-chip" type="button" hidden>🔊 Clique aqui para ligar o som do telão</button>
 
 

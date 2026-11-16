@@ -155,7 +155,7 @@ app.post('/api/admin/action', wrap(req => {
     case 'skip': engine.skip(); break;
     case 'startJourney': engine.startJourney(); break;
     case 'setScene': engine.setScene(a.scene); break;
-    case 'setAudio': engine.setAudio({ mode: a.mode, volume: a.volume, out: a.out }); break;
+    case 'setAudio': engine.setAudio({ mode: a.mode, volume: a.volume, out: a.out, beeps: a.beeps }); break;
     case 'openRanking': engine.openRanking(); break;
     case 'computeResults': engine.computeResults(); break;
     case 'resetConnections': engine.resetConnections(); break;
@@ -245,9 +245,9 @@ app.post('/api/admin/sucesso/draw', wrap(req => {
   return { ok: true };
 }));
 
-// Reflexão: comandos do Doc (abrir parada, votação, sorteio de 2 projetos), votos e configuração.
+// Reflexão: comandos do Doc (abrir parada, votação, revelar os 2 mais votados), votos e configuração.
 app.post('/api/admin/reflexao', wrap(req => {
-  const a = req.body || {}, live = ['open', 'menu', 'start', 'pause', 'end', 'reset', 'draw', 'swap', 'showDraw', 'fake'];
+  const a = req.body || {}, live = ['open', 'menu', 'start', 'pause', 'end', 'reset', 'reveal', 'showTop', 'fake'];
   if (live.includes(a.action) && !reflexaoOnAir()) throw Object.assign(new Error('Coloque a Reflexão no ar (no roteiro) antes.'), { status: 409 });
   switch (a.action) {
     case 'open': reflexao.open(a.idx); break;
@@ -256,9 +256,9 @@ app.post('/api/admin/reflexao', wrap(req => {
     case 'pause': reflexao.pause(); break;
     case 'end': reflexao.end(); break;
     case 'reset': reflexao.reset(); break;
-    case 'draw': reflexao.draw(); break;
-    case 'swap': reflexao.swap(a.k); break;
-    case 'showDraw': reflexao.showDraw(!!a.on); break;
+    case 'reveal': reflexao.reveal(); break;
+    case 'showTop': reflexao.showTop(!!a.on); break;
+    case 'counts': reflexao.setCounts(!!a.on); break;
     case 'fake': return { ok: true, added: reflexao.fake(a.n) };
     case 'clear': reflexao.clear(); break;
     case 'clearAll': reflexao.clearAll(); break;
@@ -267,6 +267,12 @@ app.post('/api/admin/reflexao', wrap(req => {
     default: throw Object.assign(new Error('Comando inválido.'), { status: 400 });
   }
   return { ok: true };
+}));
+// Página de extração de dados (/dados.html): tudo o que o evento gerou, em um pedido só.
+app.get('/api/admin/export', wrap(() => {
+  const c = engine.publicState().counts;
+  return { now: Date.now(), event: engine.settings.eventName, counts: c,
+    conexoes: engine.exportConnections(), reflexao: reflexao.exportData(), sucesso: sucesso.ready() ? sucesso.exportData(engine.state.sucessoRoom) : { roomId: null, acts: [] } };
 }));
 app.get('/api/admin/reflexao/votes', wrap(() => ({ votes: reflexao.votes() })));
 app.get('/api/admin/reflexao/votes.csv', (req, res) => res.type('text/csv; charset=utf-8').set('Content-Disposition', 'attachment; filename="Votos_Reflexao.csv"').send(reflexao.votesCsv()));

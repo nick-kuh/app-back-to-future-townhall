@@ -66,6 +66,7 @@ const DEFAULT_SETTINGS = {
   steps: null,            // roteiro do evento (montado no construtor; editável em Preparar → Roteiro)
   stageText: 'Agora a atenção é no palco.',
   stageMutes: true,       // exibir um bloco de fala desliga o som do telão
+  transitions: true,      // transição do filme (alguns segundos) no telão e nos celulares ao trocar de bloco
   musicUrl: '',           // opcional: arquivo de áudio próprio para "Música" (senão, toca a trilha gerada no navegador)
   ambientUrl: '',         // opcional: arquivo de áudio próprio para "Trilha sonora"
   agenda: [
@@ -110,7 +111,7 @@ class Engine {
       detour: saved.detour === 'message' || saved.detour === 'standby' ? saved.detour : null, // tela avulsa fora do roteiro
       returnStep: typeof saved.returnStep === 'string' ? saved.returnStep : null,           // de onde o evento saiu para uma dinâmica do Sucesso
       sucessoRoom: typeof saved.sucessoRoom === 'string' ? saved.sucessoRoom : null,        // sala das dinâmicas do Sucesso (criada sozinha)
-      audio: Object.assign({ mode: 'off', volume: 60, out: 'telao' }, saved.audio || {}), // som: off | music | ambient · sai do telão ou do painel
+      audio: Object.assign({ mode: 'off', volume: 60, out: 'telao', beeps: true }, saved.audio || {}), // som: off | music | ambient · sai do telão ou do painel · bipes do cronômetro
       drawn: saved.drawn && typeof saved.drawn === 'object' ? saved.drawn : {}, // respostas já sorteadas por dinâmica/rodada
     };
     delete this.state.conn.talk; // modelo antigo
@@ -617,6 +618,7 @@ class Engine {
     if (partial.showFormHints !== undefined) s.showFormHints = !!partial.showFormHints;
     for (const k of ['eventName', 'welcomeText', 'closingText', 'standbyText', 'stageText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
     if (partial.stageMutes !== undefined) s.stageMutes = !!partial.stageMutes;
+    if (partial.transitions !== undefined) s.transitions = !!partial.transitions;
     // áudio próprio: só endereços http(s) ou caminhos do próprio site
     for (const k of ['musicUrl', 'ambientUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
     if (partial.steps !== undefined) {
@@ -777,7 +779,8 @@ class Engine {
     const step = this.currentStep();
     return step && step.type === 'stage' ? { title: step.title, theme: step.theme, speaker: step.speaker } : { title: 'Bloco', theme: '', speaker: '' };
   }
-  setAudio({ mode, volume, out } = {}) {
+  setAudio({ mode, volume, out, beeps } = {}) {
+    if (beeps !== undefined) this.state.audio.beeps = !!beeps;
     if (mode !== undefined) { if (!AUDIO_MODES.includes(mode)) throw new Error('Modo de som inválido.'); this.state.audio.mode = mode; }
     if (out !== undefined) this.state.audio.out = out === 'painel' ? 'painel' : 'telao';
     if (volume !== undefined) this.state.audio.volume = Math.max(0, Math.min(100, Math.round(Number(volume) || 0)));
@@ -812,8 +815,8 @@ class Engine {
       presentation: this.presentation(),
       stage: this.stageInfo(),
       step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length },
-      audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
-      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints },
+      audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', beeps: this.state.audio.beeps !== false, musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
+      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false },
       now: now(),
     };
   }
@@ -854,6 +857,37 @@ class Engine {
     const ranking = rk.length ? Object.fromEntries(rk.map(r => [r.round, r.rank])) : null;
     const result = c.phase === 'results' ? this.resultOf(p.id) : null;
     return { person: { ...this.publicPerson(p), checkedInAt: p.checkedInAt }, group, conversations, ranking, result };
+  }
+  // Extração de dados das Conexões: duplas de cada viagem com as perguntas que tiveram, a avaliação
+  // (ranking) de cada pessoa e a conexão sugerida (match) de cada uma.
+  exportConnections() {
+    const c = this.state.conn, played = c.played || 0;
+    const byId = Object.fromEntries(this.listPeople().map(p => [p.id, p]));
+    const who = id => { const p = byId[id]; return p ? { id: p.id, name: p.name, area: p.area, wl: p.wl, team: p.team } : { id, name: '(removido)', area: '', wl: '', team: '' }; };
+    const questions = Object.fromEntries(db.prepare('SELECT id, text, era FROM questions').all().map(q => [q.id, q]));
+    const groups = this.allGroups(), rankings = this.rankingsMap(), code = g => String(g.idx + 1).padStart(2, '0');
+    const results = Object.fromEntries(db.prepare('SELECT * FROM results').all().map(r => [r.person_id, r]));
+    const rounds = [];
+    for (let r = 1; r <= TOTAL_ROUNDS; r++) {
+      const era = eraOfRound(r), talked = r <= played; // a conversa da viagem aconteceu (ou está acontecendo)
+      rounds.push({ round: r, era: { label: era.label, year: era.year }, talked, groups: groups.filter(g => g.round === r).map(g => ({
+        code: code(g), members: g.members.map(who),
+        // fila de perguntas da dupla; "shown" = até onde a dupla chegou durante a conversa
+        questions: g.queue.map((id, i) => ({ text: (questions[id] || {}).text || '(pergunta removida)', era: (questions[id] || {}).era || '', shown: talked && i <= g.position })),
+      })) });
+    }
+    const ids = [...new Set(groups.filter(g => g.round <= played).flatMap(g => g.members))];
+    const people = ids.map(who).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).map(p => {
+      const conversations = [];
+      for (let r = 1; r <= played; r++) {
+        const g = groups.find(x => x.round === r && x.members.includes(p.id)); if (!g) continue;
+        const mine = (rankings[p.id] || {})[r] || null;
+        for (const id of g.members) if (id !== p.id) { const theirs = (rankings[id] || {})[r] || null; conversations.push({ round: r, year: eraOfRound(r).year, code: code(g), partner: who(id), gave: mine, got: theirs, points: (POINTS[mine] || 0) + (POINTS[theirs] || 0) }); }
+      }
+      const res = results[p.id];
+      return { ...p, ranked: !!rankings[p.id], conversations, match: res && res.match_id ? who(res.match_id) : null, score: res ? res.score : null, mutual: !!(res && res.mutual), hasResult: !!res };
+    });
+    return { phase: c.phase, played, totalRounds: TOTAL_ROUNDS, rounds, people };
   }
   adminOverview() {
     const c = this.state.conn;

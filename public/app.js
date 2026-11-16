@@ -70,12 +70,13 @@
     } catch { S.lock = null; }
   }
   function flashSky() { const f = $('#skyFlash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); }
-  function warp(msg, cb) {
+  // Viagem no tempo: o velocímetro sobe até 88 MPH em "ms" (pelo relógio, para durar o mesmo em qualquer celular) e vem o clarão.
+  function warp(msg, cb, ms = 950) {
     const w = $('#warp'); $('#warpMsg').textContent = msg || 'ACELERANDO...';
     w.classList.remove('go'); w.classList.add('on'); w.setAttribute('aria-hidden', 'false');
-    let v = 0; clearInterval(warp._t);
+    const t0 = performance.now(); clearInterval(warp._t);
     warp._t = setInterval(() => {
-      v = Math.min(88, v + 4); $('#warpSpeed').textContent = v;
+      const v = Math.min(88, Math.round(88 * (performance.now() - t0) / ms)); $('#warpSpeed').textContent = v;
       if (v >= 88) {
         clearInterval(warp._t); void w.offsetWidth; w.classList.add('go'); buzz([60, 40, 120]);
         setTimeout(() => { cb && cb(); }, 320);
@@ -144,8 +145,8 @@
     }
     const rf = currentReflexao();
     if (rf) {
-      const c = rf.cur, mine = (S.me.reflexao && S.me.reflexao.votes) || [], d = c && c.draw;
-      return ['reflexao', rf.open === null ? 'menu' : rf.open, c ? rfPhase(c) : '', mine.filter(Boolean).length, d ? `${d.at}:${d.swap ? d.swap.at : ''}` : '', rf.rev, S.rfSending ? 'env' : '', S.rfProjects ? 'lista' : ''].join('|');
+      const c = rf.cur, mine = (S.me.reflexao && S.me.reflexao.votes) || [], d = c && c.top;
+      return ['reflexao', rf.open === null ? 'menu' : rf.open, c ? rfPhase(c) : '', mine.filter(Boolean).length, d ? `${d.at}:${rfShown(d) ? 'ok' : 'suspense'}:${d.items.map(v => v.votes).join()}` : '', rf.rev, S.rfSending ? 'env' : '', S.rfProjects ? 'lista' : ''].join('|');
     }
     if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}`;
     const c = S.state.conn, g = S.me && S.me.group, t = c.timer;
@@ -153,31 +154,52 @@
     let h = 0; for (let i = 0; i < content.length; i++) h = (h * 31 + content.charCodeAt(i)) >>> 0;
     return ['app', S.state.block, c.phase, c.round, '', g ? g.id : '', g && g.missing ? 'miss' : '', S.me && S.me.ranking ? 'ranked' : '', S.editing ? 'edit' : '', S.me && S.me.result ? 'res' : '', h].join('|');
   }
+  // O bloco que está no ar para este celular (depois do login). Quando ele muda, entra a transição
+  // do filme: o velocímetro sobe até 88 MPH com o destino escrito embaixo. Avisos e "olhos no telão" entram direto.
+  function blockNow() {
+    if (S.screen !== 'app' || !S.me || !S.state) return null;
+    const st = S.state, pr = currentPresentation(), i = st.step ? st.step.index : 0;
+    if (pr) return { id: 'sucesso:' + pr.activityId, msg: `DESTINO: ${pr.title}` };
+    if (st.reflexao) return { id: 'reflexao', msg: 'ABASTECENDO: 1,21 GIGAWATTS' };
+    switch (st.block) {
+      case 'stage': return { id: 'stage:' + i, msg: `PRÓXIMA PARADA: ${(st.stage && st.stage.title) || 'BLOCO'}` };
+      case 'connections': return { id: 'connections', msg: 'RUMO ÀS CONEXÕES' };
+      case 'closing': return { id: 'closing', msg: 'FIM DA VIAGEM · CONTINUA…' };
+      case 'message': return { id: 'message' };
+      case 'standby': return { id: 'standby' };
+      default: return { id: 'welcome', msg: 'CIRCUITOS DE TEMPO LIGADOS' };
+    }
+  }
   function maybeRender(force) {
     const k = viewKey();
     if (!force && k === S.lastKey) { patch(); return; }
     const prev = S.lastKey; S.lastKey = k;
     const p = prev.split('|'), n = k.split('|');
+    const blk = blockNow(), moved = !!(prev && blk && blk.msg && S.blk && S.blk !== blk.id && S.state.settings.transitions !== false);
+    S.blk = blk ? blk.id : null;
+    // a transição de bloco não é interrompida por atualizações que chegam logo em seguida: a tela nova entra por baixo
+    const show = () => { if (!moved) return render(); warp._hold = true; warp(blk.msg.toUpperCase(), () => { warp._hold = false; render(); }, 1500); };
+    const stopWarp = () => { if (warp._hold) return; clearInterval(warp._t); $('#warp').classList.remove('on', 'go'); };
     S.jump = !prev || p.slice(0, 4).join('|') !== n.slice(0, 4).join('|');
     if (n[0] === 'presentation' || p[0] === 'presentation') {
-      clearInterval(warp._t); $('#warp').classList.remove('on', 'go');
+      stopWarp();
       if (n[0] === 'presentation' && (p[0] !== 'presentation' || p[2] !== n[2] || p[4] !== n[4])) { S.another = false; S.anon = false; if (p[0] === 'presentation') { S.answerDraft = ''; S.pendingAnswer = null; } }
       if (prev && n[0] === 'presentation') {
         if (n[6] === 'eu' && p[6] !== 'eu') { beep('result'); buzz([120, 60, 120, 60, 240]); flashSky(); }            // fui sorteado(a)
         else if (p[0] !== 'presentation' || (n[3] === 'run' && p[3] !== 'run')) { beep('ok'); buzz([80, 40, 160]); flashSky(); } // dinâmica liberada / recebimento aberto
         else if (n[3] === 'done' && p[3] === 'run') { beep('end'); buzz(120); }
       }
-      return render();
+      return show();
     }
     if (n[0] === 'reflexao' || p[0] === 'reflexao') {
-      clearInterval(warp._t); $('#warp').classList.remove('on', 'go');
+      stopWarp();
       if (n[0] === 'reflexao') {
         if (p[0] !== 'reflexao' || p[1] !== n[1]) { S.rfPick = null; S.rfQ = ''; }                                                    // outra parada: escolha nova
-        if (prev && n[4] && p[4] !== n[4]) { beep('result'); buzz([120, 60, 120]); flashSky(); }                                       // projetos sorteados
+        if (prev && n[4].includes(':ok:') && !p[4].includes(':ok:')) { beep('result'); buzz([120, 60, 120]); flashSky(); }           // mais votados revelados
         else if (prev && (p[0] !== 'reflexao' || p[1] !== n[1] || (n[2] === 'run' && p[2] !== 'run'))) { beep('ok'); buzz([80, 40, 160]); flashSky(); } // parada aberta / votação aberta
         else if (prev && n[2] === 'done' && p[2] === 'run') { beep('end'); buzz(120); }
       }
-      return render();
+      return show();
     }
     const enteringPhase = ph => n[0] === 'app' && n[1] === 'connections' && n[2] === ph && !(p[1] === 'connections' && p[2] === ph && p[3] === n[3]);
     const quiet = b => b === 'standby' || b === 'stage'; // telas calmas: ao sair delas, o celular chama a atenção
@@ -187,7 +209,7 @@
     if (prev && enteringPhase('results')) { beep('result'); buzz([120, 60, 120, 60, 240]); return warp('CALCULANDO CONEXÕES...', render); }
     if (prev && enteringPhase('talk')) { beep('ok'); buzz(90); flashSky(); }
     if (prev && enteringPhase('roundEnd')) { beep('end'); buzz([200, 80, 200]); }
-    render();
+    show();
   }
   function render() {
     const app = $('#app');
@@ -305,6 +327,7 @@
    * Menu das paradas e, com uma parada aberta, a votação: a pessoa escolhe 1 projeto da lista
    * (com busca) e envia. O nome é o do check-in; vale um voto por parada. */
   const rfPhase = c => (c.phase === 'run' && c.endsAt && c.endsAt <= serverNow() ? 'done' : c.phase);
+  const rfShown = top => serverNow() - top.at > 6200; // o telão faz o suspense primeiro: o celular só mostra os nomes depois
   const rfNorm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   async function loadProjects(rev) {
     if (S.rfRev === rev) return; S.rfRev = rev;
@@ -325,12 +348,14 @@
         <div class="panel"><div class="rf-list">${r.themes.map((t, i) => `<div class="rf-item ${mine[i] ? 'ok' : ''}" style="--c:${t.c}"><b>${t.n}</b><span>${esc(t.t)}<small>${mine[i] ? '✓ ' + esc(mine[i].project) : esc(t.q)}</small></span></div>`).join('')}</div>
         <p class="muted center" style="margin-top:12px">Aguarde: o Doc vai abrir a próxima parada.</p></div>`;
     }
-    const c = r.cur, t = r.themes[r.open], ph = rfPhase(c), my = mine[r.open], d = c.draw;
+    const c = r.cur, t = r.themes[r.open], ph = rfPhase(c), my = mine[r.open], d = c.top;
     const timer = '<span class="suc-timer">⏱ <b id="rfTimer">--:--</b></span>';
     const myVote = my ? `<div class="panel"><div class="kicker">Seu voto nesta parada</div><p class="myans">${esc(my.project)}</p><p class="small">${esc(my.owner)}</p></div>` : '';
     let body;
-    if (d) {
-      body = `<div class="panel glow"><div class="kicker">Projetos sorteados</div>${d.items.map((v, k) => `<div class="rf-drawn"><small>PROJETO SORTEADO · 0${k + 1}</small><b>${esc(v.name)}</b><span>${esc(v.owner)}</span></div>`).join('')}<p class="muted center" style="margin-top:12px">Olhos no telão. 👀</p></div>${myVote}`;
+    if (d && !rfShown(d)) {
+      body = `<div class="panel glow msgbox"><div class="e">🥁</div><h2>E os mais votados são…</h2><p>Olhos no telão. 👀</p></div>${myVote}`;
+    } else if (d) {
+      body = `<div class="panel glow"><div class="kicker">Projetos mais votados</div>${d.items.map((v, k) => `<div class="rf-drawn"><small>${k + 1}º MAIS VOTADO${v.votes === undefined ? '' : ` · ${v.votes} ${v.votes === 1 ? 'VOTO' : 'VOTOS'}`}</small><b>${esc(v.name)}</b><span>${esc(v.owner)}</span></div>`).join('')}</div>${myVote}`;
     } else if (ph === 'run' && !my) {
       body = `<div class="panel">
           <div class="who">Votando como <b>${esc(me.name)}</b></div>

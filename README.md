@@ -69,18 +69,54 @@ Em cada parada:
    projeto ou responsável). O voto usa o nome do check-in e vale um por parada.
 3. A cada voto o **Flux Capacitor 3D** do telão carrega (15 votos = 100% da parada) e aparece
    "Fulano votou ⚡" (só o nome, não o projeto escolhido).
-4. **Encerrar votação** (ou o tempo acaba sozinho) e **🎲 Sortear 2 projetos** entre os que receberam
-   voto: o telão gira a roleta e mostra cada projeto com o **responsável**. Dá para trocar um dos
-   dois ou sortear de novo (sem repetir projeto já sorteado na parada).
+4. **Encerrar votação** (ou o tempo acaba sozinho) e **🏆 Revelar os 2 mais votados**. O telão faz o
+   suspense ("E os mais votados são…", com a roleta de nomes): primeiro aparece o 2º mais votado e,
+   por último, o 1º, cada um com o **responsável**. Os celulares só mostram os nomes depois do telão.
+   - **Nunca saem dois projetos do mesmo responsável**: se o 2º mais votado for de quem já está no 1º
+     lugar, ele dá lugar ao seguinte. Projetos com vários responsáveis (`Fulano / Beltrano`) contam
+     para cada um deles. Empate: fica na frente quem chegou primeiro àquela quantidade de votos.
+   - **A quantidade de votos não aparece** no telão nem nos celulares (só no painel do Doc). Se quiser
+     mostrar, o botão "Mostrar nº de votos no telão" liga isso na hora.
 5. **Próxima parada ▶**. O menu das paradas mostra os votos de cada uma e a energia total.
 
 No painel, em "Mais opções": **votos de teste** (para ensaiar sem os celulares; saem marcados como
-"teste"), ver os votos, **exportar .csv** (Tema; Nome; Responsável; Projeto; Data/Hora), reiniciar a
-votação e limpar. Sair da Reflexão no meio de uma votação a deixa pausada.
+"teste"), ver os votos, **exportar .csv**, reiniciar a votação e limpar. "Ver a contagem de todos os
+projetos" mostra quem ficou em 1º e 2º e quem foi pulado por ter o mesmo responsável. Sair da
+Reflexão no meio de uma votação a deixa pausada.
 
 Em **Preparar → Reflexão** dá para mudar o título, o tempo de votação, as paradas e a lista de
 projetos (um por linha: `projeto | responsável`). O código está em `server/reflexao.js` (regras e
 dados) e `public/flux.js` (o Flux Capacitor 3D do protótipo).
+
+## 📊 Dados do evento (extração)
+
+A página **`/dados.html`** (mesma senha do Painel do Doc; há um atalho em Preparar e no passo de
+Encerramento) reúne o que o evento gerou, em três abas, cada tabela com download em **.csv** (abre
+direto no Excel):
+
+| Aba | O que mostra | Arquivos |
+|---|---|---|
+| ⚡ Conexões | as duplas de cada viagem com as **perguntas que cada dupla teve**; o **ranking de cada pessoa** (posição que deu e que recebeu em cada conversa, pontos somados); o **match de cada pessoa** (conexão sugerida, pontos, se foi mútua) | `Conexoes_Duplas_e_Perguntas.csv`, `Conexoes_Ranking.csv`, `Conexoes_Matches.csv` |
+| 💭 Reflexão | por parada: contagem de votos de cada projeto, quem ficou em 1º e 2º (e quem foi pulado por ter o mesmo responsável) e quem votou em quê | `Reflexao_Resultado.csv`, `Reflexao_Votos.csv` |
+| 🚀 Sucesso | as **respostas de cada pergunta** (nome, resposta, hora) | `Sucesso_Respostas.csv` (todas) ou uma pergunta por vez |
+
+No plano gratuito do Render os dados somem quando o servidor reinicia: **baixe os arquivos logo
+depois do evento**.
+
+## ⏱ Bipes dos cronômetros e 🎬 transições
+
+- **Bipes.** Em todos os cronômetros (encontro, conversa e avaliação das Conexões; recebimento e tempo
+  de fala do Sucesso; votação da Reflexão) toca um "pi" quando faltam **30 segundos** e um **a cada
+  segundo nos últimos 10** (mais agudo nos 3 finais), além do sinal de tempo esgotado. O som sai do
+  telão (ou do painel, se o som estiver nele) e segue o volume do painel. O botão **⏱ Bipes** no topo
+  do painel liga e desliga; eles tocam mesmo com "Sem áudio". É preciso um clique na tela do telão
+  para o navegador liberar o som (o painel avisa quando falta).
+- **Transições.** Ao trocar de bloco, o telão mostra por alguns segundos uma "viagem no tempo": os
+  circuitos de tempo (LAST TIME DEPARTED = de onde saímos, DESTINATION TIME = para onde vamos), uma
+  fala do filme e um mostrador que muda conforme o destino (88 MPH com rastros de fogo para Conexões
+  e Sucesso, 1,21 gigawatts para a Reflexão, o relógio da torre às 10:04 para os blocos de fala,
+  "CONTINUA…" no encerramento), terminando no raio. Nos celulares, o velocímetro sobe até 88 MPH com
+  o destino escrito. Dá para desligar em Preparar → Ajustes.
 
 ## 🎤 Blocos do evento, telão calmo e som
 
@@ -150,6 +186,7 @@ entre dispositivos). O servidor usa WebSocket (Socket.IO) para avisar os celular
 | `/` | viajantes (celular) | check-in pelo nome, blocos, viagens, avaliação, resultado |
 | `/telao.html` | projetor | QR do check-in, circuitos de tempo, cronômetros gigantes, 88 MPH, avaliação, conexões, créditos; modos "relógio", "logo" e "frases" para servir de fundo durante PPT ou fala |
 | `/admin.html` | apresentador (notebook) | Painel do Doc: roteiro do evento (Ao vivo) e preparação |
+| `/dados.html` | apresentador | Extração de dados: Conexões, Reflexão e Sucesso em tabelas, com download em .csv |
 | `/painel` | apresentador | painel 3D do De Volta para o Sucesso (mesma senha) |
 | `/participar/<sala>` | participantes | formulário de resposta das dinâmicas (sem login) |
 | `/ao-vivo` | todos | página de entrada do De Volta para o Sucesso |
@@ -180,7 +217,7 @@ O que cada passo faz:
 | Check-in | cada pessoa digita o nome e embarca | QR do app + carro carregando | acompanha quem falta |
 | Bloco de fala | nome e tema do bloco | modo calmo, só o tema | nada (som desliga sozinho) |
 | Conexões | dupla, perguntas, avaliação e resultado | cronômetros e "88 MPH" | **Iniciar viagens**; o resto anda sozinho |
-| Reflexão | escolher 1 projeto por parada | menu das paradas, Flux Capacitor, 2 projetos sorteados | **Abrir parada**, **Iniciar / Encerrar votação**, **Sortear 2 projetos**, **Próxima parada** |
+| Reflexão | escolher 1 projeto por parada | menu das paradas, Flux Capacitor, os 2 mais votados (com suspense) | **Abrir parada**, **Iniciar / Encerrar votação**, **Revelar os 2 mais votados**, **Próxima parada** |
 | Sucesso 01–04 | pergunta e resposta, com o nome do check-in | carro carregando; nuvem só ao revelar; sorteio | **Iniciar / Encerrar recebimento**, **Revelar respostas**, **Sortear**, tempo de fala |
 | Aviso / intervalo | o aviso | o aviso | nada |
 | Encerramento | agradecimento e a conexão de cada um | créditos com todos os nomes | baixar as respostas |
@@ -231,7 +268,8 @@ server/results.js    ranking → conexões
 server/db.js         SQLite (node:sqlite) e esquema
 server/seed/         lista de pessoas e banco de perguntas iniciais
 server/sucesso.js    ponte com o De Volta para o Sucesso (API do Lucas sem alterações, login do Doc)
-server/reflexao.js   bloco Reflexão: paradas, projetos, votos, cronômetro e sorteio de 2 projetos
+server/reflexao.js   bloco Reflexão: paradas, projetos, votos, cronômetro e os 2 mais votados
+public/dados.*       página de extração de dados (Conexões, Reflexão, Sucesso) com download em .csv
 public/              app do viajante (index.html, app.*), telão (telao.*), Painel do Doc (admin.*)
 public/delorean3d.js motor 3D (céu, estrada, raios, portal) extraído do painel do Sucesso
 public/delorean-model.js  DeLorean realista (Three.js) · public/nuvem.js  nuvem de palavras

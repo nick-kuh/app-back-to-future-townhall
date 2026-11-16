@@ -117,6 +117,14 @@ function createSucesso({ dbPath, adminPassword }) {
     for (const [k, def] of Object.entries(mod.DEFINITIONS)) acts[k] = { ...live({ roomId, activityId: k }), title: def.title, question: def.question };
     return { roomId, acts };
   }
+  // Extração de dados: todas as respostas de cada dinâmica da sala do evento
+  function exportData(roomId) {
+    if (!mod || !roomExists(roomId)) return { roomId: null, acts: [] };
+    return { roomId, acts: Object.entries(mod.DEFINITIONS).map(([k, def]) => {
+      const setting = { roomId, activityId: k }, l = live(setting) || {};
+      return { id: k, title: def.title, question: def.question, phase: l.phase || null, responses: responses(setting).map(r => ({ name: r.name, answer: r.answer, at: r.createdAt })) };
+    }) };
+  }
   const mine = (setting, personId) => responses(setting).filter(r => r.personId === personId).map(r => ({ id: r.id, answer: r.answer, anonymous: r.name === 'Anônimo' }));
   // Resposta enviada pelo app: passa pela API original (fase, prazo, limite de 200 caracteres,
   // 2 s entre envios, reenvio sem duplicar), com o nome do check-in.
@@ -211,7 +219,7 @@ function createSucesso({ dbPath, adminPassword }) {
 
   return {
     init, mount, prepare, storePresentation, publicPresentation,
-    live, responses, mine, answer, roomExists, latestRoom, createRoom, clearRoom, overview,
+    live, responses, mine, answer, roomExists, latestRoom, createRoom, clearRoom, overview, exportData,
     hasCookie, setCookie, clearCookie,
     onChange: fn => listeners.push(fn),
     ready: () => !!mod,

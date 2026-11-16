@@ -148,7 +148,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await step(of('reflexao')); st = await state();
     assert.equal(st.block, 'reflexao'); assert.equal(st.reflexao.open, null); assert.equal(st.reflexao.themes.length, 6); assert.equal(st.conn.timer.paused, true);
     r = await call('GET', '/api/reflexao/projects', undefined, { auth: false }); assert.equal(r.json.projects.length, 36);
-    const projects = r.json.projects.map(x => x.name);
+    const projects = r.json.projects.map(x => x.name), ownerOf = Object.fromEntries(r.json.projects.map(x => [x.name, x.owner]));
     r = await rf({ action: 'open', idx: 0 }); assert.equal(r.status, 200);
     r = await vote(tokens[0], projects[0]); assert.equal(r.status, 409);                           // votação ainda não começou
     r = await rf({ action: 'start' }); st = await state(); assert.equal(st.reflexao.cur.phase, 'run'); assert.ok(st.reflexao.cur.endsAt > Date.now());
@@ -157,32 +157,54 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await vote('token-invalido', projects[1]); assert.equal(r.status, 401);
     r = await vote(tokens[1], 'Projeto que não existe'); assert.equal(r.status, 400);
     r = await vote(tokens[1], projects[1]); assert.equal(r.status, 200);
-    r = await rf({ action: 'draw' }); assert.equal(r.status, 409);                                 // sorteio só depois de encerrar
+    r = await rf({ action: 'reveal' }); assert.equal(r.status, 409);                               // os mais votados só depois de encerrar
     // sair da Reflexão pausa a votação; ao voltar, o Doc retoma
     r = await step(steps[1].id); st = await state(); assert.equal(st.reflexao, null);
     ov = (await call('GET', '/api/admin/overview')).json; assert.equal(ov.reflexao.paradas[0].phase, 'paused');
     r = await vote(tokens[2], projects[2]); assert.equal(r.status, 409);                           // fora do ar
     r = await step(of('reflexao')); st = await state(); assert.equal(st.reflexao.cur.phase, 'paused');
     r = await rf({ action: 'start' }); r = await vote(tokens[2], projects[2]); assert.equal(r.status, 200);
-    r = await rf({ action: 'end' }); st = await state(); assert.equal(st.reflexao.cur.phase, 'done'); assert.equal(st.reflexao.cur.votes, 3); assert.equal(st.reflexao.cur.draw, null);
-    r = await vote(tokens[3], projects[3]); assert.equal(r.status, 409);                           // votação encerrada
-    r = await rf({ action: 'draw' }); assert.equal(r.status, 200); st = await state();
-    const drawn = st.reflexao.cur.draw.items; assert.equal(drawn.length, 2); assert.notEqual(drawn[0].name, drawn[1].name);
-    assert.ok(drawn.every(x => projects.slice(0, 3).includes(x.name) && x.owner)); assert.equal(st.reflexao.themes[0].drawn, true);
-    r = await rf({ action: 'swap', k: 0 }); assert.equal(r.status, 200); st = await state();
-    assert.deepEqual([...drawn.map(x => x.name), st.reflexao.cur.draw.items[0].name].sort(), projects.slice(0, 3).sort());   // o terceiro projeto votado entrou
-    r = await rf({ action: 'swap', k: 1 }); assert.equal(r.status, 409);                           // não há mais projetos votados
-    r = await rf({ action: 'draw' }); assert.equal(r.status, 409);
+    // os 2 mais votados, sem repetir responsável: projetos[3] e [4] são da mesma pessoa; o [4] fica de fora e entra o seguinte
+    assert.equal(ownerOf[projects[3]], ownerOf[projects[4]]); assert.notEqual(ownerOf[projects[3]], ownerOf[projects[5]]);
+    for (const [i, proj] of [[3, 3], [4, 3], [5, 3], [6, 4], [7, 4]]) { r = await vote(tokens[i], projects[proj]); assert.equal(r.status, 200, JSON.stringify(r.json)); }
+    r = await rf({ action: 'end' }); st = await state(); assert.equal(st.reflexao.cur.phase, 'done'); assert.equal(st.reflexao.cur.votes, 8); assert.equal(st.reflexao.cur.top, null);
+    r = await vote(tokens[0], projects[3]); assert.equal(r.status, 409); assert.match(r.json.error, /encerrada/);   // votação encerrada
+    // votos: [3] × 3 (Papucci), [4] × 2 (Papucci), [0], [1], [2] × 1 → 1º = [3]; 2º = [0], o primeiro dos empatados com outro responsável
+    r = await rf({ action: 'reveal' }); assert.equal(r.status, 200); st = await state();
+    assert.deepEqual(st.reflexao.cur.top.items, [{ name: projects[3], owner: ownerOf[projects[3]] }, { name: projects[0], owner: ownerOf[projects[0]] }]);   // sem a quantidade de votos
+    assert.ok(Date.now() - st.reflexao.cur.top.at < 3000); assert.equal(st.reflexao.themes[0].revealed, true);
+    ov = (await call('GET', '/api/admin/overview')).json;
+    assert.deepEqual(ov.reflexao.paradas[0].tally.slice(0, 3).map(x => [x.p, x.n, x.pick, x.skip]), [[projects[3], 3, 1, false], [projects[4], 2, 0, true], [projects[0], 1, 2, false]]);
+    assert.deepEqual(ov.reflexao.paradas[0].top.map(x => x.n), [3, 1]);                             // o Doc vê a quantidade
+    r = await rf({ action: 'counts', on: true }); st = await state(); assert.deepEqual(st.reflexao.cur.top.items.map(x => x.votes), [3, 1]);   // e pode mostrar no telão
+    r = await rf({ action: 'counts', on: false }); st = await state(); assert.equal(st.reflexao.cur.top.items[0].votes, undefined);
+    r = await rf({ action: 'showTop', on: false }); st = await state(); assert.equal(st.reflexao.cur.top, null);
+    r = await rf({ action: 'reveal' }); st = await state(); assert.equal(st.reflexao.cur.top.items.length, 2);               // revelar de novo repete o suspense
+    r = await rf({ action: 'draw' }); assert.equal(r.status, 400);                                 // o sorteio não existe mais
     r = await rf({ action: 'fake', n: 4 }); assert.equal(r.status, 409);                           // votação encerrada: nem voto de teste entra
     r = await rf({ action: 'open', idx: 1 }); r = await rf({ action: 'fake', n: 4 }); assert.equal(r.json.added, 4);          // modo ensaio abre a votação e vota
-    st = await state(); assert.equal(st.reflexao.cur.idx, 1); assert.equal(st.reflexao.cur.phase, 'run'); assert.equal(st.reflexao.cur.votes, 4); assert.equal(st.reflexao.votes, 7);
+    st = await state(); assert.equal(st.reflexao.cur.idx, 1); assert.equal(st.reflexao.cur.phase, 'run'); assert.equal(st.reflexao.cur.votes, 4); assert.equal(st.reflexao.votes, 12);
     r = await fetch(B + '/api/admin/reflexao/votes.csv', { headers: { cookie } }); assert.equal(r.status, 200);
-    const csv = await r.text(); assert.ok(csv.includes(projects[0]) && csv.includes(people[0].name) && csv.includes('(teste)')); assert.equal(csv.trim().split('\r\n').length, 8);
+    const csv = await r.text(); assert.ok(csv.includes(projects[0]) && csv.includes(people[0].name) && csv.includes('(teste)')); assert.equal(csv.trim().split('\r\n').length, 13);
     r = await call('GET', '/api/admin/reflexao/votes.csv', undefined, { auth: false }); assert.equal(r.status, 401);
     r = await rf({ action: 'config', config: { projects: [{ name: 'Só um' }] } }); assert.equal(r.status, 400);
     r = await rf({ action: 'config', config: { voteSeconds: 45 } }); assert.equal(r.status, 200);
     ov = (await call('GET', '/api/admin/overview')).json;
-    assert.equal(ov.reflexao.config.voteSeconds, 45); assert.equal(ov.reflexao.paradas[2].remaining, 45); assert.equal(ov.reflexao.paradas[0].votes, 3); assert.equal(ov.reflexao.paradas[1].phase, 'paused');
+    assert.equal(ov.reflexao.config.voteSeconds, 45); assert.equal(ov.reflexao.paradas[2].remaining, 45); assert.equal(ov.reflexao.paradas[0].votes, 8); assert.equal(ov.reflexao.paradas[1].phase, 'paused');
+    // extração de dados: conexões (duplas, perguntas, ranking, match), reflexão (votos e resultado) e sucesso (respostas por pergunta)
+    r = await call('GET', '/api/admin/export', undefined, { auth: false }); assert.equal(r.status, 401);
+    const ex = (await call('GET', '/api/admin/export')).json;
+    assert.equal(ex.conexoes.rounds.length, 3); assert.ok(ex.conexoes.rounds[0].groups.length >= 4);
+    const g0 = ex.conexoes.rounds[0].groups[0]; assert.ok(g0.code && g0.members.length >= 2 && g0.members[0].name && g0.questions.length > 0 && typeof g0.questions[0].text === 'string');
+    assert.ok(ex.conexoes.rounds[0].talked ? g0.questions[0].shown : !g0.questions[0].shown);     // a dupla só "teve" perguntas se a conversa aconteceu
+    assert.deepEqual(ex.reflexao.paradas[0].top.map(x => [x.project, x.votes]), [[projects[3], 3], [projects[0], 1]]);
+    assert.equal(ex.reflexao.paradas[0].votes.length, 8); assert.equal(ex.reflexao.paradas[0].tally[1].skipped, true); assert.equal(ex.reflexao.paradas[1].votes.every(v => v.test), true);
+    const d3 = ex.sucesso.acts.find(a => a.id === 'd3'); assert.equal(d3.question.length > 10, true); assert.deepEqual(d3.responses.map(x => x.name).sort(), [people[0].name, people[1].name, 'Visitante'].sort()); assert.ok(d3.responses[0].answer && d3.responses[0].at);
+    // bipes do cronômetro e transições: ligados por padrão, o Doc pode desligar
+    st = await state(); assert.equal(st.audio.beeps, true); assert.equal(st.settings.transitions, true);
+    r = await call('POST', '/api/admin/action', { type: 'setAudio', beeps: false }); r = await call('POST', '/api/admin/action', { type: 'settings', settings: { transitions: false } });
+    st = await state(); assert.equal(st.audio.beeps, false); assert.equal(st.settings.transitions, false);
+    r = await call('POST', '/api/admin/action', { type: 'setAudio', beeps: true }); r = await call('POST', '/api/admin/action', { type: 'settings', settings: { transitions: true } });
     r = await step(of('connections')); st = await state(); assert.equal(st.block, 'connections'); assert.equal(st.reflexao, null);
     // passo do Sucesso: a dinâmica entra no ar na sala do evento; tela avulsa tira; voltar ao roteiro recoloca
     r = await step(of('sucesso', 'd1')); assert.equal(r.status, 200);
@@ -205,7 +227,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     await new Promise(done => setTimeout(done, 400));
     ov = (await call('GET', '/api/admin/overview')).json;
     assert.equal(ov.counts.checkedIn, 0); assert.equal(ov.state.block, 'welcome'); assert.equal(ov.sucesso.acts.d3.responseCount, 0); assert.equal(ov.sucesso.acts.d4.responseCount, 0);
-    assert.equal(ov.reflexao.open, null); assert.ok(ov.reflexao.paradas.every(p => p.votes === 0 && p.phase === 'idle' && !p.drawn.length));   // os votos da Reflexão também
+    assert.equal(ov.reflexao.open, null); assert.ok(ov.reflexao.paradas.every(p => p.votes === 0 && p.phase === 'idle' && !p.top.length));   // os votos da Reflexão também
     console.log('OK · townhall + De Volta para o Sucesso + Reflexão integrados');
   } catch (e) {
     console.error('FALHOU:', e); process.exitCode = 1;

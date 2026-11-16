@@ -4,10 +4,12 @@
  *   "ambient" → trilha de fundo calma (pads, arpejo com eco e sinos)
  * Se o Doc informar um arquivo de áudio próprio (URL) para um dos modos, ele toca no lugar.
  *
- *   Trilha.apply({ mode: 'off' | 'music' | 'ambient', volume: 0..100, musicUrl, ambientUrl })
+ *   Trilha.apply({ mode: 'off' | 'music' | 'ambient', volume: 0..100, musicUrl, ambientUrl, beeps: true|false })
  *   Trilha.unlock()   chamar num clique/tecla: os navegadores só liberam som depois de um gesto
  *   Trilha.locked     true quando há som pedido mas o navegador ainda não liberou
- *   Trilha.sfx('blip' | 'reveal' | 'timeup')   efeitos curtos (só tocam se o som estiver ligado)
+ *   Trilha.sfx('blip' | 'reveal' | 'roll' | 'warp')   efeitos curtos (só tocam se a música ou a trilha estiver ligada)
+ *   Trilha.countdown(id, ms)         bipes do cronômetro: um "pi" aos 30 s e um por segundo nos últimos 10 s
+ *                                    (tocam com "beeps" ligado, mesmo no modo "sem áudio")
  */
 (function () {
   'use strict';
@@ -146,7 +148,8 @@
 
   /* ---------- motor em tempo real ---------- */
   let ctx = null, io = null, playing = null, timer = null;
-  let want = { mode: 'off', volume: 60, musicUrl: '', ambientUrl: '' };
+  let want = { mode: 'off', volume: 60, musicUrl: '', ambientUrl: '', beeps: false };
+  const needsAudio = () => want.mode !== 'off' || want.beeps; // os bipes do cronômetro tocam mesmo sem música
   const volumeGain = () => Math.pow(Math.max(0, Math.min(100, want.volume)) / 100, 1.6) * .95;
   function ensure() {
     if (ctx || !AC) return ctx;
@@ -181,29 +184,69 @@
     return p;
   }
   function sync() {
-    if (want.mode === 'off') { stopCurrent(); notify(); return; }
+    const wake = () => { if (!ensure()) return false; if (ctx.state !== 'running') ctx.resume().catch(() => {}); io.master.gain.setTargetAtTime(volumeGain(), ctx.currentTime, .15); return true; };
+    if (want.mode === 'off') { stopCurrent(); if (want.beeps) wake(); notify(); return; }
     const url = want.mode === 'music' ? want.musicUrl : want.ambientUrl, id = want.mode + '|' + (url || 'synth');
-    if (!url) { if (!ensure()) return; if (ctx.state !== 'running') ctx.resume().catch(() => {}); io.master.gain.setTargetAtTime(volumeGain(), ctx.currentTime, .15); }
+    if (!url || want.beeps) { if (!wake() && !url) return; }
     if (!playing || playing.id !== id) { stopCurrent(); playing = url ? startMedia(id, url) : startSynth(id, want.mode); }
     notify();
   }
+  const ticks = new Map(); // último segundo visto de cada cronômetro
   function beep(f, t, dur, gain, type) { tone(ctx, io.master, { type: type || 'triangle', f, t, dur, gain, attack: .004, release: dur * .6 }); }
   const api = {
-    apply(next) { for (const k of ['mode', 'volume', 'musicUrl', 'ambientUrl']) if (next && next[k] !== undefined) want[k] = next[k]; if (!['off', 'music', 'ambient'].includes(want.mode)) want.mode = 'off'; sync(); },
+    apply(next) { for (const k of ['mode', 'volume', 'musicUrl', 'ambientUrl', 'beeps']) if (next && next[k] !== undefined) want[k] = next[k]; if (!['off', 'music', 'ambient'].includes(want.mode)) want.mode = 'off'; want.beeps = !!want.beeps; sync(); },
     unlock() {
-      if (want.mode === 'off') return;
-      if (playing && playing.el) { if (playing.el.paused) playing.el.play().then(() => { playing.blocked = false; notify(); }).catch(() => {}); return; }
-      if (ensure() && ctx.state !== 'running') ctx.resume().then(notify).catch(() => {});
+      if (!needsAudio()) return;
+      const media = want.mode !== 'off' && playing && playing.el;
+      if (media && playing.el.paused) playing.el.play().then(() => { playing.blocked = false; notify(); }).catch(() => {});
+      if ((!media || want.beeps) && ensure() && ctx.state !== 'running') ctx.resume().then(notify).catch(() => {});
     },
-    get locked() { if (want.mode === 'off') return false; if (playing && playing.el) return !!playing.blocked; return !ctx || ctx.state !== 'running'; },
+    get locked() { if (!needsAudio()) return false; if (want.mode !== 'off' && playing && playing.el) return !!playing.blocked; return !ctx || ctx.state !== 'running'; },
     get mode() { return want.mode; },
     onChange(fn) { listeners.push(fn); },
-    sfx(name) {
-      if (want.mode === 'off' || !ctx || ctx.state !== 'running') return;
-      const t = ctx.currentTime + .02;
+    sfx(name, arg, delay) {
+      if (!ctx || ctx.state !== 'running') return;
+      const clock = name === 'tick' || name === 'tick30' || name === 'timeup';   // sons do cronômetro: seguem o botão "Bipes"
+      if (clock ? !want.beeps : want.mode === 'off') return;
+      const t = ctx.currentTime + .02 + (delay || 0);
       if (name === 'blip') { beep(880, t, .09, .05, 'sine'); beep(1320, t + .07, .12, .04, 'sine'); }
       else if (name === 'reveal') [523, 659, 784, 1047].forEach((f, i) => beep(f, t + i * .11, .22, .09));
       else if (name === 'timeup') { beep(440, t, .35, .12, 'square'); beep(440, t + .5, .35, .12, 'square'); beep(880, t + 1, .6, .12, 'square'); }
+      else if (name === 'tick30') beep(988, t, .28, .13, 'square');                          // "pi" dos 30 segundos
+      else if (name === 'tick') beep(arg <= 3 ? 1319 : 988, t, .13, .13, 'square');          // contagem final: um por segundo, mais agudo nos 3 últimos
+      else if (name === 'roll') { // suspense: rufar que acelera e cresce
+        const dur = Math.max(.5, arg || 3); let at = 0, i = 0;
+        while (at < dur) { const k = at / dur; beep(i % 2 ? 196 : 147, t + at, .07, .04 + .07 * k, 'triangle'); at += .16 - .09 * k; i++; }
+      } else if (name === 'warp') { // viagem no tempo: o motor sobe até 88 mph e o raio estoura
+        const dur = Math.max(.6, arg || 2.4), o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter();
+        o.type = 'sawtooth'; o.frequency.setValueAtTime(65, t); o.frequency.exponentialRampToValueAtTime(880, t + dur);
+        f.type = 'lowpass'; f.Q.value = 2; f.frequency.setValueAtTime(350, t); f.frequency.exponentialRampToValueAtTime(5200, t + dur);
+        g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.06, t + dur * .85); g.gain.exponentialRampToValueAtTime(.0001, t + dur + .12);
+        o.connect(f); f.connect(g); g.connect(io.master); o.start(t); o.stop(t + dur + .2);
+        const n = ctx.createBufferSource(), ng = ctx.createGain(), nf = ctx.createBiquadFilter();
+        n.buffer = io.noise; n.loop = true; nf.type = 'lowpass'; nf.frequency.setValueAtTime(2400, t + dur); nf.frequency.exponentialRampToValueAtTime(110, t + dur + 1.2);
+        ng.gain.setValueAtTime(.0001, t + dur - .03); ng.gain.exponentialRampToValueAtTime(.2, t + dur + .03); ng.gain.exponentialRampToValueAtTime(.0001, t + dur + 1.3);
+        n.connect(nf); nf.connect(ng); ng.connect(io.master); n.start(t + dur - .03); n.stop(t + dur + 1.4);
+      }
+    },
+    // Bipes do cronômetro. Chamar várias vezes por segundo com os milissegundos que faltam (null = parado).
+    // Cada bipe é agendado um instante antes, no relógio do áudio, para cair exatamente na virada do segundo.
+    // Ao abrir a página no meio da contagem, pausar ou ganhar +30 s, recomeça quieto a partir do próximo segundo.
+    countdown(id, ms, opts) {
+      if (ms === null || ms === undefined || Number.isNaN(ms)) { ticks.delete(id); return; }
+      ms = Math.max(0, ms);
+      const sec = Math.ceil(ms / 1000), st = ticks.get(id);
+      if (!st || sec > st.sec) { ticks.set(id, { sec, done: sec }); return; }
+      const wanted = n => n === 30 || (n >= 1 && n <= 10) || (n === 0 && !(opts && opts.end === false));
+      const fire = (n, delay) => api.sfx(n === 30 ? 'tick30' : n === 0 ? 'timeup' : 'tick', n, delay);
+      let done = st.done; // menor segundo já anunciado
+      if (sec < done) { // a página ficou sem rodar e pulou segundos: toca o que importa agora
+        if (done > 30 && sec < 30 && sec >= 27) fire(30, 0); else if (wanted(sec)) fire(sec, 0);
+        done = sec;
+      }
+      const next = sec - 1, wait = ms - next * 1000; // quanto falta para o mostrador virar para "next"
+      if (next >= 0 && next < done && wait <= 260) { if (wanted(next)) fire(next, wait / 1000); done = next; }
+      ticks.set(id, { sec, done });
     },
     get _debug() { return { ctx, io, playing }; },
     // teste: renderiza alguns segundos fora do tempo real e devolve os níveis (pico, RMS por segundo)

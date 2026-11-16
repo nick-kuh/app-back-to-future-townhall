@@ -42,6 +42,7 @@
     // De Volta para o Sucesso em exibição
     responses: null, auth: false, drawAnswer: null, seen: new Set(), roundId: null, liveCount: null, prevPhase: null, endStage: null, endTok: 0,
     cloud: null, drawAt: null, reelT: null, revealed: false, talkDone: null,
+    blk: null, trT: [], trI: null, // transição entre blocos
     // Reflexão em exibição
     fx: null, rf: null, rfProjects: null, rfRev: null, rfTimers: [] };
   // De Volta para o Sucesso: as quatro dinâmicas (mesmas cores do painel do Lucas)
@@ -236,13 +237,12 @@
     if (t && tk) {
       const left = t.endsAt ? Math.max(0, Math.ceil((t.endsAt - serverNow()) / 1000)) : t.remaining;
       tk.textContent = fmt(left); $('#pTalkW').classList.toggle('alert', !!t.endsAt && left > 0 && left <= 30);
-      if (t.endsAt && left === 0 && S.talkDone !== t.endsAt) { S.talkDone = t.endsAt; if (window.Trilha) Trilha.sfx('timeup'); }
     }
   }
 
   /* ---------- Reflexão · Ato 1: O Combustível do Futuro ----------
    * Menu com as paradas (votos e energia de cada uma) e, com uma parada aberta, a pergunta, o Flux
-   * Capacitor carregando a cada voto, o cronômetro da votação e os 2 projetos sorteados. */
+   * Capacitor carregando a cada voto, o cronômetro da votação e, com suspense, os 2 projetos mais votados. */
   const RF_STATUS = { idle: 'AGUARDANDO INÍCIO', run: '● VOTAÇÃO ABERTA', paused: '❚❚ VOTAÇÃO PAUSADA', done: 'VOTAÇÃO ENCERRADA' };
   const clockNow = () => { const d = new Date(serverNow()); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
   const rfPhase = c => (c.phase === 'run' && c.endsAt && c.endsAt <= serverNow() ? 'done' : c.phase);
@@ -257,7 +257,7 @@
         <div class="rfx-tcs"><div class="tcbox" style="--c:var(--yellow)"><b>2026</b><span>LAST TIME DEPARTED</span></div><div class="tcbox" style="--c:var(--cyan)"><b id="rClock">${clockNow()}</b><span>PRESENT TIME</span></div><div class="tcbox" style="--c:var(--orange)"><b>2027</b><span>DESTINATION TIME</span></div></div>
         <h1 class="rfx-title">${esc(r.title.toUpperCase())}</h1>
         <div class="rfx-sub">${esc(r.subtitle.toUpperCase())}</div>
-        <div class="rfx-cards n${r.themes.length}">${r.themes.map((t, i) => `<div class="rcard" data-i="${i}" style="--c:${t.c}"><div class="n">${t.n}</div><div class="tx"><h3>${esc(t.t)}</h3><p>${esc(t.q)}</p><div class="k"></div></div><span class="badge">✓ SORTEADO</span></div>`).join('')}</div>
+        <div class="rfx-cards n${r.themes.length}">${r.themes.map((t, i) => `<div class="rcard" data-i="${i}" style="--c:${t.c}"><div class="n">${t.n}</div><div class="tx"><h3>${esc(t.t)}</h3><p>${esc(t.q)}</p><div class="k"></div></div><span class="badge">✓ REVELADA</span></div>`).join('')}</div>
         <div class="rfx-gbar"><div class="lbl"><span>⚡ FLUX CAPACITOR · ENERGIA TOTAL</span><span id="rGTot"></span></div><div class="ebar"><i id="rGBar"></i></div></div>
       </section>`;
     }
@@ -278,7 +278,7 @@
           <div class="energy"><div class="lbl"><span>⚡ FLUX CAPACITOR</span><span id="rLvl"></span></div><div class="ebar" id="rBarW"><i id="rBar"></i></div></div>
           <div class="rflash" id="rFlash"></div>
           <div class="rdraw" id="rDraw" hidden>
-            <div class="dk">VIAJANTES SORTEADOS</div>
+            <div class="dk" id="rDk">OS PROJETOS MAIS VOTADOS</div>
             <h2>${esc(t.t)}</h2>
             <div class="tcards" id="rCards"></div>
           </div>
@@ -295,23 +295,25 @@
     if (r.cur && window.FluxCapacitor && $('#rFlux')) { S.fx = FluxCapacitor($('#rFlux')); S.fx.setColor(r.themes[r.open].c); S.fx.setEnergy(r.cur.energy); }
     patchReflexao();
   }
-  // roleta de um cartão: nomes de projetos girando até parar no sorteado
-  function spinCard(k, item, ms) {
-    const reel = $('#rReel' + k), owner = $('#rOwner' + k); if (!reel) return;
+  // suspense de um cartão: nomes de projetos girando até parar no mais votado
+  function spinCard(k, item, ms, last) {
+    const reel = $('#rReel' + k), owner = $('#rOwner' + k), card = reel && reel.closest('.tcard'); if (!reel) return;
     const names = S.rfProjects && S.rfProjects.length ? S.rfProjects : ['• • •', '• •', '•'];
     reel.classList.add('spin'); reel.textContent = '???'; owner.textContent = '';
     const iv = setInterval(() => { reel.textContent = names[Math.floor(Math.random() * names.length)]; }, 85);
     S.rfTimers.push(setTimeout(() => {
       clearInterval(iv); if (!reel.isConnected) return;
-      reel.classList.remove('spin'); reel.textContent = item.name; owner.textContent = item.owner;
+      reel.classList.remove('spin'); reel.textContent = item.name; owner.textContent = item.owner; card.classList.add('shown');
       if (S.fx) S.fx.burst(); if (window.Trilha) Trilha.sfx('reveal');
+      if (last) { const f = $('#rFlash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); $('#rDk').textContent = 'OS PROJETOS MAIS VOTADOS'; }
     }, ms), iv);
   }
+  const SUSPENSE = [5600, 3200]; // o 2º mais votado aparece primeiro; o 1º fica para o final
   function patchReflexao() {
     const r = S.state && S.state.reflexao; if (!r) return;
     const gw = e => (e * 1.21).toFixed(2);
     if (r.open === null || !r.cur) { // menu das paradas
-      document.querySelectorAll('.rcard').forEach(el => { const t = r.themes[+el.dataset.i]; if (!t) return; el.querySelector('.k').textContent = `${t.votes} ${t.votes === 1 ? 'voto' : 'votos'} · ${t.gw.toFixed(2)} GW`; el.classList.toggle('done', t.drawn); });
+      document.querySelectorAll('.rcard').forEach(el => { const t = r.themes[+el.dataset.i]; if (!t) return; el.querySelector('.k').textContent = `${t.votes} ${t.votes === 1 ? 'voto' : 'votos'} · ${t.gw.toFixed(2)} GW`; el.classList.toggle('done', t.revealed); });
       const b = $('#rGBar'); if (b) b.style.width = (r.energy * 100).toFixed(1) + '%';
       const g = $('#rGTot'); if (g) g.textContent = `${gw(r.energy)} / 1.21 GIGAWATTS`;
       return;
@@ -333,18 +335,19 @@
       if (window.Trilha) Trilha.sfx('blip');
     }
     if (!first && ph === 'done' && prev.phase !== 'done') { if (S.fx) S.fx.burst(); const f = $('#rFlash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); if (window.Trilha) Trilha.sfx('timeup'); }
-    // sorteio dos 2 projetos (e troca de um deles)
-    const d = c.draw, ov = $('#rDraw'), drawAt = d ? d.at : null, swapAt = d && d.swap ? d.swap.at : null;
-    if (d && (first || prev.drawAt !== drawAt)) {
-      const fresh = serverNow() - d.at < 1500 && !(d.swap && d.swap.at > d.at);
+    // os 2 mais votados: suspense (roleta de nomes), primeiro o 2º lugar e por último o 1º
+    const d = c.top, ov = $('#rDraw'), topAt = d ? d.at : null, counts = d ? d.items.map(v => v.votes).join() : '';
+    const card = (v, k, hidden) => `<div class="tcard ${hidden ? '' : 'shown'} p${k + 1}"><span class="star">${k ? '★' : '🏆'}</span><div class="lb">${k + 1}º MAIS VOTADO</div><div class="reel" id="rReel${k}">${hidden ? '???' : esc(v.name)}</div><div class="lb mu">RESPONSÁVEL PELO PROJETO</div><div class="owner" id="rOwner${k}">${hidden ? '' : esc(v.owner)}</div>${v.votes === undefined ? '' : `<div class="nv">${v.votes} ${v.votes === 1 ? 'VOTO' : 'VOTOS'}</div>`}</div>`;
+    if (d && (first || prev.topAt !== topAt)) {
+      const fresh = serverNow() - d.at < 1500, n = d.items.length;
+      S.rfTimers.forEach(clearTimeout); S.rfTimers = [];
       ov.hidden = false;
-      $('#rCards').innerHTML = d.items.map((v, k) => `<div class="tcard"><span class="star">★</span><div class="lb">PROJETO SORTEADO · 0${k + 1}</div><div class="reel" id="rReel${k}">${fresh ? '???' : esc(v.name)}</div><div class="lb mu">RESPONSÁVEL PELO PROJETO</div><div class="owner" id="rOwner${k}">${fresh ? '' : esc(v.owner)}</div></div>`).join('');
-      if (fresh) d.items.forEach((v, k) => spinCard(k, v, 1800 + k * 700));
-    } else if (d && swapAt && prev.swapAt !== swapAt) {
-      const k = d.swap.k;
-      if (serverNow() - swapAt < 1500) spinCard(k, d.items[k], 1500); else { const reel = $('#rReel' + k), owner = $('#rOwner' + k); if (reel) { reel.textContent = d.items[k].name; owner.textContent = d.items[k].owner; } }
-    } else if (!d && !ov.hidden) { ov.hidden = true; S.rfTimers.forEach(clearTimeout); S.rfTimers = []; }
-    S.rf = { votes: c.votes, phase: ph, drawAt, swapAt };
+      $('#rDk').textContent = fresh ? 'E OS MAIS VOTADOS SÃO…' : 'OS PROJETOS MAIS VOTADOS';
+      $('#rCards').innerHTML = d.items.map((v, k) => card(v, k, fresh)).join('');
+      if (fresh) { d.items.forEach((v, k) => spinCard(k, v, n === 1 ? SUSPENSE[1] : SUSPENSE[k], k === 0)); if (window.Trilha) Trilha.sfx('roll', (n === 1 ? SUSPENSE[1] : SUSPENSE[0]) / 1000); }
+    } else if (d && prev.counts !== counts && !$('#rCards .spin')) $('#rCards').innerHTML = d.items.map((v, k) => card(v, k, false)).join(''); // o Doc ligou/desligou a quantidade de votos
+    else if (!d && !ov.hidden) { ov.hidden = true; S.rfTimers.forEach(clearTimeout); S.rfTimers = []; }
+    S.rf = { votes: c.votes, phase: ph, topAt, counts };
     tickReflexao();
   }
   function tickReflexao() {
@@ -355,6 +358,52 @@
     const left = rfLeft(c);
     $('#rTimer').textContent = fmt(left);
     w.classList.toggle('alert', c.phase === 'run' && left <= 15 && left > 0);
+  }
+
+  /* ---------- transições entre blocos (viagem no tempo) ----------
+   * Ao trocar de bloco, o telão mostra por alguns segundos os circuitos de tempo (de onde saímos, para
+   * onde vamos) e um elemento do filme: velocímetro até 88 MPH com rastros de fogo, o Flux Capacitor
+   * chegando a 1,21 gigawatts, o relógio da torre às 10:04, ou o "CONTINUA…" do final. Termina no raio. */
+  const TR = {
+    checkin: { kind: 'circuits', ms: 2800, quote: ['Circuitos de tempo ligados.', 'Doc Brown · 1985'] },
+    stage: { kind: 'clock', ms: 3200, quote: ['Salve a torre do relógio!', 'Hill Valley · 1985'] },
+    connections: { kind: 'speed', ms: 3800, quote: ['Para onde vamos, não precisamos de estradas.', 'Doc Brown · 1985'] },
+    reflexao: { kind: 'fuel', ms: 3800, quote: ['Só um raio pode gerar 1,21 gigawatts!', 'Doc Brown · 1955'] },
+    sucesso: { kind: 'speed', ms: 3800, quote: ['Quando essa belezinha chegar a 88 milhas por hora, você vai ver algo sério.', 'Doc Brown · 1985'] },
+    message: { kind: 'circuits', ms: 2400, quote: ['Great Scott!', 'Doc Brown'] },
+    standby: { kind: 'circuits', ms: 2400, quote: ['Isso é pesado, Doc.', 'Marty McFly · 1985'] },
+    closing: { kind: 'end', ms: 4400, quote: ['O futuro ainda não está escrito. Ele é o que você fizer dele.', 'Doc Brown · 1990'] },
+  };
+  // o bloco que está no ar: identidade (para saber quando mudou) e nome (para os circuitos de tempo)
+  function blockInfo(st) {
+    const pr = st.presentation, i = st.step ? st.step.index : 0;
+    if (pr) { const d = DYN[pr.activityId] || DYN.d1; return { id: 'sucesso:' + pr.activityId, type: 'sucesso', name: `SUCESSO ${d.n} · ${pr.title}` }; }
+    if (st.reflexao || st.block === 'reflexao') return { id: 'reflexao', type: 'reflexao', name: 'REFLEXÃO' };
+    switch (st.block) {
+      case 'stage': return { id: 'stage:' + i, type: 'stage', name: (st.stage && st.stage.title) || 'BLOCO' };
+      case 'connections': return { id: 'connections', type: 'connections', name: 'CONEXÕES' };
+      case 'message': return { id: 'message:' + st.message.title, type: 'message', name: st.message.title || 'AVISO' };
+      case 'standby': return { id: 'standby', type: 'standby', name: 'OLHOS NO TELÃO' };
+      case 'closing': return { id: 'closing', type: 'closing', name: 'ENCERRAMENTO' };
+      default: return { id: 'welcome', type: 'checkin', name: 'CHECK-IN' };
+    }
+  }
+  function playTransition(from, to) {
+    const el = $('#tr'), cfg = TR[to.type] || TR.checkin, led = v => String(v).toUpperCase().slice(0, 26);
+    S.trT.forEach(clearTimeout); S.trT = []; clearInterval(S.trI);
+    el.dataset.kind = cfg.kind;
+    $('#trDest').textContent = led(to.name); $('#trLast').textContent = led(from.name); $('#trNow').textContent = ledNow(true);
+    $('#trQuote').innerHTML = `“${esc(cfg.quote[0])}”<small>${esc(cfg.quote[1])}</small>`;
+    el.classList.remove('on', 'go', 'out'); void el.offsetWidth; el.classList.add('on');
+    // mostrador central: sobe até 88 MPH, 1,21 GW ou 10:04 pouco antes do raio
+    const num = $('#trNum'), ramp = cfg.ms - 1100, t0 = performance.now();
+    const show = { speed: k => String(Math.round(88 * k)).padStart(2, '0'), fuel: k => (1.21 * k).toFixed(2).replace('.', ','), clock: k => `10:0${Math.min(4, Math.floor(k * 4.999))}` }[cfg.kind];
+    $('#trUnit').textContent = { speed: 'MPH', fuel: 'GIGAWATTS', clock: 'PM · TORRE DO RELÓGIO' }[cfg.kind] || '';
+    if (show) { num.textContent = show(0); S.trI = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ramp); num.textContent = show(k * k * (3 - 2 * k)); if (k >= 1) clearInterval(S.trI); }, 40); }
+    if (window.Trilha) Trilha.sfx('warp', (cfg.ms - 900) / 1000);
+    S.trT.push(setTimeout(() => el.classList.add('go'), cfg.ms - 900),          // raio (e rastros de fogo a 88 mph)
+      setTimeout(() => el.classList.add('out'), cfg.ms),                        // a tela nova surge do clarão
+      setTimeout(() => el.classList.remove('on', 'go', 'out'), cfg.ms + 650));
   }
 
   /* ---------- cenas ---------- */
@@ -401,6 +450,10 @@
   function render() {
     if (!S.state) return;
     applyAudio();
+    // mudou o bloco no ar: transição do filme (não na primeira tela, nem com o telão preso em "relógio"/"logo")
+    const info = blockInfo(S.state), auto = ((S.state.screen && S.state.screen.scene) || 'auto') === 'auto';
+    if (S.blk && S.blk.id !== info.id && auto && S.state.settings && S.state.settings.transitions !== false) playTransition(S.blk, info);
+    S.blk = info;
     const [key, html] = sceneFor();
     const pr = S.state.presentation, rf = key === 'reflexao' ? S.state.reflexao : null;
     const k = `${key}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
@@ -442,12 +495,23 @@
     }
   }
   setInterval(tick, 500);
+  // Bipes dos cronômetros (Conexões, recebimento do Sucesso, tempo de fala, votação da Reflexão):
+  // um "pi" aos 30 s e um por segundo nos últimos 10 s. Saem do telão, a não ser que o som esteja no painel.
+  setInterval(() => {
+    if (!window.Trilha || !S.state) return;
+    const st = S.state, sec = at => at - serverNow(); // milissegundos que faltam
+    const t = st.conn.timer, pr = st.presentation, l = pr && pr.live, talk = pr && pr.draw && pr.draw.talk, c = st.reflexao && st.reflexao.cur;
+    Trilha.countdown('conn', t && !t.paused && t.kind !== 'break' && !pr && st.block === 'connections' ? sec(t.endsAt) : null);
+    Trilha.countdown('suc', l && l.phase === 'run' && l.endsAt ? sec(l.endsAt) : null);
+    Trilha.countdown('talk', talk && talk.endsAt ? sec(talk.endsAt) : null);
+    Trilha.countdown('rfx', c && c.phase === 'run' && c.endsAt ? sec(c.endsAt) : null, { end: false }); // o fim da votação já tem o seu som
+  }, 100);
   setInterval(() => { if (!S.calm && Math.random() < .2) flash(); }, 9000);
   // som do telão (música, trilha de fundo ou silêncio, escolhido no Painel do Doc)
   function applyAudio() {
     if (!window.Trilha || !S.state || !S.state.audio) return;
     const a = S.state.audio;
-    Trilha.apply({ mode: a.out === 'painel' ? 'off' : a.mode, volume: a.volume, musicUrl: a.musicUrl, ambientUrl: a.ambientUrl });
+    Trilha.apply({ mode: a.out === 'painel' ? 'off' : a.mode, beeps: a.out !== 'painel' && a.beeps !== false, volume: a.volume, musicUrl: a.musicUrl, ambientUrl: a.ambientUrl });
   }
   if (window.Trilha) {
     const chip = $('#soundChip');

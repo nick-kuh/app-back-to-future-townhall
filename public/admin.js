@@ -15,7 +15,7 @@
   // roteiro do evento
   const STEP_ICON = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', reflexao: '💭', message: '📣', standby: '📺', closing: '🏁' };
   const STEP_KIND = { checkin: 'Check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', reflexao: 'Dinâmica · Reflexão', message: 'Aviso', standby: 'Olhos no telão', closing: 'Encerramento' };
-  const STEP_HINT = { checkin: 'as pessoas entram pelo nome', connections: '3 viagens em duplas e avaliação', sucesso: 'pergunta ao vivo, nuvem de palavras', reflexao: 'paradas com votação em projetos e sorteio de 2 projetos', standby: 'celulares em pausa, atenção no telão', closing: 'agradecimento e créditos' };
+  const STEP_HINT = { checkin: 'as pessoas entram pelo nome', connections: '3 viagens em duplas e avaliação', sucesso: 'pergunta ao vivo, nuvem de palavras', reflexao: 'paradas com votação em projetos e os 2 mais votados', standby: 'celulares em pausa, atenção no telão', closing: 'agradecimento e créditos' };
   const SUC_NAME = { d1: 'Antes de Partir', d2: 'Look Back', d3: 'Uso de IA', d4: 'Look Ahead' };
   const SUC_COLOR = { d1: 'var(--cyan)', d2: 'var(--yellow)', d3: 'var(--magenta)', d4: 'var(--orange)' };
   const SUC_PHASE = { idle: 'aguardando você iniciar', run: 'recebendo respostas', paused: 'recebimento pausado', done: 'recebimento encerrado' };
@@ -78,7 +78,7 @@
     const view = A.tab === 'live' ? 'live' : 'prep-' + A.prep;
     if (!force && ['prep-config', 'prep-tests', 'prep-reflexao'].includes(view) && $('#main').dataset.view === view) return;
     const html = A.tab === 'live' ? vLive()
-      : `<div class="subtabs prepnav">${PREP.map(([k, l]) => `<button class="${A.prep === k ? 'on' : ''}" data-prep="${k}">${l}</button>`).join('')}</div>` + ({ roteiro: vRoteiro, reflexao: vReflexaoCfg, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.prep]();
+      : `<div class="subtabs prepnav">${PREP.map(([k, l]) => `<button class="${A.prep === k ? 'on' : ''}" data-prep="${k}">${l}</button>`).join('')}<a class="datalink" href="/dados.html" target="_blank" title="Página de extração: Conexões, Reflexão e Sucesso, com download em .csv">📊 Dados do evento ↗</a></div>` + ({ roteiro: vRoteiro, reflexao: vReflexaoCfg, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.prep]();
     if (!force && $('#main').dataset.view === view && html === A.lastHtml) return;
     A.lastHtml = html;
     const y = window.scrollY;
@@ -127,15 +127,17 @@
   /* ---------- som: três botões sempre à mão (música animada, trilha de fundo, sem áudio) ---------- */
   function renderAudio() {
     const O = A.O; if (!O) return;
-    const a = O.state.audio || { mode: 'off', volume: 60, out: 'telao' }, key = JSON.stringify([a, O.telao]);
-    if (window.Trilha) Trilha.apply({ mode: a.out === 'painel' ? a.mode : 'off', volume: a.volume, musicUrl: O.settings.musicUrl, ambientUrl: O.settings.ambientUrl });
+    const a = O.state.audio || { mode: 'off', volume: 60, out: 'telao' }, key = JSON.stringify([a, O.telao]), beeps = a.beeps !== false;
+    if (window.Trilha) Trilha.apply({ mode: a.out === 'painel' ? a.mode : 'off', beeps: a.out === 'painel' && beeps, volume: a.volume, musicUrl: O.settings.musicUrl, ambientUrl: O.settings.ambientUrl });
     if (key === A.audioKey || A.pressing) return;
     A.audioKey = key;
     const tl = O.telao || { count: 0 };
-    const warn = a.out === 'painel' || a.mode === 'off' ? '' : !tl.count ? 'abra o telão' : !tl.sound ? 'clique na tela do telão para liberar o som' : '';
+    // som no telão: com música ligada e nenhum telão aberto, avisa; com o telão aberto mas ainda sem clique, pede o clique (os bipes também dependem dele)
+    const warn = a.out === 'painel' ? '' : !tl.count ? (a.mode === 'off' ? '' : 'abra o telão') : !tl.sound && (a.mode !== 'off' || beeps) ? 'clique na tela do telão para liberar o som' : '';
     $('#audioCtl').innerHTML = `<button type="button" class="k" data-act="audioOut" data-out="${a.out === 'painel' ? 'telao' : 'painel'}" title="Clique para trocar: o som pode sair do computador do telão ou deste painel">SOM · ${a.out === 'painel' ? 'este painel' : 'telão'} ⇄</button>
       ${warn ? `<span class="warn">⚠ ${warn}</span>` : ''}
       ${['music', 'ambient', 'off'].map(m => `<button type="button" class="${a.mode === m ? 'on' : ''}" data-act="audio" data-mode="${m}">${AUDIO_LABEL[m]}</button>`).join('')}
+      <button type="button" class="beeps ${beeps ? 'on' : ''}" data-act="audioBeeps" data-on="${beeps ? '' : 1}" title="Bipes do cronômetro: um aos 30 segundos e um por segundo nos últimos 10. Tocam mesmo com 'Sem áudio'.">⏱ Bipes</button>
       <input type="range" min="0" max="100" step="5" value="${a.volume}" data-act="audioVol" title="Volume" aria-label="Volume">`;
   }
   document.addEventListener('pointerdown', () => { if (window.Trilha) Trilha.unlock(); });
@@ -156,7 +158,7 @@
       return ph ? `${a.responseCount} respostas · ${ph === 'done' ? 'encerrado' : open ? 'recebendo' : ph === 'run' ? 'sem cronômetro' : ph === 'paused' ? 'pausado' : 'não iniciado'}` : '';
     }
     if (x.type === 'message') return x.body || '';
-    if (x.type === 'reflexao' && O.reflexao) { const R = O.reflexao, done = R.paradas.filter(p => p.drawn.length).length, votes = R.paradas.reduce((a, p) => a + p.votes, 0); return votes || done ? `${done} de ${R.paradas.length} paradas sorteadas · ${votes} votos` : `${R.paradas.length} paradas · votação em projetos`; }
+    if (x.type === 'reflexao' && O.reflexao) { const R = O.reflexao, done = R.paradas.filter(p => p.top.length).length, votes = R.paradas.reduce((a, p) => a + p.votes, 0); return votes || done ? `${done} de ${R.paradas.length} paradas reveladas · ${votes} votos` : `${R.paradas.length} paradas · votação em projetos`; }
     return STEP_HINT[x.type] || '';
   }
   function vLive() {
@@ -229,6 +231,7 @@
   function pClosing() {
     return { onair: 'Celulares: agradecimento e a conexão de cada um · Telão: créditos',
       body: `<p class="lead">${esc(A.O.settings.closingText || '')}</p>
+        <div class="actions"><a class="btn ghost" href="/dados.html" target="_blank">📊 Extrair os dados do evento ↗</a></div>
         <div class="actions" style="align-items:center"><span class="small">Respostas do Sucesso:</span>${['d1', 'd2', 'd3', 'd4'].map(k => btn(`${k.slice(1).padStart(2, '0')} · ${SUC_NAME[k]}`, 'sucAnswers', { cls: 'ghost xs', data: { k } })).join('')}</div>` };
   }
   function pConnections() {
@@ -304,25 +307,25 @@
       <p class="small" style="margin-top:8px"><a href="/painel?sala=${encodeURIComponent(room || '')}&d=${k}" target="_blank">Abrir o painel 3D original ↗</a></p>`;
     return { title: `Dinâmica ${k.slice(1)} · ${a.title || SUC_NAME[k]}`, body, primary, secondary, more, warn, busy, onair: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar' };
   }
-  // Reflexão: uma parada por vez. Abrir parada → iniciar votação → encerrar → sortear 2 projetos → próxima parada.
+  // Reflexão: uma parada por vez. Abrir parada → iniciar votação → encerrar → revelar os 2 mais votados → próxima parada.
   function pReflexao(step) {
     const O = A.O, R = O.reflexao, on = rfxOnAir();
     if (!R) return { title: 'Reflexão', body: '<p class="lead">Carregando…</p>' };
     const cfg = R.config, n = cfg.themes.length, i = R.open, p = i === null ? null : R.paradas[i], COLORS = ['#22d3ee', '#ff2e88', '#ffd23f', '#ff6b1a'];
     const cmd = (label, c, cls, data = {}) => btn(label, 'rfx', { cls, data: { cmd: c, ...data } });
-    const undone = k => !R.paradas[k].drawn.length, order = [...Array(n).keys()];
+    const undone = k => !R.paradas[k].top.length, order = [...Array(n).keys()];
     const nextIdx = i === null ? order.find(undone) : [...order.filter(k => k > i), ...order.filter(k => k < i)].find(undone);
     const openNext = (label, cls) => (nextIdx === undefined ? null : cmd(`${label} ${pad(nextIdx + 1)} · ${esc(cfg.themes[nextIdx].t)}${label.startsWith('▶') ? '' : ' ▶'}`, 'open', cls, { idx: nextIdx }));
-    const state = q => (q.drawn.length ? '✓ sorteada' : q.phase === 'done' ? 'encerrada' : q.phase === 'run' ? 'votando' : q.phase === 'paused' ? 'pausada' : '');
-    const chips = `<div class="rfx-chips">${cfg.themes.map((t, k) => { const q = R.paradas[k]; return `<button type="button" class="chip ${k === i ? 'on' : ''} ${q.drawn.length ? 'done' : ''}" style="--c:${COLORS[k % 4]}" data-act="rfx" data-cmd="open" data-idx="${k}" title="${esc(t.q)}" ${on ? '' : 'disabled'}><b>${pad(k + 1)}</b><span>${esc(t.t)}<small>${q.votes} ${q.votes === 1 ? 'voto' : 'votos'}${state(q) ? ' · ' + state(q) : ''}</small></span></button>`; }).join('')}</div>`;
+    const state = q => (q.top.length ? '✓ revelada' : q.phase === 'done' ? 'encerrada' : q.phase === 'run' ? 'votando' : q.phase === 'paused' ? 'pausada' : '');
+    const chips = `<div class="rfx-chips">${cfg.themes.map((t, k) => { const q = R.paradas[k]; return `<button type="button" class="chip ${k === i ? 'on' : ''} ${q.top.length ? 'done' : ''}" style="--c:${COLORS[k % 4]}" data-act="rfx" data-cmd="open" data-idx="${k}" title="${esc(t.q)}" ${on ? '' : 'disabled'}><b>${pad(k + 1)}</b><span>${esc(t.t)}<small>${q.votes} ${q.votes === 1 ? 'voto' : 'votos'}${state(q) ? ' · ' + state(q) : ''}</small></span></button>`; }).join('')}</div>`;
     const more = `<div class="actions">${cmd('🤖 +5 votos de teste', 'fake', 'ghost sm', { n: 5 })}${btn('Ver os votos', 'rfxVotes', { cls: 'ghost sm' })}${btn('⬇ Exportar votos (.csv)', 'rfxCsv', { cls: 'ghost sm' })}${cmd('↺ Reiniciar a votação desta parada', 'reset', 'ghost sm')}${cmd('🗑 Limpar os votos desta parada', 'clear', 'red sm')}${cmd('🗑 Limpar tudo', 'clearAll', 'red sm')}</div>
       <p class="small" style="margin-top:8px">Os votos de teste servem para ensaiar sem os celulares (os nomes saem marcados como "teste"). Paradas e projetos: <a href="#" data-go="reflexao">Preparar → Reflexão</a>.</p>`;
-    const base = { title: cfg.title, more, onair: 'Celulares: escolher 1 projeto · Telão: Flux Capacitor e sorteio' };
+    const base = { title: cfg.title, more, onair: 'Celulares: escolher 1 projeto · Telão: Flux Capacitor e os 2 mais votados' };
     if (!on) return { ...base, body: `<p class="warn">A Reflexão não está na tela agora.</p>${chips}`, primary: btn('📺 Exibir no telão e nos celulares', 'goStep', { cls: 'big', data: { id: step.id } }) };
     if (!p) { // menu das paradas
       const total = R.paradas.reduce((a, q) => a + q.votes, 0);
       return { ...base, body: `<p class="lead">${esc(cfg.subtitle)}. O telão mostra as ${n} paradas, os votos de cada uma e a energia total do Flux Capacitor${total ? ` (${total} votos até agora)` : ''}.</p>${chips}`,
-        primary: openNext(R.paradas.some(q => q.drawn.length) ? 'Próxima parada:' : '▶ Abrir a parada', 'big') };
+        primary: openNext(R.paradas.some(q => q.top.length) ? 'Próxima parada:' : '▶ Abrir a parada', 'big') };
     }
     const t = cfg.themes[i], left = rfxLeft(p), ph = p.phase;
     const stats = `<div class="suc-stats"><div class="tcx"><b>${String(p.votes).padStart(3, '0')}</b><span>VOTOS</span></div>${ph !== 'done' ? `<div class="tcx ${ph === 'run' && left <= 15 ? 'alert' : ''}" style="--c:var(--yellow)"><b data-timer="rfx">${fmt(left)}</b><span>VOTAÇÃO</span></div>` : ''}<span class="suc-ph" data-phase="${ph}">${RFX_PHASE[ph]}${p.votes ? ` · ${p.projects} ${p.projects === 1 ? 'projeto votado' : 'projetos votados'}` : ''}</span></div>`;
@@ -330,16 +333,18 @@
     if (ph === 'idle') primary = cmd(`▶ Iniciar votação (${fmt(p.remaining)})`, 'start', 'big');
     else if (ph === 'run') { primary = cmd('⏭ Encerrar votação', 'end', 'big'); secondary = [cmd('❚❚ Pausar', 'pause', 'ghost')]; busy = 'A votação ainda está aberta. Avançar mesmo assim?'; }
     else if (ph === 'paused') { primary = cmd('▶ Retomar votação', 'start', 'big'); secondary = [cmd('⏭ Encerrar', 'end', 'ghost')]; }
-    else if (!p.cur.length) {
-      if (p.projects >= 2) primary = cmd('🎲 Sortear 2 projetos', 'draw', 'big');
-      else { body += '<p class="warn">Para o sorteio são necessários pelo menos 2 projetos diferentes votados.</p>'; primary = openNext('Próxima parada:', 'big'); secondary = [cmd('↺ Reiniciar a votação', 'reset', 'ghost')]; }
+    else if (!p.top.length) {
+      if (p.votes) { primary = cmd('🏆 Revelar os 2 mais votados', 'reveal', 'big'); body += '<p class="small reveal">O telão faz o suspense: primeiro aparece o 2º mais votado e, por último, o 1º. Nunca saem dois projetos do mesmo responsável.</p>'; }
+      else { body += '<p class="warn">Nenhum voto nesta parada.</p>'; primary = openNext('Próxima parada:', 'big'); secondary = [cmd('↺ Reiniciar a votação', 'reset', 'ghost')]; }
     } else {
-      body += `<div class="rfx-drawn">${p.cur.map((v, k) => `<div class="suc-draw on"><div class="small">🎲 PROJETO SORTEADO · 0${k + 1}</div><div class="who">${esc(v.p)}</div><div class="what">${esc(v.o)}</div>${cmd('↻ Trocar este projeto', 'swap', 'ghost xs', { k })}</div>`).join('')}</div>`;
+      body += `<div class="rfx-drawn">${p.top.map((v, k) => `<div class="suc-draw on"><div class="small">${k ? '★' : '🏆'} ${k + 1}º MAIS VOTADO · ${v.n} ${v.n === 1 ? 'voto' : 'votos'}</div><div class="who">${esc(v.p)}</div><div class="what">${esc(v.o)}</div></div>`).join('')}</div>
+        <p class="small reveal ${cfg.showCounts ? 'on' : ''}">${cfg.showCounts ? 'O telão e os celulares mostram a quantidade de votos de cada um.' : 'A quantidade de votos aparece só aqui para você. No telão e nos celulares, só o projeto e o responsável.'}</p>`;
       primary = openNext('Próxima parada:', 'big');
-      secondary = [cmd('🎲 Sortear novamente (2)', 'draw', 'ghost'), p.show ? cmd('Ver o Flux Capacitor', 'showDraw', 'ghost', { on: '' }) : cmd('Mostrar os sorteados', 'showDraw', 'ghost', { on: 1 })];
+      secondary = [cmd('↻ Revelar de novo (com suspense)', 'reveal', 'ghost'), p.show ? cmd('Ver o Flux Capacitor', 'showTop', 'ghost', { on: '' }) : cmd('Mostrar os mais votados', 'showTop', 'ghost', { on: 1 }),
+        cfg.showCounts ? cmd('Esconder nº de votos no telão', 'counts', 'ghost', { on: '' }) : cmd('Mostrar nº de votos no telão', 'counts', 'ghost', { on: 1 })];
     }
     secondary.push(cmd('☰ Menu das paradas', 'menu', 'ghost'));
-    if (ph === 'done' && p.tally.length) body += det('rfx-tally', `Ver os projetos votados (${p.tally.length})`, `<div class="anslist" style="margin-top:6px">${p.tally.map(x => `<p><b>${x.n}</b> · ${esc(x.p)} <span class="small">· ${esc(x.o)}</span></p>`).join('')}</div>`);
+    if (ph === 'done' && p.tally.length) body += det('rfx-tally', `Ver a contagem de todos os projetos (${p.tally.length})`, `<div class="anslist" style="margin-top:6px">${p.tally.map(x => `<p><b>${x.n}</b> · ${esc(x.p)} <span class="small">· ${esc(x.o)}</span>${x.pick ? ` <span class="ok">· ${x.pick}º</span>` : x.skip ? ' <span class="warn">· pulado: mesmo responsável de um dos escolhidos</span>' : ''}</p>`).join('')}</div>`);
     return { ...base, color: COLORS[i % 4], body, after: `<div class="small" style="margin-top:16px">Paradas (clique para abrir outra):</div>${chips}`, primary, secondary, busy };
   }
   // Preparar → Reflexão: título, tempo, paradas e a lista de projetos (um por linha)
@@ -347,7 +352,7 @@
     const R = A.O.reflexao; if (!R) return '<div class="card"><p class="lead">Carregando…</p></div>';
     const c = R.config;
     return `<div class="card"><h2>Reflexão · paradas e projetos</h2>
-      <p class="small">Em cada parada as pessoas escolhem 1 projeto pelo celular (com o nome do check-in), o Flux Capacitor do telão carrega e você sorteia 2 projetos. Aqui você ajusta os textos e a lista. No <a href="#" data-go="live">Ao vivo</a> a Reflexão é um passo do roteiro.</p>
+      <p class="small">Em cada parada as pessoas escolhem 1 projeto pelo celular (com o nome do check-in), o Flux Capacitor do telão carrega e você revela os 2 mais votados (nunca dois do mesmo responsável). Aqui você ajusta os textos e a lista. No <a href="#" data-go="live">Ao vivo</a> a Reflexão é um passo do roteiro.</p>
       <div class="form two" style="margin-top:12px">
         <label class="f">Título no telão<input class="input" id="rfTitle" value="${esc(c.title)}"></label>
         <label class="f">Subtítulo<input class="input" id="rfSub" value="${esc(c.subtitle)}"></label>
@@ -358,7 +363,7 @@
       <p class="small">Uma por linha: <span class="mono">nome da parada | pergunta</span> (até 8).</p>
       <textarea class="input mono" id="rfThemes" rows="${Math.max(6, c.themes.length + 1)}" spellcheck="false">${esc(c.themes.map(t => `${t.t} | ${t.q}`).join('\n'))}</textarea>
       <h3 style="margin-top:16px">Projetos (${c.projects.length})</h3>
-      <p class="small">Um por linha: <span class="mono">projeto | responsável</span>. É a lista que aparece no celular e o que o telão mostra no sorteio.</p>
+      <p class="small">Um por linha: <span class="mono">projeto | responsável</span>. É a lista que aparece no celular e o que o telão mostra ao revelar os mais votados. Para vários responsáveis no mesmo projeto, separe os nomes com <span class="mono">/</span>.</p>
       <textarea class="input mono" id="rfProjects" rows="18" spellcheck="false">${esc(c.projects.map(x => `${x.name} | ${x.owner}`).join('\n'))}</textarea>
       <div class="actions" style="margin-top:14px"><button class="btn" data-act="rfxSaveCfg">Salvar</button><button class="btn ghost sm" data-act="rfxResetCfg" style="margin-left:auto">Restaurar o padrão</button></div>
     </div>`;
@@ -389,6 +394,17 @@
     const key = [step.id, a ? sucEff(a) : '', a && a.phase === 'run' ? sucLeft(a) <= 30 : '', d ? (left > 30 ? 'a' : left > 0 ? 'b' : 'c') : ''].join('|');
     if (key !== A.liveKey) { A.liveKey = key; render(); }
   }, 500);
+
+  // Bipes dos cronômetros: saem daqui só quando o som está configurado para este computador (senão, saem do telão)
+  setInterval(() => {
+    const O = A.O; if (!O || !window.Trilha) return;
+    const sec = at => at - Date.now() - A.offset; // milissegundos que faltam
+    const t = O.state.conn.timer, pr = O.state.presentation, l = pr ? sucAct(pr.activityId) : null, talk = pr && pr.draw && pr.draw.talk, R = O.reflexao, c = R && R.open !== null && rfxOnAir() ? R.paradas[R.open] : null;
+    Trilha.countdown('conn', t && !t.paused && t.kind !== 'break' && !pr && O.state.block === 'connections' ? sec(t.endsAt) : null);
+    Trilha.countdown('suc', l && l.phase === 'run' && l.endsAt ? sec(l.endsAt) : null);
+    Trilha.countdown('talk', talk && talk.endsAt ? sec(talk.endsAt) : null);
+    Trilha.countdown('rfx', c && c.phase === 'run' && c.endsAt ? sec(c.endsAt) : null);
+  }, 100);
 
   // Respostas de uma dinâmica do Sucesso: lista + download (.txt ou Word), como no painel 3D
   async function sucAnswersDialog(k) {
@@ -535,6 +551,7 @@
           <label class="f">Trilha de fundo própria (opcional)<input class="input" id="cfgAmbientUrl" value="${esc(s.ambientUrl || '')}" placeholder="https://… .mp3"></label>
           <label class="f">Texto dos blocos de fala (celular)<input class="input" id="cfgStageText" value="${esc(s.stageText || '')}"></label>
           <label class="sw"><input type="checkbox" id="cfgStageMutes" ${s.stageMutes ? 'checked' : ''}> Desligar o som ao exibir um bloco de fala</label>
+          <label class="sw"><input type="checkbox" id="cfgTransitions" ${s.transitions !== false ? 'checked' : ''}> Transições do filme ao trocar de bloco (alguns segundos, no telão e nos celulares)</label>
           <div class="actions"><button class="btn" data-act="saveSettings">Salvar</button></div>
         </div></div>
         <div class="card"><h2>Acesso</h2><p class="small">A senha do painel é definida pela variável de ambiente <span class="mono">ADMIN_PASSWORD</span> no servidor. Link do app para os viajantes: <span class="mono">${esc(location.origin)}/</span> · Telão: <span class="mono">${esc(location.origin)}/telao.html</span></p>
@@ -670,11 +687,12 @@
         const secs = num('#cfgSeconds', 10, 3600), find = num('#cfgFind', 0, 600), brk = num('#cfgBreak', 0, 120), rk = num('#cfgRanking', 0, 1800);
         if ([secs, find, brk, rk].some(v => v === null)) return toast('Confira os tempos: conversa 10–3600 s, encontro 0–600 s, intervalo 0–120 s, avaliação 0–1800 s.', true);
         const agenda = $('#cfgAgenda').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const i = l.indexOf('|'); return i >= 0 ? { time: l.slice(0, i).trim(), title: l.slice(i + 1).trim() } : { time: '', title: l }; });
-        return run(async () => { await act('settings', { settings: { autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda, stageText: $('#cfgStageText').value, stageMutes: $('#cfgStageMutes').checked, musicUrl: $('#cfgMusicUrl').value, ambientUrl: $('#cfgAmbientUrl').value } }); await act('setAudio', { out: $('#cfgAudioOut').value }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
+        return run(async () => { await act('settings', { settings: { autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda, stageText: $('#cfgStageText').value, stageMutes: $('#cfgStageMutes').checked, transitions: $('#cfgTransitions').checked, musicUrl: $('#cfgMusicUrl').value, ambientUrl: $('#cfgAmbientUrl').value } }); await act('setAudio', { out: $('#cfgAudioOut').value }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
       }
       case 'saveMessage': case 'showMessage': return run(() => act('setMessage', { message: { emoji: $('#msgEmoji').value, title: $('#msgTitle').value, body: $('#msgBody').value }, show: act_ === 'showMessage' }), act_ === 'showMessage' ? 'Mensagem exibida nos celulares' : 'Mensagem salva');
       case 'logout': localStorage.removeItem('bttf.admin'); api('POST', '/api/admin/logout').finally(() => location.reload()); return;
       case 'audio': return run(() => act('setAudio', { mode: el.dataset.mode }), el.dataset.mode === 'off' ? 'Som desligado' : `${el.dataset.mode === 'music' ? '🎵 Música animada' : '🎼 Trilha de fundo'} ligada · o som sai ${(O.state.audio || {}).out === 'painel' ? 'deste computador' : 'do telão'}`);
+      case 'audioBeeps': return run(() => act('setAudio', { beeps: !!el.dataset.on }), el.dataset.on ? '⏱ Bipes do cronômetro ligados' : 'Bipes do cronômetro desligados');
       case 'audioOut': return run(() => act('setAudio', { out: el.dataset.out }), el.dataset.out === 'painel' ? 'O som agora sai deste computador' : 'O som agora sai do telão');
       case 'audioVol': return run(() => act('setAudio', { volume: +el.value }));
       // --- roteiro: ao vivo ---
@@ -718,8 +736,8 @@
         if (cmd === 'open' && R && R.open === +d.idx) return;
         if (cmd === 'open' && R && R.open !== null && R.paradas[R.open].phase === 'run' && !confirm('A votação desta parada ainda está aberta. Ela fica pausada se você trocar de parada. Trocar mesmo assim?')) return;
         if (cmd === 'end' && !confirm('Encerrar a votação agora?')) return;
-        if (cmd === 'clear' && !confirm('Apagar os votos e o sorteio desta parada? Não dá para desfazer.')) return;
-        if (cmd === 'clearAll' && !confirm('Apagar os votos e os sorteios de TODAS as paradas? Não dá para desfazer.')) return;
+        if (cmd === 'clear' && !confirm('Apagar os votos e o resultado desta parada? Não dá para desfazer.')) return;
+        if (cmd === 'clearAll' && !confirm('Apagar os votos e os resultados de TODAS as paradas? Não dá para desfazer.')) return;
         return run(() => api('POST', '/api/admin/reflexao', { action: cmd, idx: d.idx === undefined ? undefined : +d.idx, k: d.k === undefined ? undefined : +d.k, n: d.n === undefined ? undefined : +d.n, on: !!d.on }));
       }
       case 'rfxVotes': return run(() => rfxVotesDialog());

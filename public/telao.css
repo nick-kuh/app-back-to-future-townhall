@@ -255,5 +255,45 @@ body.calm .osd{opacity:.45}
 .tcard .reel{font:900 clamp(20px,2.5vw,42px)/1.14 Inter;color:var(--yellow);text-shadow:0 0 22px #ff6b1a;margin:1.2vh 0 1.6vh;min-height:2.3em;overflow-wrap:anywhere}
 .tcard .reel.spin{animation:reelroll .12s linear infinite}
 .tcard .owner{font:800 clamp(14px,1.5vw,24px)/1.25 var(--led);color:var(--cyan);letter-spacing:.7px;text-transform:uppercase;margin-top:.6vh;min-height:1.3em;overflow-wrap:anywhere}
+.tcard .nv{display:none;margin-top:1vh;font:800 clamp(13px,1.3vw,21px) var(--led);letter-spacing:2px;color:var(--yellow)}
+.tcard.shown .nv{display:block}
+.tcard.shown{animation:cardin 1s cubic-bezier(.2,.9,.3,1.2) both,cardpop .7s ease-out}
+.tcard.shown.p1{border-color:var(--yellow);box-shadow:0 0 44px rgba(255,210,31,.55)}
+@keyframes cardpop{0%{filter:brightness(2.4)}100%{filter:none}}
+.tcard:not(.shown) .lb.mu{opacity:.35}
 @media (max-aspect-ratio:4/3){.rfx-stage{grid-template-columns:1fr}.rfx-cards{grid-template-columns:repeat(2,1fr)}.rfx-view{min-height:46vh}}
 @media (prefers-reduced-motion:reduce){.tcard,.rfx-view .rfeed div,.tcard .reel.spin{animation:none}}
+
+/* ===== transição entre blocos: viagem no tempo (circuitos de tempo → mostrador → raio) ===== */
+.tr{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(ellipse at 50% 45%,#1a0d3d 0%,#05030c 72%)}
+.tr.on{display:flex;animation:trin .35s ease-out}
+@keyframes trin{from{filter:brightness(6)}to{filter:none}}
+.tr-lines{position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0 78px,rgba(46,230,214,.09) 78px 81px);animation:trstreak .22s linear infinite}
+@keyframes trstreak{to{background-position:-162px 0}}
+.tr-box{position:relative;display:flex;flex-direction:column;align-items:center;gap:3.2vh;width:min(86vw,1280px);text-align:center}
+.tr-circ{width:100%;min-width:0}
+.tr-circ .tc .led{font-size:clamp(22px,3.6vw,64px)}
+.tr-gauge{display:none;align-items:baseline;gap:1.4vw}
+.tr[data-kind=speed] .tr-gauge,.tr[data-kind=fuel] .tr-gauge,.tr[data-kind=clock] .tr-gauge{display:flex}
+.tr-gauge b{font:900 italic clamp(70px,17vh,230px) var(--display);color:var(--yellow);text-shadow:0 0 40px var(--orange);line-height:1}
+.tr[data-kind=fuel] .tr-gauge b{color:var(--cyan);text-shadow:0 0 40px var(--cyan)}
+.tr[data-kind=clock] .tr-gauge b{font-family:var(--led);font-style:normal;color:var(--amber);text-shadow:0 0 34px var(--amber)}
+.tr-gauge span{font:400 clamp(12px,1.6vw,26px) var(--pixel);letter-spacing:5px;color:var(--cyan)}
+.tr-end{display:none;font:900 italic clamp(54px,11vw,190px)/1 var(--display);background:linear-gradient(180deg,#fff6b0 0%,#ffd21f 28%,#ff8a00 52%,#ff2a00 78%,#7a0a00 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 6px 0 #3b0700) drop-shadow(0 0 30px rgba(255,106,0,.55));animation:trend 1.6s ease-out both}
+@keyframes trend{from{letter-spacing:.4em;opacity:0}to{letter-spacing:0;opacity:1}}
+.tr[data-kind=end] .tr-end{display:block}
+.tr[data-kind=end] .tr-circ{display:none}
+.tr-quote{font:400 clamp(18px,2.4vw,40px)/1.3 var(--hand);color:var(--txt);max-width:72vw}
+.tr-quote small{display:block;margin-top:1vh;font:400 clamp(9px,1vw,15px) var(--pixel);color:var(--cyan);letter-spacing:2px}
+.tr-fire{position:absolute;left:-110vw;bottom:17vh;height:12px;width:100vw;border-radius:9px;background:linear-gradient(90deg,transparent,#ff2a00,#ffd21f,#fff);filter:blur(1px);box-shadow:0 0 34px #ff6a00;opacity:0}
+.tr-fire.f2{bottom:12vh}
+.tr[data-kind=speed].go .tr-fire{animation:trfire .75s ease-in forwards}
+.tr[data-kind=speed].go .tr-fire.f2{animation-delay:.07s}
+@keyframes trfire{0%{left:-110vw;opacity:1}100%{left:110vw;opacity:1}}
+.tr-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.tr.go .tr-flash{animation:trflash .9s ease-out forwards}
+@keyframes trflash{0%{opacity:0}12%{opacity:.95}22%{opacity:.2}34%{opacity:1}100%{opacity:1}}
+.tr.out{animation:trout .65s ease-out forwards}
+.tr.out>*:not(.tr-flash){visibility:hidden}
+@keyframes trout{from{opacity:1}to{opacity:0}}
+@media (prefers-reduced-motion:reduce){.tr-lines,.tr-end{animation:none}}

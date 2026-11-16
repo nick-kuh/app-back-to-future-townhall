@@ -304,3 +304,9 @@ details.sb-more{border-top:1px dashed var(--line2);padding-top:10px}
 .card h3{font:800 15px Inter;color:var(--txt)}
 textarea.mono{font:13px/1.5 'Share Tech Mono',Consolas,monospace;white-space:pre;overflow:auto;width:100%}
 @media (max-width:920px){.rfx-chips{grid-template-columns:repeat(2,minmax(0,1fr))}.rfx-drawn{grid-template-columns:1fr}}
+.audio button.beeps.on{background:#0f2f37;border-color:var(--cyan);color:var(--cyan)}
+@media (max-width:1500px){.audio button.beeps{font-size:0;padding:7px 9px}.audio button.beeps::before{content:"⏱";font-size:13px}}
+.prepnav .datalink{margin-left:auto;align-self:center;font:700 13px Inter;color:var(--cyan);text-decoration:none;border:1px solid var(--line2);border-radius:999px;padding:7px 14px;white-space:nowrap}
+.prepnav .datalink:hover{border-color:var(--cyan)}
+a.btn{text-decoration:none;display:inline-flex;align-items:center}
+.nowchip{min-width:150px}
