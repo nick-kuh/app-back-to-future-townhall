@@ -385,21 +385,70 @@
   }
   function playTransition(from, to) {
     const el = $('#tr'), cfg = TR[to.type] || TR.checkin, led = v => String(v).toUpperCase().slice(0, 26);
-    S.trT.forEach(clearTimeout); S.trT = []; clearInterval(S.trI);
-    el.dataset.kind = cfg.kind;
-    $('#trDest').textContent = led(to.name); $('#trLast').textContent = led(from.name); $('#trNow').textContent = ledNow(true);
+    const secs = Number(S.state.settings.transitionSeconds) || 15, quick = to.type === 'message' || to.type === 'standby';
+    stopTransition();
+    $('#trLast').textContent = led(from.name); $('#trNow').textContent = ledNow(true);
     $('#trQuote').innerHTML = `“${esc(cfg.quote[0])}”<small>${esc(cfg.quote[1])}</small>`;
-    el.classList.remove('on', 'go', 'out'); void el.offsetWidth; el.classList.add('on');
-    // mostrador central: sobe até 88 MPH, 1,21 GW ou 10:04 pouco antes do raio
-    const num = $('#trNum'), ramp = cfg.ms - 1100, t0 = performance.now();
-    const show = { speed: k => String(Math.round(88 * k)).padStart(2, '0'), fuel: k => (1.21 * k).toFixed(2).replace('.', ','), clock: k => `10:0${Math.min(4, Math.floor(k * 4.999))}` }[cfg.kind];
-    $('#trUnit').textContent = { speed: 'MPH', fuel: 'GIGAWATTS', clock: 'PM · TORRE DO RELÓGIO' }[cfg.kind] || '';
-    if (show) { num.textContent = show(0); S.trI = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ramp); num.textContent = show(k * k * (3 - 2 * k)); if (k >= 1) clearInterval(S.trI); }, 40); }
-    if (window.Trilha) Trilha.sfx('warp', (cfg.ms - 900) / 1000);
-    S.trT.push(setTimeout(() => el.classList.add('go'), cfg.ms - 900),          // raio (e rastros de fogo a 88 mph)
-      setTimeout(() => el.classList.add('out'), cfg.ms),                        // a tela nova surge do clarão
-      setTimeout(() => el.classList.remove('on', 'go', 'out'), cfg.ms + 650));
+    const later = (ms, fn) => S.trT.push(setTimeout(fn, ms));
+    const finish = ms => { later(ms, () => el.classList.add('out')); later(ms + 650, stopTransition); };      // a tela nova surge do clarão
+    el.classList.remove('on', 'go', 'out', 'long'); delete el.dataset.phase;
+    if (quick || secs < 7) { // versão curta (avisos, "olhos no telão" ou duração curta nos Ajustes): circuitos, mostrador e raio
+      const ms = quick ? 3000 : Math.max(2400, secs * 1000);
+      el.dataset.kind = cfg.kind; $('#trDest').textContent = led(to.name);
+      void el.offsetWidth; el.classList.add('on');
+      const num = $('#trNum'), ramp = ms - 1100, t0 = performance.now();
+      const show = { speed: k => String(Math.round(88 * k)).padStart(2, '0'), fuel: k => (1.21 * k).toFixed(2).replace('.', ','), clock: k => `10:0${Math.min(4, Math.floor(k * 4.999))}` }[cfg.kind];
+      $('#trUnit').textContent = { speed: 'MPH', fuel: 'GIGAWATTS', clock: 'PM · TORRE DO RELÓGIO' }[cfg.kind] || '';
+      if (show) { num.textContent = show(0); S.trI = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ramp); num.textContent = show(k * k * (3 - 2 * k)); if (k >= 1) clearInterval(S.trI); }, 40); }
+      if (window.Trilha) Trilha.sfx('warp', (ms - 900) / 1000);
+      later(ms - 900, () => el.classList.add('go'));
+      return finish(ms);
+    }
+    // Versão longa, em quatro atos, para todo mundo olhar para o telão:
+    //  1) PROGRAMAR o destino nos circuitos de tempo (o nome do bloco é digitado letra a letra)
+    //  2) CARREGAR o Flux Capacitor até 1,21 gigawatts
+    //  3) ACELERAR até 88 milhas por hora (as linhas correm cada vez mais rápido, a tela treme)
+    //  4) CHEGADA: três raios, rastros de fogo e o nome do bloco em letras do logo
+    const D = secs * 1000, T = { type: .03 * D, fuel: .27 * D, speed: .46 * D, arrive: .83 * D, end: D };
+    const dest = led(to.name), num = $('#trNum'), unit = $('#trUnit'), step = $('#trStep'), bar = $('#trBar');
+    const phase = (name, text) => { el.dataset.phase = name; step.textContent = text; };
+    el.dataset.kind = 'trip'; $('#trDest').textContent = '';
+    $('#trName').textContent = to.name; $('#trName').classList.toggle('long', to.name.length > 18);
+    $('#trArrive').textContent = to.type === 'closing' ? 'CONTINUA…' : '88 MPH!';
+    void el.offsetWidth; el.classList.add('on', 'long'); phase('type', 'PROGRAMANDO O DESTINO…');
+    bar.style.transition = 'none'; bar.style.width = '0'; void bar.offsetWidth; bar.style.transition = `width ${T.arrive}ms linear`; bar.style.width = '100%';
+    // 1) digita o destino
+    const per = (T.fuel - T.type - 500) / Math.max(1, dest.length);
+    [...dest].forEach((ch, i) => later(T.type + i * per, () => { $('#trDest').textContent = dest.slice(0, i + 1); if (ch !== ' ' && window.Trilha) Trilha.sfx('key', i); }));
+    // 2) Flux Capacitor
+    later(T.fuel, () => {
+      phase('fuel', 'CARREGANDO O FLUX CAPACITOR…'); unit.textContent = 'GIGAWATTS'; if (window.Trilha) Trilha.sfx('hum', (T.speed - T.fuel) / 1000);
+      const t0 = performance.now(), ramp = T.speed - T.fuel - 350; clearInterval(S.trI);
+      S.trI = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ramp); num.textContent = (1.21 * k * k * (3 - 2 * k)).toFixed(2).replace('.', ','); if (k >= 1) clearInterval(S.trI); }, 40);
+    });
+    // 3) 88 milhas por hora
+    later(T.speed, () => {
+      phase('speed', 'ACELERANDO ATÉ 88 MILHAS POR HORA…'); unit.textContent = 'MPH'; if (window.Trilha) Trilha.sfx('warp', (T.arrive - T.speed) / 1000);
+      const t0 = performance.now(), ramp = T.arrive - T.speed - 150, lines = $('.tr-lines'); clearInterval(S.trI);
+      S.trI = setInterval(() => {
+        const k = Math.min(1, (performance.now() - t0) / ramp), v = Math.round(88 * Math.pow(k, 1.35));
+        num.textContent = String(v).padStart(2, '0'); lines.style.animationDuration = (.5 - .42 * k).toFixed(2) + 's'; el.classList.toggle('shake', v >= 70);
+        if (k >= 1) clearInterval(S.trI);
+      }, 40);
+    });
+    // 4) chegada
+    el.style.setProperty('--arrive', (T.end - T.arrive) + 'ms');
+    later(T.arrive, () => { clearInterval(S.trI); el.classList.remove('shake'); $('.tr-lines').style.animationDuration = ''; phase('arrive', ''); el.classList.add('go'); });
+    [0, .035, .075].forEach(k => later(T.arrive + k * D, () => { if (window.Trilha) Trilha.sfx('thunder'); }));
+    finish(T.end);
   }
+  function stopTransition() {
+    const el = $('#tr');
+    S.trT.forEach(clearTimeout); S.trT = []; clearInterval(S.trI);
+    el.classList.remove('on', 'go', 'out', 'long', 'shake'); delete el.dataset.phase; $('.tr-lines').style.animationDuration = '';
+  }
+  // Esc pula a transição (se o apresentador quiser ir direto para a tela)
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#tr').classList.contains('on')) stopTransition(); });
 
   /* ---------- cenas ---------- */
   function sceneFor() {

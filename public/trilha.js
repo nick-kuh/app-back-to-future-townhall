@@ -207,14 +207,27 @@
     sfx(name, arg, delay) {
       if (!ctx || ctx.state !== 'running') return;
       const clock = name === 'tick' || name === 'tick30' || name === 'timeup';   // sons do cronômetro: seguem o botão "Bipes"
-      if (clock ? !want.beeps : want.mode === 'off') return;
+      const trip = name === 'warp' || name === 'key' || name === 'thunder' || name === 'hum';                 // sons da transição entre blocos
+      if (clock ? !want.beeps : trip ? !(want.beeps || want.mode !== 'off') : want.mode === 'off') return;
       const t = ctx.currentTime + .02 + (delay || 0);
       if (name === 'blip') { beep(880, t, .09, .05, 'sine'); beep(1320, t + .07, .12, .04, 'sine'); }
       else if (name === 'reveal') [523, 659, 784, 1047].forEach((f, i) => beep(f, t + i * .11, .22, .09));
       else if (name === 'timeup') { beep(440, t, .35, .12, 'square'); beep(440, t + .5, .35, .12, 'square'); beep(880, t + 1, .6, .12, 'square'); }
       else if (name === 'tick30') beep(988, t, .28, .13, 'square');                          // "pi" dos 30 segundos
       else if (name === 'tick') beep(arg <= 3 ? 1319 : 988, t, .13, .13, 'square');          // contagem final: um por segundo, mais agudo nos 3 últimos
-      else if (name === 'roll') { // suspense: rufar que acelera e cresce
+      else if (name === 'key') beep(1400 + (arg || 0) % 5 * 90, t, .05, .05, 'square');                    // teclado dos circuitos de tempo
+      else if (name === 'hum') { // Flux Capacitor carregando: zumbido que sobe e pulsa
+        const dur = Math.max(.5, arg || 3), o = ctx.createOscillator(), l = ctx.createOscillator(), lg = ctx.createGain(), g = ctx.createGain();
+        o.type = 'triangle'; o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(330, t + dur);
+        l.frequency.setValueAtTime(3, t); l.frequency.linearRampToValueAtTime(14, t + dur); lg.gain.value = .035; l.connect(lg); lg.connect(g.gain);
+        g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.06, t + dur * .7); g.gain.exponentialRampToValueAtTime(.0001, t + dur + .1);
+        o.connect(g); g.connect(io.master); o.start(t); l.start(t); o.stop(t + dur + .2); l.stop(t + dur + .2);
+      } else if (name === 'thunder') { // raio
+        const n = ctx.createBufferSource(), ng = ctx.createGain(), nf = ctx.createBiquadFilter();
+        n.buffer = io.noise; n.loop = true; nf.type = 'lowpass'; nf.frequency.setValueAtTime(3000, t); nf.frequency.exponentialRampToValueAtTime(100, t + 1.1);
+        ng.gain.setValueAtTime(.0001, t); ng.gain.exponentialRampToValueAtTime(.24, t + .03); ng.gain.exponentialRampToValueAtTime(.0001, t + 1.2);
+        n.connect(nf); nf.connect(ng); ng.connect(io.master); n.start(t); n.stop(t + 1.3);
+      } else if (name === 'roll') { // suspense: rufar que acelera e cresce
         const dur = Math.max(.5, arg || 3); let at = 0, i = 0;
         while (at < dur) { const k = at / dur; beep(i % 2 ? 196 : 147, t + at, .07, .04 + .07 * k, 'triangle'); at += .16 - .09 * k; i++; }
       } else if (name === 'warp') { // viagem no tempo: o motor sobe até 88 mph e o raio estoura

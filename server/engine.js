@@ -66,7 +66,8 @@ const DEFAULT_SETTINGS = {
   steps: null,            // roteiro do evento (montado no construtor; editável em Preparar → Roteiro)
   stageText: 'Agora a atenção é no palco.',
   stageMutes: true,       // exibir um bloco de fala desliga o som do telão
-  transitions: true,      // transição do filme (alguns segundos) no telão e nos celulares ao trocar de bloco
+  transitions: true,      // transição do filme no telão e nos celulares ao trocar de bloco
+  transitionSeconds: 15,  // quanto dura a transição entre blocos (avisos e "olhos no telão" entram em 3 s)
   // quem não participa de cada bloco (ex.: quem coordena): faz o login e conta presença, mas fica fora das duplas, da votação ou das respostas
   skip: { connections: [], reflexao: [], sucesso: [] },
   musicUrl: '',           // opcional: arquivo de áudio próprio para "Música" (senão, toca a trilha gerada no navegador)
@@ -629,6 +630,7 @@ class Engine {
     for (const k of ['eventName', 'welcomeText', 'closingText', 'standbyText', 'stageText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
     if (partial.stageMutes !== undefined) s.stageMutes = !!partial.stageMutes;
     if (partial.transitions !== undefined) s.transitions = !!partial.transitions;
+    if (partial.transitionSeconds !== undefined) s.transitionSeconds = Math.max(3, Math.min(30, Math.round(Number(partial.transitionSeconds) || 15)));
     if (partial.skip !== undefined) s.skip = this.cleanSkip({ ...s.skip, ...(partial.skip && typeof partial.skip === 'object' ? partial.skip : {}) });
     // áudio próprio: só endereços http(s) ou caminhos do próprio site
     for (const k of ['musicUrl', 'ambientUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
@@ -827,7 +829,7 @@ class Engine {
       stage: this.stageInfo(),
       step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length },
       audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', beeps: this.state.audio.beeps !== false, musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
-      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false },
+      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 15 },
       now: now(),
     };
   }

@@ -32,15 +32,22 @@
 <div class="tr" id="tr" aria-hidden="true">
   <div class="tr-lines"></div>
   <div class="tr-box">
+    <div class="tr-step" id="trStep"></div>
     <div class="circuits tr-circ">
       <div class="tc r"><label>DESTINATION TIME</label><div class="led" id="trDest"></div></div>
       <div class="tc g"><label>PRESENT TIME</label><div class="led" id="trNow"></div></div>
       <div class="tc a"><label>LAST TIME DEPARTED</label><div class="led" id="trLast"></div></div>
     </div>
-    <div class="tr-gauge"><b id="trNum">00</b><span id="trUnit">MPH</span></div>
+    <div class="tr-row">
+      <div class="flux tr-flux"><i></i><i></i><i></i><b></b></div>
+      <div class="tr-gauge"><b id="trNum">00</b><span id="trUnit">MPH</span></div>
+    </div>
     <div class="tr-end">CONTINUA…</div>
     <div class="tr-quote" id="trQuote"></div>
+    <!-- chegada: o nome do bloco em letras do logo -->
+    <div class="tr-arrive"><div class="tr-mph" id="trArrive">88 MPH!</div><div class="tr-top"><span class="bttf">DESTINO</span><i class="sf-arrow"></i></div><div class="tr-name"><span class="bttf" id="trName"></span></div></div>
   </div>
+  <div class="tr-progress"><i id="trBar"></i></div>
   <div class="tr-fire"></div><div class="tr-fire f2"></div>
   <div class="tr-flash"></div>
 </div>

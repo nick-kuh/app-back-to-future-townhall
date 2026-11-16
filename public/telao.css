@@ -324,3 +324,44 @@ body.calm .osd{opacity:.45}
 .tr.out>*:not(.tr-flash){visibility:hidden}
 @keyframes trout{from{opacity:1}to{opacity:0}}
 @media (prefers-reduced-motion:reduce){.tr-lines,.tr-end{animation:none}}
+
+/* ===== transição longa (15 s), em quatro atos: programar o destino → Flux Capacitor → 88 MPH → chegada ===== */
+.tr-step{display:none;font:400 clamp(12px,1.5vw,24px) var(--pixel);letter-spacing:4px;color:var(--yellow);text-shadow:0 0 14px rgba(255,210,31,.6);animation:blink 1s steps(2) infinite}
+.tr.long .tr-step{display:block}
+.tr-row{display:flex;align-items:center;justify-content:center;gap:3vw}
+.tr-flux{display:none;flex:none;width:min(24vh,250px);height:min(24vh,250px)}
+.tr-arrive,.tr-progress{display:none}
+.tr.long .tr-gauge,.tr.long .tr-quote{display:none}
+.tr.long[data-phase=type] .tr-circ .tc.r .led::after{content:"▮";animation:blink .5s steps(2) infinite;margin-left:.1em}
+.tr.long[data-phase=type] .tr-circ .tc.r{filter:drop-shadow(0 0 18px rgba(255,59,48,.55))}
+.tr.long[data-phase=type] .tr-quote{display:block}
+.tr.long[data-phase=fuel] .tr-gauge,.tr.long[data-phase=speed] .tr-gauge{display:flex}
+.tr.long[data-phase=fuel] .tr-flux{display:block}
+.tr.long[data-phase=fuel] .tr-flux i{animation-duration:.45s}
+.tr.long[data-phase=fuel] .tr-gauge b{color:var(--cyan);text-shadow:0 0 40px var(--cyan)}
+.tr.long[data-phase=speed] .tr-quote{display:block}
+.tr.long[data-phase=speed] .tr-gauge b{font-size:clamp(90px,24vh,320px)}
+.tr.long[data-phase=fuel] .tr-circ,.tr.long[data-phase=speed] .tr-circ{transform:scale(.72);transform-origin:50% 0;margin-bottom:-7vh;transition:transform .6s,margin .6s}
+.tr.shake .tr-box{animation:trshake .09s linear infinite}
+@keyframes trshake{0%{transform:translate(0,0)}25%{transform:translate(-5px,3px)}50%{transform:translate(4px,-4px)}75%{transform:translate(-3px,-2px)}100%{transform:translate(0,0)}}
+/* chegada */
+.tr.long[data-phase=arrive] .tr-circ,.tr.long[data-phase=arrive] .tr-row,.tr.long[data-phase=arrive] .tr-step,.tr.long[data-phase=arrive] .tr-quote{display:none}
+.tr.long[data-phase=arrive] .tr-arrive{display:flex;flex-direction:column;align-items:center;gap:2vh;width:100%;animation:trland .5s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes trland{from{transform:scale(2.4);opacity:0}to{transform:none;opacity:1}}
+.tr-mph{font:900 italic clamp(30px,5vw,84px) var(--display);color:var(--yellow);text-shadow:0 0 30px var(--orange);letter-spacing:.06em}
+.tr-top{display:flex;align-items:center;gap:1.4vw;font-size:clamp(20px,3vw,52px)}
+.tr-name{font-size:clamp(60px,12vw,210px);line-height:1.02;text-align:center;overflow-wrap:anywhere}
+.tr-name .long{font-size:.56em}
+.tr-name .bttf{-webkit-box-decoration-break:clone;box-decoration-break:clone;padding:.04em .14em}
+.tr.long .tr-fire{bottom:14vh}.tr.long .tr-fire.f2{bottom:9vh}
+.tr.long.go .tr-fire{animation:trfire .8s ease-in forwards}
+.tr.long.go .tr-fire.f2{animation-delay:.08s}
+/* três raios na chegada; a tela fica acesa só no fim, quando a cena nova entra */
+.tr.long.go .tr-flash{animation:trflash3 var(--arrive,2.5s) linear forwards}
+@keyframes trflash3{0%{opacity:.95}5%{opacity:0}19%{opacity:0}21%{opacity:.9}27%{opacity:0}42%{opacity:0}44%{opacity:1}52%{opacity:0}84%{opacity:0}95%{opacity:1}100%{opacity:1}}
+.tr.out .tr-flash{animation:none!important;opacity:1}  /* a tela nova sempre surge do clarão, mesmo se o computador engasgar */
+/* barra de progresso da viagem (some na chegada) */
+.tr.long .tr-progress{display:block;position:absolute;left:8vw;right:8vw;bottom:5vh;height:8px;background:#0a0618;border:1px solid #5c47a8;border-radius:99px;overflow:hidden}
+.tr.long[data-phase=arrive] .tr-progress{display:none}
+.tr-progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--yellow),var(--orange));box-shadow:0 0 14px var(--orange)}
+@media (prefers-reduced-motion:reduce){.tr.shake .tr-box,.tr-step{animation:none}}

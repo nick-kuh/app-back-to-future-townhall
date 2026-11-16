@@ -181,7 +181,9 @@
     const blk = blockNow(), moved = !!(prev && blk && blk.msg && S.blk && S.blk !== blk.id && S.state.settings.transitions !== false);
     S.blk = blk ? blk.id : null;
     // a transição de bloco não é interrompida por atualizações que chegam logo em seguida: a tela nova entra por baixo
-    const show = () => { if (!moved) return render(); warp._hold = true; warp(blk.msg.toUpperCase(), () => { warp._hold = false; render(); }, 1500); };
+    // dura o mesmo que a transição do telão (15 s por padrão), pedindo para a pessoa olhar para lá
+    const secs = Number(S.state && S.state.settings.transitionSeconds) || 15, long = secs >= 7;
+    const show = () => { if (!moved) return render(); warp._hold = true; warp(`${long ? '👀 OLHE PARA O TELÃO\n\n' : ''}${blk.msg.toUpperCase()}`, () => { warp._hold = false; render(); }, long ? secs * 1000 - 700 : 1500); };
     const stopWarp = () => { if (warp._hold) return; clearInterval(warp._t); $('#warp').classList.remove('on', 'go'); };
     S.jump = !prev || p.slice(0, 4).join('|') !== n.slice(0, 4).join('|');
     if (n[0] === 'presentation' || p[0] === 'presentation') {

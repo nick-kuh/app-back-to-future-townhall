@@ -346,3 +346,4 @@ textarea.input{resize:none;line-height:1.4;font-size:16px;font-weight:500;min-he
 .presentation-card.compact .pq{font-size:16px;padding:6px 10px}
 .presentation-card.compact .small{margin-top:8px!important}
 .rfx-chips:first-child{margin-top:8px}
+.warp-msg{white-space:pre-line}

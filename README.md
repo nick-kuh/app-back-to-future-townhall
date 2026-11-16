@@ -125,12 +125,21 @@ viagens (depois do sorteio, é preciso sortear de novo).
   telão (ou do painel, se o som estiver nele) e segue o volume do painel. O botão **⏱ Bipes** no topo
   do painel liga e desliga; eles tocam mesmo com "Sem áudio". É preciso um clique na tela do telão
   para o navegador liberar o som (o painel avisa quando falta).
-- **Transições.** Ao trocar de bloco, o telão mostra por alguns segundos uma "viagem no tempo": os
-  circuitos de tempo (LAST TIME DEPARTED = de onde saímos, DESTINATION TIME = para onde vamos), uma
-  fala do filme e um mostrador que muda conforme o destino (88 MPH com rastros de fogo para Conexões
-  e Sucesso, 1,21 gigawatts para a Reflexão, o relógio da torre às 10:04 para os blocos de fala,
-  "CONTINUA…" na conclusão), terminando no raio. Nos celulares, o velocímetro sobe até 88 MPH com
-  o destino escrito. Dá para desligar em Preparar → Ajustes.
+- **Transições.** Ao trocar de bloco, o telão faz uma "viagem no tempo" de **15 segundos**, em quatro
+  atos, para todo mundo olhar para ele:
+  1. **Programando o destino**: os circuitos de tempo digitam o nome do próximo bloco, letra a letra
+     (LAST TIME DEPARTED mostra de onde saímos), com uma fala do filme;
+  2. **Carregando o Flux Capacitor**: o mostrador sobe até 1,21 gigawatts;
+  3. **Acelerando até 88 milhas por hora**: as linhas correm cada vez mais rápido e a tela treme;
+  4. **Chegada**: três raios, rastros de fogo e o nome do bloco em letras do logo ("CONTINUA…" na
+     conclusão). A tela nova surge do clarão.
+
+  Nos celulares, durante esse tempo, aparece **"👀 Olhe para o telão"** com o velocímetro subindo até
+  88 MPH; a tela nova só entra quando o telão termina. Avisos rápidos e "olhos no telão" entram em 3 s.
+  Em Preparar → Ajustes dá para mudar a duração (3 a 30 s; menos de 7 s usa a versão curta) ou
+  desligar. No telão, a tecla **Esc** pula a transição. Os sons da transição (teclado, zumbido, motor
+  e raios) tocam com a música ligada ou com os Bipes ligados.
+
 
 ### Fonte do logo
 

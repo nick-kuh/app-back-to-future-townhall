@@ -216,6 +216,9 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await call('POST', '/api/admin/action', { type: 'setScene', scene: 'auto' });
     // bipes do cronômetro e transições: ligados por padrão, o Doc pode desligar
     st = await state(); assert.equal(st.audio.beeps, true); assert.equal(st.settings.transitions, true);
+    assert.equal(st.settings.transitionSeconds, 15);                // transição longa por padrão; o Doc ajusta entre 3 e 30 s
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { transitionSeconds: 99 } }); st = await state(); assert.equal(st.settings.transitionSeconds, 30);
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { transitionSeconds: 15 } }); st = await state(); assert.equal(st.settings.transitionSeconds, 15);
     r = await call('POST', '/api/admin/action', { type: 'setAudio', beeps: false }); r = await call('POST', '/api/admin/action', { type: 'settings', settings: { transitions: false } });
     st = await state(); assert.equal(st.audio.beeps, false); assert.equal(st.settings.transitions, false);
     r = await call('POST', '/api/admin/action', { type: 'setAudio', beeps: true }); r = await call('POST', '/api/admin/action', { type: 'settings', settings: { transitions: true } });
