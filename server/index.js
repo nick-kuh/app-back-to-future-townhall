@@ -8,6 +8,7 @@ const { Server } = require('socket.io');
 const { Engine, TOTAL_ROUNDS } = require('./engine');
 const { DB_PATH, DATA_DIR } = require('./db');
 const { createSucesso } = require('./sucesso');
+const { createReflexao } = require('./reflexao');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'doc1985';
@@ -22,6 +23,9 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' }, pingInterval: 10000, pingTimeout: 20000 });
 
 const sucesso = createSucesso({ dbPath: process.env.SUCESSO_DB_PATH || path.join(DATA_DIR, 'sucesso.db'), adminPassword: ADMIN_PASSWORD });
+// Bloco Reflexão (paradas com votação em projetos): está no ar quando o roteiro está nesse passo e não há dinâmica do Sucesso na tela
+const reflexao = createReflexao();
+const reflexaoOnAir = () => engine.state.block === 'reflexao' && !engine.state.presentation;
 
 app.disable('x-powered-by');
 app.use(require('compression')()); // gzip: páginas e scripts chegam mais rápido no Wi-Fi do evento
@@ -49,6 +53,7 @@ app.use(express.static(path.join(__dirname, '..', 'public'), { etag: true, maxAg
 function publicState() {
   const s = engine.publicState();
   if (s.presentation) s.presentation.live = sucesso.ready() ? sucesso.live(engine.state.presentation) : null;
+  s.reflexao = reflexaoOnAir() ? reflexao.publicState() : null;
   return s;
 }
 // Estado da pessoa + o que ela já respondeu na dinâmica em exibição e se foi a sorteada
@@ -58,6 +63,7 @@ function meState(pid) {
     const d = p.draw, drawn = !!(d && d.personId === pid);
     m.sucesso = { answers: sucesso.mine(p, pid), drawn, drawnAnswer: drawn ? d.answer : null };
   }
+  if (m && reflexaoOnAir()) m.reflexao = reflexao.mine(pid);
   return m;
 }
 
@@ -100,6 +106,15 @@ app.post('/api/sucesso/answer', wrapAsync(async req => {
   if (!p || !sucesso.ready()) throw Object.assign(new Error('Nenhuma dinâmica está aberta agora.'), { status: 409 });
   const r = await sucesso.answer(p, person, { answer: b.answer, anonymous: !!b.anonymous, clientRequestId: String(b.clientRequestId || '') });
   return { ok: true, duplicate: r.duplicate, me: meState(person.id) };
+}));
+// Reflexão: lista de projetos (para o celular escolher) e o voto, sempre com o nome do check-in.
+app.get('/api/reflexao/projects', wrap(() => reflexao.catalog()));
+app.post('/api/reflexao/vote', wrap(req => {
+  const b = req.body || {}, person = engine.personByToken(b.token);
+  if (!person || !person.checkedInAt || !person.active) throw Object.assign(new Error('Seu check-in não está mais ativo. Escolha seu nome de novo.'), { status: 401 });
+  if (!reflexaoOnAir()) throw Object.assign(new Error('A Reflexão não está no ar agora.'), { status: 409 });
+  reflexao.vote(person, String(b.project || ''));
+  return { ok: true, me: meState(person.id) };
 }));
 app.get('/health', (req, res) => res.json({ ok: true, db: DB_PATH, phase: engine.state.conn.phase, block: engine.state.block }));
 
@@ -144,7 +159,7 @@ app.post('/api/admin/action', wrap(req => {
     case 'openRanking': engine.openRanking(); break;
     case 'computeResults': engine.computeResults(); break;
     case 'resetConnections': engine.resetConnections(); break;
-    case 'resetEvent': engine.resetEvent(); sucesso.clearRoom(engine.state.sucessoRoom).catch(e => console.error('[sucesso] limpar sala:', e.message)); break;
+    case 'resetEvent': reflexao.clearAll({ silent: true }); engine.resetEvent(); sucesso.clearRoom(engine.state.sucessoRoom).catch(e => console.error('[sucesso] limpar sala:', e.message)); break;
     case 'testCheckinAll': engine.testCheckinAll(); break;
     case 'testRandomRankings': engine.testRandomRankings(); break;
     default: throw new Error('Ação desconhecida: ' + a.type);
@@ -221,9 +236,40 @@ app.post('/api/admin/sucesso/draw', wrap(req => {
     engine.setDraw(pool[crypto.randomInt(pool.length)], l.roundId, l.talkSeconds);
   } else if (action === 'close') engine.closeDraw();
   else if (['talkStart', 'talkPause', 'talkReset'].includes(action)) engine.drawTalk(action.slice(4).toLowerCase());
+  else if (action === 'reveal') { // a nuvem de palavras só vai para o telão quando o Doc revela
+    const l = sucesso.live(p);
+    if (!l || l.phase !== 'done') fail('Encerre o recebimento antes de revelar as respostas.');
+    engine.setReveal(true);
+  } else if (action === 'hide') engine.setReveal(false);
   else fail('Comando inválido.', 400);
   return { ok: true };
 }));
+
+// Reflexão: comandos do Doc (abrir parada, votação, sorteio de 2 projetos), votos e configuração.
+app.post('/api/admin/reflexao', wrap(req => {
+  const a = req.body || {}, live = ['open', 'menu', 'start', 'pause', 'end', 'reset', 'draw', 'swap', 'showDraw', 'fake'];
+  if (live.includes(a.action) && !reflexaoOnAir()) throw Object.assign(new Error('Coloque a Reflexão no ar (no roteiro) antes.'), { status: 409 });
+  switch (a.action) {
+    case 'open': reflexao.open(a.idx); break;
+    case 'menu': reflexao.menu(); break;
+    case 'start': reflexao.start(); break;
+    case 'pause': reflexao.pause(); break;
+    case 'end': reflexao.end(); break;
+    case 'reset': reflexao.reset(); break;
+    case 'draw': reflexao.draw(); break;
+    case 'swap': reflexao.swap(a.k); break;
+    case 'showDraw': reflexao.showDraw(!!a.on); break;
+    case 'fake': return { ok: true, added: reflexao.fake(a.n) };
+    case 'clear': reflexao.clear(); break;
+    case 'clearAll': reflexao.clearAll(); break;
+    case 'config': reflexao.setConfig(a.config || {}); break;
+    case 'resetConfig': reflexao.resetConfig(); break;
+    default: throw Object.assign(new Error('Comando inválido.'), { status: 400 });
+  }
+  return { ok: true };
+}));
+app.get('/api/admin/reflexao/votes', wrap(() => ({ votes: reflexao.votes() })));
+app.get('/api/admin/reflexao/votes.csv', (req, res) => res.type('text/csv; charset=utf-8').set('Content-Disposition', 'attachment; filename="Votos_Reflexao.csv"').send(reflexao.votesCsv()));
 
 app.post('/api/admin/people', wrap(req => engine.addPerson(req.body || {})));
 app.put('/api/admin/people/:id', wrap(req => engine.updatePerson(req.params.id, req.body || {})));
@@ -256,7 +302,10 @@ function pushAdmin() {
   if (adminTimer) return;
   adminTimer = setTimeout(() => { adminTimer = null; io.to('admin').emit('admin:overview', adminOverview()); }, 500);
 }
+// O evento saiu da Reflexão (outro passo, aviso, dinâmica do Sucesso): a votação em andamento fica pausada.
+engine.onChange(() => { if (!reflexaoOnAir()) reflexao.hold(); });
 engine.onChange(pushAll);
+reflexao.onChange(pushAll);
 // Resposta nova ou comando numa dinâmica do Sucesso: celulares, telão e painel atualizam na hora.
 let pulseTimer = null, expiryTimer = null;
 function armExpiry() { // o prazo de recebimento acaba sem nenhum comando: avisa os aparelhos nessa hora
@@ -269,7 +318,9 @@ function sucessoChanged() {
   pulseTimer = setTimeout(() => {
     pulseTimer = null;
     const p = engine.state.presentation, l = p && sucesso.ready() ? sucesso.live(p) : null;
-    if (p && p.draw && (!l || l.phase !== 'done')) engine.closeDraw(); // dinâmica reiniciada ou limpa: o sorteio sai da tela
+    const reopened = !!p && (!l || l.phase !== 'done');
+    if (reopened && p.revealed) { p.revealed = false; engine.save(); } // recebimento reaberto ou respostas apagadas: a nuvem volta a ficar guardada
+    if (reopened && p.draw) engine.closeDraw(); // dinâmica reiniciada ou limpa: o sorteio sai da tela
     else pushAll();
     io.emit('sucesso:pulse'); armExpiry();
   }, 150);
@@ -283,7 +334,7 @@ function telaoStatus() {
   for (const [, s] of io.of('/').sockets) if (s.data.telao) list.push(s.data.telao);
   return { count: list.length, sound: list.some(t => !t.locked), auth: list.some(t => t.auth) };
 }
-const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null });
+const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null, reflexao: reflexao.adminState() });
 
 // Liga o socket à pessoa dona do token (do evento ou guardado no socket) e revalida sempre:
 // se o token foi trocado (outro aparelho assumiu o nome) ou o check-in foi desfeito, desliga.

@@ -28,31 +28,13 @@
 
 <button id="soundChip" class="sound-chip" type="button" hidden>🔊 Clique aqui para ligar o som do telão</button>
 
-<div class="delorean" id="delorean" aria-hidden="true">
-  <div class="fire f1"></div><div class="fire f2"></div>
-  <svg viewBox="0 0 340 130">
-    <defs>
-      <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f6fa"/><stop offset=".5" stop-color="#a7b0c0"/><stop offset="1" stop-color="#4b5263"/></linearGradient>
-      <linearGradient id="glass" x1="0" x2="1"><stop offset="0" stop-color="#2ee6d6" stop-opacity=".75"/><stop offset="1" stop-color="#0b0618"/></linearGradient>
-    </defs>
-    <path d="M14 92 L44 66 L118 60 L158 28 L236 28 L272 62 L322 72 L330 96 L318 110 L28 110 Z" fill="url(#body)" stroke="#2ee6d6" stroke-width="2"/>
-    <path d="M160 34 L228 34 L258 62 L126 64 Z" fill="url(#glass)"/>
-    <line x1="194" y1="34" x2="194" y2="64" stroke="#4b5263" stroke-width="3"/>
-    <rect x="236" y="76" width="60" height="16" fill="#2b2f3a" stroke="#ffd21f"/>
-    <rect x="300" y="80" width="22" height="9" rx="2" fill="#ff2d95"/>
-    <rect x="26" y="86" width="20" height="8" fill="#ffd21f"/>
-    <circle cx="84" cy="112" r="20" fill="#111" stroke="#2ee6d6" stroke-width="4"/><circle cx="84" cy="112" r="7" fill="#a7b0c0"/>
-    <circle cx="268" cy="112" r="20" fill="#111" stroke="#2ee6d6" stroke-width="4"/><circle cx="268" cy="112" r="7" fill="#a7b0c0"/>
-    <circle cx="250" cy="52" r="4" fill="#2ee6d6"><animate attributeName="opacity" values="1;.2;1" dur=".6s" repeatCount="indefinite"/></circle>
-    <circle cx="262" cy="56" r="4" fill="#2ee6d6"><animate attributeName="opacity" values=".2;1;.2" dur=".6s" repeatCount="indefinite"/></circle>
-  </svg>
-</div>
 
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/vendor/qrcode.js"></script>
 <script src="delorean3d.js"></script>
 <script src="nuvem.js"></script>
+<script src="flux.js"></script>
 <script src="trilha.js"></script>
 <script src="telao.js"></script>
 </body>

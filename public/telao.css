@@ -101,14 +101,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .mutual span{font:700 clamp(14px,1.6vw,26px) Inter;background:rgba(255,106,0,.18);border:2px solid rgba(255,106,0,.6);border-radius:99px;padding:.8vh 1.4vw}
 
 /* DeLorean passando */
-.delorean{position:fixed;left:-30vw;bottom:9vh;width:22vw;z-index:12;pointer-events:none;opacity:0}
-.delorean.go{animation:drive 7s cubic-bezier(.3,.2,.7,.8) forwards}
-@keyframes drive{0%{left:-30vw;opacity:1}85%{opacity:1}100%{left:120vw;opacity:0}}
-.delorean svg{width:100%;filter:drop-shadow(0 0 24px rgba(46,230,214,.5))}
-.delorean .fire{position:absolute;bottom:6%;height:6px;width:60vw;right:70%;border-radius:9px;background:linear-gradient(90deg,transparent,#ff2a00,#ffd21f,#fff);filter:blur(1px);box-shadow:0 0 18px #ff6a00;opacity:0}
-.delorean .fire.f2{bottom:0;right:30%}
-.delorean.go .fire{animation:trail 7s linear forwards}
-@keyframes trail{10%{opacity:1}100%{opacity:1}}
 
 /* letreiro de frases */
 .ticker{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(5,3,12,.85);border-top:3px solid var(--magenta);height:6.5vh;display:flex;align-items:center;overflow:hidden}
@@ -163,15 +155,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .live-projection{width:min(1500px,100%);display:flex;flex-direction:column;gap:2vh;min-height:0;flex:1}
 .live-projection .kicker{color:var(--c);text-shadow:0 0 10px var(--c)}
 .live-projection .pq{font:900 clamp(24px,3.6vw,58px)/1.12 Inter;color:var(--txt);max-width:60ch;margin:0 auto;border-left:6px solid var(--c);padding:6px 18px;text-align:left;background:rgba(23,20,46,.85);overflow-wrap:anywhere}
-.projection-body{display:grid;grid-template-columns:minmax(220px,.42fr) 1fr;gap:2.4vw;flex:1;min-height:0}
-.projection-entry{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2vh;background:rgba(17,9,35,.88);border:2px solid #3a3560;border-radius:16px;padding:2vh 1.4vw}
-.projection-entry .qr{width:min(34vh,100%,340px);height:auto;aspect-ratio:1;box-shadow:0 0 30px var(--c)}
-.projection-entry .scan{font:700 clamp(11px,1.2vw,18px) var(--led);letter-spacing:3px;color:var(--cyan);text-shadow:0 0 10px var(--cyan)}
-.projection-entry .tcbox{--c:var(--cyan)}
-.carbox .feed{position:absolute;left:14px;top:14px;z-index:4;display:flex;flex-direction:column;gap:6px;max-width:44%;pointer-events:none;text-align:left}
-.carbox .feed div{background:rgba(23,20,46,.92);border-left:3px solid var(--magenta);padding:6px 10px;font:600 clamp(13px,1.3vw,20px) Inter;line-height:1.25;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
-.carbox .feed div.new{animation:feedin .6s ease-out}
-@keyframes feedin{from{opacity:0;transform:translateX(-30px) rotateY(40deg)}to{opacity:1;transform:none}}
+.live-projection .carbox.wide{flex:1;min-height:0}
+.carbox .tcbox.count{position:absolute;top:14px;left:14px;z-index:4;--c:var(--cyan)}
 .carbox .phase{position:absolute;left:18px;bottom:clamp(58px,8vh,80px);z-index:4;font:700 clamp(11px,1.1vw,16px) var(--led);letter-spacing:2px;color:var(--cyan)}
 .carbox .phase[data-phase=run]{color:var(--green)}.carbox .phase[data-phase=paused]{color:var(--amber)}.carbox .phase[data-phase=done]{color:var(--magenta)}
 .carbox .timer{position:absolute;top:14px;right:14px;z-index:4;--c:var(--yellow)}
@@ -179,8 +164,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .carbox .portal-msg{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;font:900 italic clamp(34px,5vw,80px) var(--display);color:var(--yellow);text-shadow:0 0 30px #ff6b1a;opacity:0;pointer-events:none;transition:opacity .6s}
 .carbox[data-mode=arrived] .portal-msg,.carbox.final .portal-msg{opacity:1}
 .carbox[data-mode=arrived] .energy{opacity:.25}
-@media (max-aspect-ratio:4/3){.projection-body{grid-template-columns:1fr}.carbox.wide{min-height:46vh}}
-@media (prefers-reduced-motion:reduce){.gwplus,.carbox .feed div.new{animation:none}}
+@media (max-aspect-ratio:4/3){.carbox.wide{min-height:46vh}}
+@media (prefers-reduced-motion:reduce){.gwplus{animation:none}}
 
 /* ===== Sucesso no telão: camadas (carro → nuvem de palavras), respostas, sorteio e tempo de fala ===== */
 .carbox .layer{position:absolute;inset:0}
@@ -188,9 +173,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .carbox .cloud-layer canvas{width:100%;height:100%;display:block}
 .carbox[data-mode=cloud] .car-layer{display:none}
 .carbox[data-mode=cloud] .cloud-layer{display:block}
-.carbox[data-mode=cloud] .feed{display:none}
-.carbox .feed div b{color:var(--yellow)}
-.projection-entry .url{font:400 clamp(10px,1vw,15px) var(--pixel);max-width:100%;text-align:center;line-height:1.7}
 .carbox .draw{position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.8vh;text-align:center;padding:2vh 2vw;background:rgba(11,10,31,.93)}
 .carbox .draw[hidden]{display:none}
 .draw .dk{font:700 clamp(12px,1.3vw,20px) var(--led);letter-spacing:5px;color:var(--cyan);text-shadow:0 0 10px rgba(46,230,214,.6)}
@@ -212,10 +194,66 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .stage-calm .ss{font:600 clamp(18px,2.2vw,36px) Inter;color:var(--yellow)}
 body.calm .sky{filter:brightness(.34) saturate(.65);transition:filter 1.2s}
 body.calm .crt{animation:none}
-body.calm .delorean{display:none}
 body.calm .osd{opacity:.45}
 
 /* aviso para liberar o som (os navegadores exigem um clique) */
 .sound-chip{position:fixed;left:50%;bottom:3vh;transform:translateX(-50%);z-index:40;border:2px solid var(--yellow);background:rgba(5,4,9,.92);color:var(--yellow);font:700 clamp(13px,1.3vw,20px) Inter;padding:12px 22px;border-radius:99px;cursor:pointer;animation:chip 1.6s ease-in-out infinite}
 .sound-chip[hidden]{display:none}
 @keyframes chip{50%{box-shadow:0 0 0 10px rgba(255,210,31,.12)}}
+
+/* ===== Reflexão no telão (Ato 1 · O Combustível do Futuro): menu das paradas, Flux Capacitor e sorteio ===== */
+.rfx{width:min(1500px,100%);display:flex;flex-direction:column;min-height:0;flex:1}
+.rfx .lbl{display:flex;justify-content:space-between;gap:12px;font:700 clamp(11px,1.15vw,18px) var(--led);color:var(--yellow);margin-bottom:5px;letter-spacing:1px;text-shadow:0 0 8px rgba(255,210,31,.5)}
+.rfx-menu{align-items:center;justify-content:center;gap:1.5vh}
+.rfx-tcs{display:flex;gap:1.4vw;justify-content:center}
+.rfx-tcs .tcbox b{font-size:clamp(22px,2.8vw,44px)}
+.rfx-title{font:900 italic clamp(26px,4.2vw,68px)/1.06 var(--display);margin-top:1vh;background:linear-gradient(180deg,#fff6b0 0%,#ffd21f 28%,#ff8a00 55%,#ff2d95 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 4px 0 #4a0823) drop-shadow(0 0 22px rgba(255,46,136,.5))}
+.rfx-sub{font:700 clamp(12px,1.3vw,20px) var(--led);letter-spacing:6px;color:var(--cyan);text-shadow:0 0 10px var(--cyan);background:rgba(11,6,24,.72);padding:5px 16px}
+.rfx-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:1.6vh 1.4vw;width:100%;margin-top:1vh}
+.rcard{position:relative;display:flex;gap:1.1vw;align-items:center;text-align:left;background:linear-gradient(160deg,rgba(29,24,64,.95),rgba(11,10,31,.95));border:2px solid var(--c);padding:1.7vh 1.2vw;box-shadow:0 0 18px color-mix(in srgb,var(--c) 40%,transparent)}
+.rcard .n{font:700 clamp(26px,3vw,48px) var(--led);color:var(--c);text-shadow:0 0 14px var(--c)}
+.rcard h3{font:800 clamp(15px,1.5vw,24px) Inter;margin-bottom:.4vh}
+.rcard p{font:italic 400 clamp(12px,1.1vw,18px) Inter;color:var(--muted)}
+.rcard .k{margin-top:.7vh;font:700 clamp(11px,1vw,16px) var(--led);color:var(--c)}
+.rcard .badge{display:none;position:absolute;top:8px;right:10px;font:800 clamp(9px,.8vw,12px) Inter;color:#0b0a1f;background:var(--c);padding:2px 6px}
+.rcard.done .badge{display:block}
+.rfx-gbar{width:100%;margin-top:1.6vh;text-align:left}
+.rfx-gbar .ebar{height:clamp(14px,2vh,24px)}
+.rfx-theme{gap:1.8vh}
+.rfx-top{display:flex;align-items:center;justify-content:space-between;gap:2vw}
+.rfx-top .ttl{font:900 italic clamp(20px,2.8vw,46px)/1.1 var(--display);color:var(--c);text-shadow:0 0 14px var(--c);text-align:left}
+.rfx-top .tcbox b{font-size:clamp(22px,2.6vw,42px)}
+.rfx-stage{flex:1;display:grid;grid-template-columns:minmax(240px,.36fr) 1fr;gap:2vw;min-height:0}
+.rfx-side{display:flex;flex-direction:column;gap:2.4vh;align-items:center;justify-content:center}
+.rfx-side .q{align-self:stretch;background:rgba(23,20,46,.94);border-left:6px solid var(--c);padding:1.8vh 1.2vw;font:800 clamp(18px,2vw,34px)/1.22 Inter;text-align:left;overflow-wrap:anywhere}
+.rfx-side .scan{font:700 clamp(11px,1.1vw,17px) var(--led);letter-spacing:2px;color:var(--cyan);text-shadow:0 0 10px var(--cyan)}
+.rfx-view{position:relative;border:2px solid #3a3560;border-radius:16px;overflow:hidden;min-height:0;background:radial-gradient(ellipse at 50% 40%,rgba(29,20,64,.6),rgba(5,4,9,.66) 75%)}
+.rfx-view canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.rfx-view .timer{position:absolute;top:14px;right:14px;z-index:4}
+.rfx-view .rstatus{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:4;font:800 clamp(11px,1.1vw,16px) var(--led);letter-spacing:3px;padding:6px 14px;border:2px solid var(--c);color:var(--c);background:rgba(5,4,9,.8);white-space:nowrap}
+.rfx-view .rstatus[data-phase=run]{border-color:var(--green);color:var(--green)}
+.rfx-view .rstatus[data-phase=paused]{border-color:var(--amber);color:var(--amber)}
+.rfx-view .rfeed{position:absolute;left:14px;top:14px;z-index:5;display:flex;flex-direction:column;gap:6px;pointer-events:none;text-align:left;max-width:34%}
+.rfx-view .rfeed div{background:rgba(23,20,46,.93);border-left:3px solid var(--c);padding:5px 10px;font:600 clamp(13px,1.2vw,19px) Inter;animation:rfeed 3s forwards;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rfx-view .rfeed b{color:var(--yellow)}
+@keyframes rfeed{0%{opacity:0;transform:translateX(-30px)}12%,80%{opacity:1;transform:none}100%{opacity:0}}
+.rfx-view .energy{position:absolute;left:18px;right:18px;bottom:14px;z-index:4}
+.rflash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:9}
+.rflash.on{animation:rfl .8s}
+@keyframes rfl{15%{opacity:.85}100%{opacity:0}}
+.rdraw{position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.8vh;padding:2vh 2vw;background:rgba(11,10,31,.93);perspective:1000px}
+.rdraw[hidden]{display:none}
+.rdraw .dk{font:700 clamp(12px,1.3vw,20px) var(--led);letter-spacing:5px;color:var(--cyan);text-shadow:0 0 10px rgba(46,230,214,.6)}
+.rdraw h2{font:900 italic clamp(20px,2.6vw,42px) var(--display);color:var(--yellow);text-shadow:0 0 20px #ff6b1a}
+.tcards{display:flex;gap:2vw;justify-content:center;align-items:stretch;width:100%}
+.tcard{position:relative;flex:1;max-width:46%;min-height:24vh;text-align:left;background:linear-gradient(160deg,#1d1840,#0b0a1f);border:2px solid var(--c);padding:2vh 1.4vw;box-shadow:0 0 30px color-mix(in srgb,var(--c) 50%,transparent);animation:cardin 1s cubic-bezier(.2,.9,.3,1.2) both}
+.tcard:nth-child(2){animation-delay:.25s}
+@keyframes cardin{from{transform:rotateY(180deg) translateZ(-200px);opacity:0}to{transform:none;opacity:1}}
+.tcard .lb{font:700 clamp(10px,1vw,15px) var(--led);letter-spacing:3px;color:var(--c)}
+.tcard .lb.mu{color:var(--muted)}
+.tcard .star{position:absolute;right:14px;top:10px;font-size:clamp(18px,1.8vw,28px);color:var(--yellow);text-shadow:0 0 12px var(--yellow)}
+.tcard .reel{font:900 clamp(20px,2.5vw,42px)/1.14 Inter;color:var(--yellow);text-shadow:0 0 22px #ff6b1a;margin:1.2vh 0 1.6vh;min-height:2.3em;overflow-wrap:anywhere}
+.tcard .reel.spin{animation:reelroll .12s linear infinite}
+.tcard .owner{font:800 clamp(14px,1.5vw,24px)/1.25 var(--led);color:var(--cyan);letter-spacing:.7px;text-transform:uppercase;margin-top:.6vh;min-height:1.3em;overflow-wrap:anywhere}
+@media (max-aspect-ratio:4/3){.rfx-stage{grid-template-columns:1fr}.rfx-cards{grid-template-columns:repeat(2,1fr)}.rfx-view{min-height:46vh}}
+@media (prefers-reduced-motion:reduce){.tcard,.rfx-view .rfeed div,.tcard .reel.spin{animation:none}}

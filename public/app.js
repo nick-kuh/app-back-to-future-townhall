@@ -21,6 +21,7 @@
     state: null, me: null, people: [], pick: null, q: '', offset: 0, socket: null,
     draft: [], editing: false, lastKey: '', audio: null, offline: false, lock: null, jump: true,
     answerDraft: '', anon: false, another: false, sending: false, pendingAnswer: null, // resposta das dinâmicas do Sucesso
+    rfProjects: null, rfRev: null, rfPick: null, rfQ: '', rfSending: false,             // Reflexão: lista de projetos e o voto em andamento
   };
   const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c => (+c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> +c / 4).toString(16)));
   // O nome do check-in vale para tudo: fica guardado para o formulário do Sucesso (/participar) também usar.
@@ -131,11 +132,20 @@
     if (!p || typeof p.roomId !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.roomId) || !['d1', 'd2', 'd3', 'd4'].includes(p.activityId)) return null;
     return p;
   }
+  // Bloco Reflexão no ar (votação em projetos, parada por parada): também usa o nome do check-in.
+  function currentReflexao() {
+    return (S.screen === 'app' && S.me && S.state && !currentPresentation() && S.state.reflexao) || null;
+  }
   function viewKey() {
     const pr = currentPresentation();
     if (pr) {
       const su = S.me.sucesso || {}, d = pr.draw;
       return ['presentation', pr.roomId, pr.activityId, sucPhase(pr), (pr.live && pr.live.roundId) || '', (su.answers || []).length, su.drawn ? 'eu' : '', d ? d.at : '', S.another ? 'outra' : '', S.pendingAnswer ? 'pend' : ''].join('|');
+    }
+    const rf = currentReflexao();
+    if (rf) {
+      const c = rf.cur, mine = (S.me.reflexao && S.me.reflexao.votes) || [], d = c && c.draw;
+      return ['reflexao', rf.open === null ? 'menu' : rf.open, c ? rfPhase(c) : '', mine.filter(Boolean).length, d ? `${d.at}:${d.swap ? d.swap.at : ''}` : '', rf.rev, S.rfSending ? 'env' : '', S.rfProjects ? 'lista' : ''].join('|');
     }
     if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}`;
     const c = S.state.conn, g = S.me && S.me.group, t = c.timer;
@@ -159,6 +169,16 @@
       }
       return render();
     }
+    if (n[0] === 'reflexao' || p[0] === 'reflexao') {
+      clearInterval(warp._t); $('#warp').classList.remove('on', 'go');
+      if (n[0] === 'reflexao') {
+        if (p[0] !== 'reflexao' || p[1] !== n[1]) { S.rfPick = null; S.rfQ = ''; }                                                    // outra parada: escolha nova
+        if (prev && n[4] && p[4] !== n[4]) { beep('result'); buzz([120, 60, 120]); flashSky(); }                                       // projetos sorteados
+        else if (prev && (p[0] !== 'reflexao' || p[1] !== n[1] || (n[2] === 'run' && p[2] !== 'run'))) { beep('ok'); buzz([80, 40, 160]); flashSky(); } // parada aberta / votação aberta
+        else if (prev && n[2] === 'done' && p[2] === 'run') { beep('end'); buzz(120); }
+      }
+      return render();
+    }
     const enteringPhase = ph => n[0] === 'app' && n[1] === 'connections' && n[2] === ph && !(p[1] === 'connections' && p[2] === ph && p[3] === n[3]);
     const quiet = b => b === 'standby' || b === 'stage'; // telas calmas: ao sair delas, o celular chama a atenção
     if (prev && quiet(p[1]) && n[1] && !quiet(n[1])) { beep('ok'); buzz([80, 40, 160]); flashSky(); }
@@ -171,9 +191,10 @@
   }
   function render() {
     const app = $('#app');
-    const presentation = currentPresentation();
-    const typing = document.activeElement && document.activeElement.id === 'ans';
+    const presentation = currentPresentation(), reflexao = currentReflexao();
+    const typing = document.activeElement && document.activeElement.id === 'ans', searching = document.activeElement && document.activeElement.id === 'rfQ';
     if (presentation) app.innerHTML = vPresentation(presentation);
+    else if (reflexao) app.innerHTML = vReflexao(reflexao);
     else if (S.screen === 'splash') app.innerHTML = vSplash();
     else if (S.screen === 'identify') app.innerHTML = S.pick ? vConfirm() : vIdentify();
     else if (!S.state || !S.me) app.innerHTML = vLoading();
@@ -186,6 +207,8 @@
     document.body.classList.toggle('off', calm);
     if (window.Delorean3D) Delorean3D.pause(calm);
     const ans = $('#ans'); if (ans) { ans.value = S.answerDraft; countAnswer(); if (typing && !ans.disabled) { ans.focus(); ans.setSelectionRange(ans.value.length, ans.value.length); } }
+    const rq = $('#rfQ'); if (rq) { rq.value = S.rfQ; if (searching) { rq.focus(); rq.setSelectionRange(rq.value.length, rq.value.length); } }
+    if (reflexao) loadProjects(reflexao.rev);
     mountCar();
     wakeLock();
     if (S.jump !== false) window.scrollTo(0, 0);
@@ -197,6 +220,8 @@
     if (!S.state) return;
     const pr = currentPresentation();
     if (pr) { const n = $('#sucCount'); if (n && pr.live) n.textContent = pr.live.responseCount; return; }
+    const rf = currentReflexao();
+    if (rf) { const n = $('#rfCount'); if (n && rf.cur) n.textContent = rf.cur.votes; return; }
     const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), true); }
     const rp = $('#rankProgress'); if (rp) rp.textContent = `${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} viajantes já avaliaram`;
     if (S.screen === 'identify' && !S.pick) refreshPeopleSoon();
@@ -272,9 +297,58 @@
         <div class="kicker">DE VOLTA PARA O SUCESSO · DINÂMICA ${d.n}</div>
         <h1 id="liveTitle">${esc(p.title)}</h1>
         <p class="pq">${esc(p.question)}</p>
-        ${l.responseCount !== undefined ? `<p class="small center" style="margin-top:10px"><b id="sucCount">${l.responseCount}</b> respostas no telão</p>` : ''}
+        ${l.responseCount !== undefined ? `<p class="small center" style="margin-top:10px"><b id="sucCount">${l.responseCount}</b> respostas recebidas</p>` : ''}
       </section>`;
     return su.drawn ? `${vHeader()}${body}${card}` : `${vHeader()}${card}${body}`; // sorteado(a): o aviso e o tempo de fala vêm primeiro
+  }
+  /* ---- Reflexão · Ato 1: O Combustível do Futuro ----
+   * Menu das paradas e, com uma parada aberta, a votação: a pessoa escolhe 1 projeto da lista
+   * (com busca) e envia. O nome é o do check-in; vale um voto por parada. */
+  const rfPhase = c => (c.phase === 'run' && c.endsAt && c.endsAt <= serverNow() ? 'done' : c.phase);
+  const rfNorm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  async function loadProjects(rev) {
+    if (S.rfRev === rev) return; S.rfRev = rev;
+    try { S.rfProjects = (await api('/api/reflexao/projects')).projects || []; } catch { S.rfRev = null; return; }
+    const l = $('#rfList'); if (l) l.innerHTML = vProjects();
+  }
+  function vProjects() {
+    if (!S.rfProjects) return '<p class="muted center" style="padding:14px">Carregando projetos…</p>';
+    const q = rfNorm(S.rfQ), list = S.rfProjects.filter(x => !q || rfNorm(x.name + ' ' + x.owner).includes(q));
+    return list.length ? list.map(x => `<button type="button" class="rf-proj ${S.rfPick === x.name ? 'on' : ''}" data-action="pickProject" data-name="${esc(x.name)}"><small>${esc(x.owner)}</small><span>${esc(x.name)}</span></button>`).join('')
+      : '<p class="muted center" style="padding:14px">Nenhum projeto encontrado</p>';
+  }
+  function vReflexao(r) {
+    const me = S.me.person, mine = (S.me.reflexao && S.me.reflexao.votes) || [];
+    const head = (kicker, title, q, c, extra = '') => `<section class="panel glow presentation-card ${extra ? 'compact' : ''}" style="--c:${c}"><div class="kicker">${kicker}</div><h1>${esc(title)}</h1>${q ? `<p class="pq">${esc(q)}</p>` : ''}${extra}</section>`;
+    if (r.open === null || !r.cur) {
+      return `${vHeader()}${head('REFLEXÃO', r.title, r.subtitle, 'var(--yellow)')}
+        <div class="panel"><div class="rf-list">${r.themes.map((t, i) => `<div class="rf-item ${mine[i] ? 'ok' : ''}" style="--c:${t.c}"><b>${t.n}</b><span>${esc(t.t)}<small>${mine[i] ? '✓ ' + esc(mine[i].project) : esc(t.q)}</small></span></div>`).join('')}</div>
+        <p class="muted center" style="margin-top:12px">Aguarde: o Doc vai abrir a próxima parada.</p></div>`;
+    }
+    const c = r.cur, t = r.themes[r.open], ph = rfPhase(c), my = mine[r.open], d = c.draw;
+    const timer = '<span class="suc-timer">⏱ <b id="rfTimer">--:--</b></span>';
+    const myVote = my ? `<div class="panel"><div class="kicker">Seu voto nesta parada</div><p class="myans">${esc(my.project)}</p><p class="small">${esc(my.owner)}</p></div>` : '';
+    let body;
+    if (d) {
+      body = `<div class="panel glow"><div class="kicker">Projetos sorteados</div>${d.items.map((v, k) => `<div class="rf-drawn"><small>PROJETO SORTEADO · 0${k + 1}</small><b>${esc(v.name)}</b><span>${esc(v.owner)}</span></div>`).join('')}<p class="muted center" style="margin-top:12px">Olhos no telão. 👀</p></div>${myVote}`;
+    } else if (ph === 'run' && !my) {
+      body = `<div class="panel">
+          <div class="who">Votando como <b>${esc(me.name)}</b></div>
+          <div class="ansmeta" style="margin:8px 0">${timer}<span>Escolha 1 projeto</span></div>
+          <input class="input" id="rfQ" placeholder="🔎 Buscar projeto ou responsável…" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <div class="rf-projects" id="rfList">${vProjects()}</div>
+          <button class="btn" id="rfSend" data-action="sendVote" ${S.rfPick && !S.rfSending ? '' : 'disabled'}>${S.rfSending ? 'Enviando…' : '⚡ Enviar voto'}</button>
+        </div>`;
+    } else if (ph === 'run') {
+      body = `<div class="panel glow msgbox"><div class="e">⚡</div><h2>Voto registrado!</h2><p>+energia para o Flux Capacitor</p><div class="ansmeta" style="justify-content:center;margin-top:10px">${timer}</div></div>${myVote}`;
+    } else if (ph === 'paused') {
+      body = `<div class="panel center"><div class="ptag" style="display:inline-block">❚❚ VOTAÇÃO PAUSADA PELO DOC</div><div class="ansmeta" style="justify-content:center;margin-top:10px">${timer}</div></div>${myVote}`;
+    } else if (ph === 'done') {
+      body = `<div class="panel glow msgbox"><div class="e">🏁</div><h2>Votação encerrada</h2><p>Olhe para o telão.</p></div>${myVote}`;
+    } else {
+      body = `<div class="panel"><div class="wait"><div class="flux"><i></i><i></i><i></i><b></b></div><p class="muted">Aguarde: o Doc vai abrir a votação.</p></div></div>${myVote}`;
+    }
+    return `${vHeader()}${head(`REFLEXÃO · PARADA ${t.n}`, t.t, t.q, t.c, `<p class="small center" style="margin-top:10px">Votos no Flux Capacitor: <b id="rfCount">${c.votes}</b></p>`)}${body}`;
   }
   // Bloco de fala: o celular mostra o nome e o tema do bloco e fica quieto.
   function vStage() {
@@ -543,6 +617,13 @@
       if (viewKey() !== S.lastKey) maybeRender();
       return;
     }
+    const rf = currentReflexao();
+    if (rf) { // Reflexão: prazo da votação
+      const c = rf.cur, el = $('#rfTimer');
+      if (el && c) el.textContent = fmt(c.phase === 'run' && c.endsAt ? Math.max(0, Math.ceil((c.endsAt - serverNow()) / 1000)) : c.remaining || 0);
+      if (viewKey() !== S.lastKey) maybeRender();
+      return;
+    }
     const c = S.state.conn, t = c.timer; if (!t) return;
     const left = t.paused ? t.remaining : Math.max(0, Math.round((t.endsAt - serverNow()) / 1000));
     const pt = $('#pauseTag'); if (pt) pt.style.display = t.paused ? 'inline-block' : 'none';
@@ -588,6 +669,23 @@
             if (e.status && e.status < 500) S.pendingAnswer = null; // recusa confirmada pelo servidor: pode ajustar e enviar de novo
             toast(e.status ? e.message : 'Sem conexão. Sua resposta está guardada: toque para tentar de novo.', true);
           } finally { S.sending = false; maybeRender(true); }
+          break;
+        }
+        case 'pickProject': { // marca o projeto sem redesenhar a lista (a rolagem fica onde está)
+          S.rfPick = el.dataset.name; buzz(20);
+          document.querySelectorAll('.rf-proj.on').forEach(x => x.classList.remove('on')); el.classList.add('on');
+          const b = $('#rfSend'); if (b) b.disabled = false;
+          break;
+        }
+        case 'sendVote': {
+          if (!S.rfPick) { toast('Escolha um projeto antes de enviar.', true); break; }
+          S.rfSending = true; maybeRender(true);
+          try {
+            const r = await api('/api/reflexao/vote', { token: S.token, project: S.rfPick });
+            S.rfPick = null; S.rfQ = ''; if (r.me) S.me = r.me;
+            toast('Voto registrado! ⚡'); buzz(60); beep('ok');
+          } catch (e) { toast(e.status ? e.message : 'Sem conexão. Toque em enviar de novo.', true); }
+          finally { S.rfSending = false; maybeRender(true); }
           break;
         }
         case 'pick': S.pick = S.people.find(p => p.id === +el.dataset.id) || null; maybeRender(true); break;
@@ -640,6 +738,7 @@
   document.addEventListener('input', e => {
     if (e.target.id === 'q') { S.q = e.target.value; const l = $('#plist'); if (l) l.innerHTML = vPeopleList(); }
     if (e.target.id === 'ans') { S.answerDraft = e.target.value; countAnswer(); }
+    if (e.target.id === 'rfQ') { S.rfQ = e.target.value; const l = $('#rfList'); if (l) l.innerHTML = vProjects(); }
   });
   document.addEventListener('change', e => { if (e.target.id === 'anon') S.anon = e.target.checked; });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (S.socket && S.socket.connected) hello(); wakeLock(); unlockAudio(); } });

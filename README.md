@@ -17,7 +17,7 @@ rodam **dentro deste mesmo app**, no mesmo servidor e com a mesma senha:
 
 | Dinâmica | Pergunta | Depois de encerrar |
 |---|---|---|
-| 01 · Antes de Partir | O que você considera um sucesso? | nuvem de palavras ao vivo |
+| 01 · Antes de Partir | O que você considera um sucesso? | nuvem de palavras |
 | 02 · Look Back | Olhando para 2026, o que fez você pensar: "isso foi um sucesso"? | nuvem + sorteio com 2 min de fala |
 | 03 · Uso de IA | O que você fez (projeto, agente ou aprendizado) em 2026 com a ajuda da IA? | nuvem + sorteio com 3 min de fala (desafio → IA → impacto) |
 | 04 · Look Ahead | O que precisaria ter acontecido para você dizer: "2027 foi um sucesso"? | nuvem + "Destino: 2027" (a pessoa pode enviar sem nome) |
@@ -26,17 +26,20 @@ rodam **dentro deste mesmo app**, no mesmo servidor e com a mesma senha:
   dinâmicas do Sucesso ela responde direto no app, sem digitar o nome de novo. Quem cai e volta no
   meio do evento entra de novo pelo nome e cai no momento atual.
 - **Painel do Doc**: cada dinâmica é um passo do roteiro. Ao chegar nela, a pergunta entra no telão
-  e nos celulares; os botões do passo são iniciar/pausar/encerrar o recebimento, **🎲 Sortear viajante**
-  e o **tempo de fala** (dinâmicas 2 e 3). Em "Mais opções": ver e **baixar as respostas** (.txt/Word),
-  reabrir o recebimento e apagar as respostas.
+  e nos celulares; os botões do passo são iniciar/pausar/encerrar o recebimento, **✨ Revelar respostas
+  no telão**, **🎲 Sortear viajante** e o **tempo de fala** (dinâmicas 2 e 3). Em "Mais opções": ver e
+  **baixar as respostas** (.txt/Word), reabrir o recebimento e apagar as respostas.
 - **Celulares**: pergunta + campo de resposta (200 caracteres) + prazo. Depois do envio, a pessoa vê a
   própria resposta. Quem é sorteado recebe o aviso "É você!" com a resposta e o tempo de fala.
-- **Telão**: pergunta + QR do app + contagem + prazo + o carro 3D carregando a cada resposta; ao
-  encerrar, o carro entra no portal e aparece a **nuvem de palavras**; no sorteio, roleta de nomes,
-  resposta, guia e cronômetro de fala. Os **textos das respostas só aparecem no telão aberto no
-  navegador logado no Painel do Doc** (o topo do painel avisa se o telão está aberto e logado).
-- **Painel 3D** (`/painel`): o painel original do Lucas continua disponível, com a mesma senha. O QR
-  dele abre o formulário original (`/participar/<sala>`), que também usa o nome do check-in.
+- **Telão**: pergunta + contagem + prazo + o carro 3D carregando a cada resposta (sem QR: todo mundo
+  já está no app). **Nenhuma resposta aparece enquanto elas chegam.** Ao encerrar, o carro entra no
+  portal; a **nuvem de palavras só aparece quando o Doc clica em "Revelar respostas no telão"** (e
+  some de novo se ele reabrir o recebimento). No sorteio: roleta de nomes, resposta, guia e
+  cronômetro de fala. Os **textos das respostas só aparecem no telão aberto no navegador logado no
+  Painel do Doc** (o topo do painel avisa se o telão está aberto e logado).
+- **Painel 3D** (`/painel`): o painel original do Lucas continua disponível, com a mesma senha, do
+  jeito que ele fez (com o QR dele e a nuvem ao vivo). O QR abre o formulário original
+  (`/participar/<sala>`), que também usa o nome do check-in.
 
 **Mesmo visual nos dois:** o motor 3D do painel do Lucas virou `public/delorean3d.js` e a nuvem de
 palavras virou `public/nuvem.js`; o carro realista está em `public/delorean-model.js` (Three.js).
@@ -44,6 +47,40 @@ palavras virou `public/nuvem.js`; o carro realista está em `public/delorean-mod
 O código do Lucas está em [`sucesso/`](sucesso/) (API, banco, páginas e testes originais, sem
 alterações); a ponte com este servidor está em `server/sucesso.js`. As respostas ficam em
 `data/sucesso.db` (SQLite).
+
+## 💭 Reflexão · Ato 1: O Combustível do Futuro
+
+O bloco **Reflexão** veio do protótipo `Prototipo_Ato1_SORTEIO_2_PROJETOS_RESPONSAVEIS.html` e virou
+um passo do roteiro. São **6 paradas**, cada uma com uma pergunta:
+
+| Parada | Pergunta |
+|---|---|
+| 01 · O Capacitor de Fluxo | Que ideias testamos e o que aprendemos? |
+| 02 · Mudamos a Linha do Tempo | O que passou a funcionar de outro jeito? |
+| 03 · Dobra no Tempo | Onde devolvemos tempo às pessoas? |
+| 04 · Conexões | Que fronteiras aproximamos? |
+| 05 · Reação em Cadeia | O que começou pequeno e ganhou escala? |
+| 06 · Doc & Marty | Quem ajudou cada conquista a acontecer? |
+
+Em cada parada:
+
+1. **Abrir a parada**: a pergunta entra no telão e nos celulares.
+2. **Iniciar votação (1:30)**: cada pessoa escolhe **1 projeto** da lista (36 projetos, com busca por
+   projeto ou responsável). O voto usa o nome do check-in e vale um por parada.
+3. A cada voto o **Flux Capacitor 3D** do telão carrega (15 votos = 100% da parada) e aparece
+   "Fulano votou ⚡" (só o nome, não o projeto escolhido).
+4. **Encerrar votação** (ou o tempo acaba sozinho) e **🎲 Sortear 2 projetos** entre os que receberam
+   voto: o telão gira a roleta e mostra cada projeto com o **responsável**. Dá para trocar um dos
+   dois ou sortear de novo (sem repetir projeto já sorteado na parada).
+5. **Próxima parada ▶**. O menu das paradas mostra os votos de cada uma e a energia total.
+
+No painel, em "Mais opções": **votos de teste** (para ensaiar sem os celulares; saem marcados como
+"teste"), ver os votos, **exportar .csv** (Tema; Nome; Responsável; Projeto; Data/Hora), reiniciar a
+votação e limpar. Sair da Reflexão no meio de uma votação a deixa pausada.
+
+Em **Preparar → Reflexão** dá para mudar o título, o tempo de votação, as paradas e a lista de
+projetos (um por linha: `projeto | responsável`). O código está em `server/reflexao.js` (regras e
+dados) e `public/flux.js` (o Flux Capacitor 3D do protótipo).
 
 ## 🎤 Blocos do evento, telão calmo e som
 
@@ -143,7 +180,8 @@ O que cada passo faz:
 | Check-in | cada pessoa digita o nome e embarca | QR do app + carro carregando | acompanha quem falta |
 | Bloco de fala | nome e tema do bloco | modo calmo, só o tema | nada (som desliga sozinho) |
 | Conexões | dupla, perguntas, avaliação e resultado | cronômetros e "88 MPH" | **Iniciar viagens**; o resto anda sozinho |
-| Sucesso 01–04 | pergunta e resposta, com o nome do check-in | carro, nuvem de palavras, sorteio | **Iniciar / Encerrar recebimento**, **Sortear**, tempo de fala |
+| Reflexão | escolher 1 projeto por parada | menu das paradas, Flux Capacitor, 2 projetos sorteados | **Abrir parada**, **Iniciar / Encerrar votação**, **Sortear 2 projetos**, **Próxima parada** |
+| Sucesso 01–04 | pergunta e resposta, com o nome do check-in | carro carregando; nuvem só ao revelar; sorteio | **Iniciar / Encerrar recebimento**, **Revelar respostas**, **Sortear**, tempo de fala |
 | Aviso / intervalo | o aviso | o aviso | nada |
 | Encerramento | agradecimento e a conexão de cada um | créditos com todos os nomes | baixar as respostas |
 
@@ -193,9 +231,11 @@ server/results.js    ranking → conexões
 server/db.js         SQLite (node:sqlite) e esquema
 server/seed/         lista de pessoas e banco de perguntas iniciais
 server/sucesso.js    ponte com o De Volta para o Sucesso (API do Lucas sem alterações, login do Doc)
+server/reflexao.js   bloco Reflexão: paradas, projetos, votos, cronômetro e sorteio de 2 projetos
 public/              app do viajante (index.html, app.*), telão (telao.*), Painel do Doc (admin.*)
 public/delorean3d.js motor 3D (céu, estrada, raios, portal) extraído do painel do Sucesso
 public/delorean-model.js  DeLorean realista (Three.js) · public/nuvem.js  nuvem de palavras
+public/flux.js       Flux Capacitor 3D do bloco Reflexão (motor do protótipo, sem bibliotecas)
 public/trilha.js     música e trilha de fundo geradas no navegador (Web Audio)
 sucesso/             projeto do Lucas: server/api.js, drizzle/, public/ (painel, participar), tests/
 scripts/             testes

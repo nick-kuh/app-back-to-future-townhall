@@ -7,21 +7,21 @@ const { buildQueues, ERAS, eraOfRound } = require('./queues');
 const { computeResults, POINTS } = require('./results');
 
 const TOTAL_ROUNDS = 3;
-const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing', 'stage'];
+const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing', 'stage', 'reflexao'];
 const AUDIO_MODES = ['off', 'music', 'ambient'];
 
 // Roteiro do evento: a ordem dos passos que o Doc percorre no painel ("Próximo ▶").
 //  checkin · stage (bloco de fala: título, tema, quem fala) · connections · sucesso (dinâmica d1..d4)
-//  message (aviso/intervalo) · standby (olhos no telão) · closing
-const STEP_TYPES = ['checkin', 'stage', 'connections', 'sucesso', 'message', 'standby', 'closing'];
+//  reflexao (as paradas com votação em projetos) · message (aviso/intervalo) · standby (olhos no telão) · closing
+const STEP_TYPES = ['checkin', 'stage', 'connections', 'sucesso', 'reflexao', 'message', 'standby', 'closing'];
 const SUCESSO_ACTS = ['d1', 'd2', 'd3', 'd4'];
-const STEP_BLOCK = { checkin: 'welcome', stage: 'stage', connections: 'connections', message: 'message', standby: 'standby', closing: 'closing' };
 const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 function defaultSteps(stages) {
   const st = i => Object.assign({ title: `Bloco ${i + 1}`, theme: '', speaker: '' }, (stages || [])[i] || {});
   return [
     { type: 'checkin' },
     { type: 'stage', ...st(0) },
+    { type: 'reflexao' },
     { type: 'connections' },
     { type: 'stage', ...st(1) },
     { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' },
@@ -29,14 +29,14 @@ function defaultSteps(stages) {
     { type: 'closing' },
   ].map((x, i) => ({ id: 'p' + (i + 1), ...x }));
 }
-// Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões e cada
-// dinâmica do Sucesso só entram uma vez (o estado delas é um só).
+// Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões, Reflexão
+// e cada dinâmica do Sucesso só entram uma vez (o estado delas é um só).
 function cleanSteps(list) {
   const out = [], ids = new Set(), once = new Set();
   for (const raw of (Array.isArray(list) ? list : []).slice(0, 40)) {
     if (!raw || !STEP_TYPES.includes(raw.type)) continue;
     if (raw.type === 'sucesso' && !SUCESSO_ACTS.includes(raw.activity)) continue;
-    const unique = raw.type === 'connections' ? 'connections' : raw.type === 'sucesso' ? raw.activity : null;
+    const unique = raw.type === 'connections' || raw.type === 'reflexao' ? raw.type : raw.type === 'sucesso' ? raw.activity : null;
     if (unique) { if (once.has(unique)) continue; once.add(unique); }
     let id = typeof raw.id === 'string' && /^[a-z0-9]{1,16}$/i.test(raw.id) && !ids.has(raw.id) ? raw.id : null;
     while (!id || ids.has(id)) id = 'p' + crypto.randomBytes(4).toString('hex');
@@ -118,6 +118,12 @@ class Engine {
     const steps = cleanSteps(this.settings.steps);
     this.settings.steps = steps.length ? steps : defaultSteps(this.settings.stages); // versões antigas guardavam só os blocos de fala
     delete this.settings.stages;
+    // roteiros salvos antes de existir o bloco Reflexão ganham o passo uma vez (depois do primeiro bloco de fala)
+    if (!this.settings.reflexaoStep) {
+      const list = this.settings.steps;
+      if (!list.some(x => x.type === 'reflexao')) { const at = list.findIndex(x => x.type === 'stage'); list.splice(at < 0 ? Math.min(1, list.length) : at + 1, 0, { id: 'p' + crypto.randomBytes(4).toString('hex'), type: 'reflexao' }); }
+      this.settings.reflexaoStep = true;
+    }
     if (!this.stepById(this.state.step)) this.state.step = this.settings.steps[0].id;
     this.listeners = [];
     this.timer = null;
@@ -586,7 +592,7 @@ class Engine {
     if (block === 'stage' && this.settings.stageMutes) this.state.audio.mode = 'off';
     // mensagem e "olhos no telão" são telas avulsas (fora do roteiro); as outras levam o cursor junto
     if (block === 'message' || block === 'standby') { this.state.detour = block; this.holdJourney(); }
-    else { this.state.detour = null; this.syncCursor({ welcome: 'checkin', connections: 'connections', closing: 'closing', stage: 'stage' }[block]); if (block === 'connections') this.releaseJourney(); else this.holdJourney(); }
+    else { this.state.detour = null; this.syncCursor({ welcome: 'checkin', connections: 'connections', closing: 'closing', stage: 'stage', reflexao: 'reflexao' }[block]); if (block === 'connections') this.releaseJourney(); else this.holdJourney(); }
     const notices = {
       message: { title: this.state.message.title, body: this.state.message.body },
       welcome: wasOff ? { title: 'Circuitos ligados', body: 'Estamos de volta. Olhe para o seu celular.' } : null,
@@ -694,7 +700,7 @@ class Engine {
     const p = this.state.presentation;
     if (!p) return null;
     const d = p.draw; // o texto da resposta sorteada não vai no estado público (só telão logado e o próprio sorteado)
-    return { roomId: p.roomId, activityId: p.activityId, title: p.title, question: p.question, draw: d ? { name: d.name, at: d.at, talk: d.talk } : null };
+    return { roomId: p.roomId, activityId: p.activityId, title: p.title, question: p.question, revealed: !!p.revealed, draw: d ? { name: d.name, at: d.at, talk: d.talk } : null };
   }
   // Sorteio de viajante (dinâmicas com tempo de fala): o estado fica aqui para o Painel do Doc,
   // o telão e o celular do sorteado mostrarem a mesma coisa.
@@ -726,6 +732,13 @@ class Engine {
     if (!p || !p.draw) return;
     p.draw = null; this.commit();
   }
+  // As respostas ficam guardadas enquanto chegam: a nuvem de palavras só vai para o telão quando o Doc revela.
+  setReveal(on) {
+    const p = this.state.presentation;
+    if (!p) throw new Error('Nenhuma dinâmica em exibição.');
+    p.revealed = !!on;
+    this.commit(on ? { title: 'Respostas reveladas', body: 'Olhe para o telão.' } : null);
+  }
 
   /* ---------------- roteiro do evento ---------------- */
   stepById(id) { return (this.settings.steps || []).find(x => x.id === id) || null; }
@@ -752,6 +765,7 @@ class Engine {
       case 'message': this.state.message = { title: step.title, body: step.body, emoji: step.emoji }; this.state.block = 'message'; notice = { title: step.title, body: step.body }; break;
       case 'standby': this.state.block = 'standby'; break;
       case 'closing': this.state.block = 'closing'; notice = { title: 'Fim da viagem', body: this.settings.closingText }; break;
+      case 'reflexao': this.state.block = 'reflexao'; notice = { title: 'Reflexão', body: 'Olhe para o seu celular.' }; break;
       default: break; // sucesso: a apresentação entra em seguida
     }
     if (step.type === 'connections') this.releaseJourney(); else this.holdJourney();

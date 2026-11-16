@@ -285,3 +285,22 @@ details.sb-more{border-top:1px dashed var(--line2);padding-top:10px}
 @media (max-width:1180px){.audio .k{display:none}.audio input[type=range]{width:70px}}
 .rs.held .n{background:#3a2a05;color:var(--amber)}
 .rs.held .tx small{color:var(--amber)}
+/* Reflexão: paradas (uma por vez) e projetos sorteados */
+.rfx-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}
+.rfx-chips .chip{display:flex;gap:10px;align-items:center;text-align:left;background:#14162a;border:1px solid var(--line2);border-left:4px solid var(--c);border-radius:10px;padding:8px 10px;color:var(--txt);cursor:pointer;font:700 13px Inter;min-width:0}
+.rfx-chips .chip b{font:900 16px Orbitron,Inter;color:var(--c)}
+.rfx-chips .chip span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rfx-chips .chip small{display:block;font:500 11px Inter;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.rfx-chips .chip.on{background:#1f1b3d;border-color:var(--c);box-shadow:0 0 0 1px var(--c) inset}
+.rfx-chips .chip.done small{color:var(--green)}
+.rfx-chips .chip:disabled{opacity:.55;cursor:default}
+.rfx-drawn{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.rfx-drawn .suc-draw.on{max-width:none;border-color:var(--c,var(--magenta))}
+.rfx-drawn .who{font-size:17px}
+.rfx-drawn .what{color:var(--cyan);font-size:13px}
+.rfx-drawn .btn{align-self:flex-start}
+.small.reveal{margin-top:8px;color:var(--muted)}
+.small.reveal.on{color:var(--green)}
+.card h3{font:800 15px Inter;color:var(--txt)}
+textarea.mono{font:13px/1.5 'Share Tech Mono',Consolas,monospace;white-space:pre;overflow:auto;width:100%}
+@media (max-width:920px){.rfx-chips{grid-template-columns:repeat(2,minmax(0,1fr))}.rfx-drawn{grid-template-columns:1fr}}

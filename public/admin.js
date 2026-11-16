@@ -13,15 +13,15 @@
   const PHASE_LABEL = { idle: 'sem duplas', ready: 'duplas prontas', matching: 'duplas se encontrando', talk: 'conversa em andamento', roundEnd: '88 MPH (intervalo)', ranking: 'avaliação aberta', results: 'resultados publicados' };
   const TIMER_LABEL = { matching: 'encontro', talk: 'conversa', break: 'intervalo', ranking: 'avaliação' };
   // roteiro do evento
-  const STEP_ICON = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', message: '📣', standby: '📺', closing: '🏁' };
-  const STEP_KIND = { checkin: 'Check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', message: 'Aviso', standby: 'Olhos no telão', closing: 'Encerramento' };
-  const STEP_HINT = { checkin: 'as pessoas entram pelo nome', connections: '3 viagens em duplas e avaliação', sucesso: 'pergunta ao vivo, nuvem de palavras', standby: 'celulares em pausa, atenção no telão', closing: 'agradecimento e créditos' };
+  const STEP_ICON = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', reflexao: '💭', message: '📣', standby: '📺', closing: '🏁' };
+  const STEP_KIND = { checkin: 'Check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', reflexao: 'Dinâmica · Reflexão', message: 'Aviso', standby: 'Olhos no telão', closing: 'Encerramento' };
+  const STEP_HINT = { checkin: 'as pessoas entram pelo nome', connections: '3 viagens em duplas e avaliação', sucesso: 'pergunta ao vivo, nuvem de palavras', reflexao: 'paradas com votação em projetos e sorteio de 2 projetos', standby: 'celulares em pausa, atenção no telão', closing: 'agradecimento e créditos' };
   const SUC_NAME = { d1: 'Antes de Partir', d2: 'Look Back', d3: 'Uso de IA', d4: 'Look Ahead' };
   const SUC_COLOR = { d1: 'var(--cyan)', d2: 'var(--yellow)', d3: 'var(--magenta)', d4: 'var(--orange)' };
   const SUC_PHASE = { idle: 'aguardando você iniciar', run: 'recebendo respostas', paused: 'recebimento pausado', done: 'recebimento encerrado' };
   const TALK = { d2: 120, d3: 180 }; // dinâmicas com sorteio e tempo de fala (como no painel do Lucas)
-  const stepTitle = x => (x.type === 'checkin' ? 'Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : 'Encerramento');
-  const DEFAULT_STEPS = () => [{ type: 'checkin' }, { type: 'stage', title: 'Bloco 1', theme: '', speaker: '' }, { type: 'connections' }, { type: 'stage', title: 'Bloco 2', theme: '', speaker: '' },
+  const stepTitle = x => (x.type === 'checkin' ? 'Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : x.type === 'reflexao' ? 'Reflexão' : 'Encerramento');
+  const DEFAULT_STEPS = () => [{ type: 'checkin' }, { type: 'stage', title: 'Bloco 1', theme: '', speaker: '' }, { type: 'reflexao' }, { type: 'connections' }, { type: 'stage', title: 'Bloco 2', theme: '', speaker: '' },
     { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' }, { type: 'stage', title: 'Bloco 3', theme: '', speaker: '' }, { type: 'closing' }];
   const AUDIO_LABEL = { music: '🎵 Música', ambient: '🎼 Trilha', off: '🔇 Sem áudio' };
 
@@ -70,15 +70,15 @@
 
   /* ---------- render ---------- */
   // Duas áreas: "Ao vivo" (o roteiro e o passo que está no ar) e "Preparar" (roteiro, pessoas, perguntas, ajustes, testes).
-  const PREP = [['roteiro', 'Roteiro'], ['people', 'Pessoas'], ['questions', 'Perguntas'], ['config', 'Ajustes'], ['tests', 'Testes']];
+  const PREP = [['roteiro', 'Roteiro'], ['reflexao', 'Reflexão'], ['people', 'Pessoas'], ['questions', 'Perguntas'], ['config', 'Ajustes'], ['tests', 'Testes']];
   function render(force) {
     if (!A.O) return;
     renderStatus(); renderAudio();
     if (A.pressing) { clearTimeout(A.renderLater); A.renderLater = setTimeout(() => render(force), 250); return; }
     const view = A.tab === 'live' ? 'live' : 'prep-' + A.prep;
-    if (!force && ['prep-config', 'prep-tests'].includes(view) && $('#main').dataset.view === view) return;
+    if (!force && ['prep-config', 'prep-tests', 'prep-reflexao'].includes(view) && $('#main').dataset.view === view) return;
     const html = A.tab === 'live' ? vLive()
-      : `<div class="subtabs prepnav">${PREP.map(([k, l]) => `<button class="${A.prep === k ? 'on' : ''}" data-prep="${k}">${l}</button>`).join('')}</div>` + ({ roteiro: vRoteiro, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.prep]();
+      : `<div class="subtabs prepnav">${PREP.map(([k, l]) => `<button class="${A.prep === k ? 'on' : ''}" data-prep="${k}">${l}</button>`).join('')}</div>` + ({ roteiro: vRoteiro, reflexao: vReflexaoCfg, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.prep]();
     if (!force && $('#main').dataset.view === view && html === A.lastHtml) return;
     A.lastHtml = html;
     const y = window.scrollY;
@@ -97,6 +97,10 @@
   const sucAct = k => (A.O.sucesso && A.O.sucesso.acts[k]) || {};
   const sucEff = a => (a.phase === 'run' && a.endsAt && a.endsAt <= Date.now() + A.offset ? 'done' : a.phase || null); // o prazo pode acabar entre dois avisos do servidor
   const sucLeft = a => (a.phase === 'run' && a.endsAt ? Math.max(0, Math.ceil((a.endsAt - Date.now() - A.offset) / 1000)) : a.remainingSeconds || 0);
+  // Reflexão: parada aberta, fase e tempo que falta
+  const rfxOnAir = () => A.O.state.block === 'reflexao' && !A.O.state.presentation;
+  const rfxLeft = p => (p.phase === 'run' && p.endsAt ? Math.max(0, Math.ceil((p.endsAt - Date.now() - A.offset) / 1000)) : p.remaining || 0);
+  const RFX_PHASE = { idle: 'aguardando você iniciar', run: 'votação aberta', paused: 'votação pausada', done: 'votação encerrada' };
   // O que está no ar agora, em uma linha
   function nowText() {
     const O = A.O, { steps, i, step } = liveStep();
@@ -105,6 +109,7 @@
     if (step.type === 'connections') { const c = O.state.conn, t = c.timer; extra = ` · ${c.round ? `viagem ${c.round}/3 · ` : ''}${t ? `${TIMER_LABEL[t.kind] || t.kind} ${fmt(timerLeft(t))}${t.paused ? ' ⏸' : ''}` : PHASE_LABEL[c.phase] || c.phase}`; }
     if (step.type === 'sucesso') { const a = sucAct(step.activity), ph = sucEff(a); if (ph) extra = ` · ${ph === 'run' ? 'recebendo' + (a.endsAt ? ' ' + fmt(sucLeft(a)) : '') : ph === 'done' ? 'encerrado' : ph === 'paused' ? 'pausado' : 'não iniciado'} · ${a.responseCount} resp.`; }
     if (step.type === 'stage' && step.theme) extra = ` · ${step.theme}`;
+    if (step.type === 'reflexao' && O.reflexao) { const R = O.reflexao, p = R.open === null ? null : R.paradas[R.open]; extra = p ? ` · parada ${pad(R.open + 1)} · ${p.phase === 'run' ? 'votando ' + fmt(rfxLeft(p)) : p.phase === 'done' ? 'encerrada' : p.phase === 'paused' ? 'pausada' : 'não iniciada'} · ${p.votes} votos` : ' · menu das paradas'; }
     return `${i + 1}/${steps.length} · ${step.type === 'sucesso' ? 'Sucesso ' + step.activity.slice(1).padStart(2, '0') : stepTitle(step)}${extra}`;
   }
   function renderStatus() {
@@ -151,6 +156,7 @@
       return ph ? `${a.responseCount} respostas · ${ph === 'done' ? 'encerrado' : open ? 'recebendo' : ph === 'run' ? 'sem cronômetro' : ph === 'paused' ? 'pausado' : 'não iniciado'}` : '';
     }
     if (x.type === 'message') return x.body || '';
+    if (x.type === 'reflexao' && O.reflexao) { const R = O.reflexao, done = R.paradas.filter(p => p.drawn.length).length, votes = R.paradas.reduce((a, p) => a + p.votes, 0); return votes || done ? `${done} de ${R.paradas.length} paradas sorteadas · ${votes} votos` : `${R.paradas.length} paradas · votação em projetos`; }
     return STEP_HINT[x.type] || '';
   }
   function vLive() {
@@ -171,17 +177,18 @@
   }
   // Painel do passo atual: um botão principal por vez; quando o passo não pede mais nada, o principal é "Próximo".
   function panelStep(step, i, total, next, prev) {
-    const p = ({ checkin: pCheckin, stage: pStage, connections: pConnections, sucesso: pSucesso, message: pMessage, standby: pStandby, closing: pClosing })[step.type](step);
+    const p = ({ checkin: pCheckin, stage: pStage, connections: pConnections, sucesso: pSucesso, reflexao: pReflexao, message: pMessage, standby: pStandby, closing: pClosing })[step.type](step);
     // "Próximo" vira o botão principal quando o passo não pede mais nada; com algo em andamento ele fica discreto
     const nextBig = !p.primary && !p.busy;
     const nextBtn = next ? btn(`Próximo: ${esc(stepTitle(next))} ▶`, 'goStep', { cls: nextBig ? 'big next' : 'ghost next', data: { id: next.id, guard: p.busy || '' } }) : '';
-    return `<section class="stepbox t-${step.type}" ${step.type === 'sucesso' ? `style="--c:${SUC_COLOR[step.activity]}"` : ''}>
+    return `<section class="stepbox t-${step.type}" ${step.type === 'sucesso' ? `style="--c:${SUC_COLOR[step.activity]}"` : p.color ? `style="--c:${p.color}"` : ''}>
       <div class="sb-head"><span class="kick">Passo ${i + 1} de ${total} · ${STEP_KIND[step.type]}</span><span class="onair">${esc(p.onair || '')}</span></div>
       <h1>${STEP_ICON[step.type]} ${esc(p.title || stepTitle(step))}</h1>
       ${p.body || ''}
       ${p.warn ? `<div class="sb-warn">${p.warn}</div>` : ''}
       <div class="sb-actions">${p.primary || (nextBig ? nextBtn : '')}${(p.secondary || []).join('')}${nextBig && !next ? '<span class="ok">✔ Último passo do roteiro</span>' : ''}</div>
       <div class="sb-nav">${prev ? `<a href="#" data-act="jumpStep" data-id="${prev.id}">← voltar para ${esc(stepTitle(prev))}</a>` : '<span></span>'}${nextBig ? '' : nextBtn}</div>
+      ${p.after || ''}
       ${p.more ? det('more-' + step.type, 'Mais opções', `<div class="sb-more-in">${p.more}</div>`, 'sb-more') : ''}
     </section>`;
   }
@@ -271,32 +278,108 @@
     const drawnBefore = ((O.state.drawn || {})[`${room}:${k}:${a.roundId}`] || []).length > 0;
     if (!O.sucesso) return { title: `Dinâmica ${k.slice(1)} · ${SUC_NAME[k]}`, body: '<p class="lead">As dinâmicas do Sucesso estão carregando…</p>' };
     const stats = `<div class="suc-stats"><div class="tcx"><b>${String(n).padStart(3, '0')}</b><span>RESPOSTAS</span></div>${k !== 'd1' && ph && ph !== 'done' ? `<div class="tcx ${ph === 'run' && sucLeft(a) <= 30 ? 'alert' : ''}" style="--c:var(--yellow)"><b data-timer="suc" data-k="${k}">${fmt(sucLeft(a))}</b><span>RECEBIMENTO</span></div>` : ''}<span class="suc-ph" data-phase="${ph || ''}">${ph ? SUC_PHASE[ph] : ''}</span></div>`;
-    let body = `<p class="question">${esc(a.question || '')}</p>${stats}`, primary = null, secondary = [], busy = '';
+    const shown = onScreen && !!pres.revealed;
+    let body = `<p class="question">${esc(a.question || '')}</p>${stats}${onScreen && ph && n ? `<p class="small reveal ${shown ? 'on' : ''}">${shown ? '✨ Respostas reveladas no telão (nuvem de palavras).' : '🙈 O telão mostra só o carro carregando. As respostas ficam guardadas até você revelar.'}</p>` : ''}`, primary = null, secondary = [], busy = '';
     const cmd = (label, c, cls) => btn(label, 'sucCmd', { cls, data: { k, cmd: c } }), dr = (label, c, cls) => btn(label, 'sucDraw', { cls, data: { cmd: c } });
     if (!onScreen) { body += '<p class="warn">Esta dinâmica não está na tela agora.</p>'; primary = btn('📺 Exibir no telão e nos celulares', 'goStep', { cls: 'big', data: { id: step.id } }); }
     else if (ph === 'idle') primary = cmd(`▶ Iniciar recebimento${k === 'd1' ? '' : ' (2 min)'}`, 'start', 'big');
     else if (ph === 'run') { primary = cmd('⏭ Encerrar recebimento', 'end', 'big'); secondary = [cmd('❚❚ Pausar', 'pause', 'ghost')]; busy = 'O recebimento ainda está aberto. Avançar mesmo assim?'; }
     else if (ph === 'paused') { primary = cmd('▶ Retomar recebimento', 'start', 'big'); secondary = [cmd('⏭ Encerrar', 'end', 'ghost')]; }
-    else if (ph === 'done' && TALK[k]) {
+    else if (ph === 'done') {
+      const hide = shown ? [dr('🙈 Esconder respostas', 'hide', 'ghost')] : [];
       if (draw) {
         const left = talkLeft(draw.talk), running = !!draw.talk.endsAt && left > 0;
         body += `<div class="suc-draw on"><div class="small">🎲 VIAJANTE SORTEADO${draw.personId ? ' · avisado no celular' : ''}</div><div class="who">${esc(draw.name)}</div><div class="what">“${esc(draw.answer)}”</div>
           <div class="tcx ${running && left <= 30 ? 'alert' : ''}" style="--c:var(--orange);align-self:flex-start"><b data-timer="talk">${fmt(left)}</b><span>TEMPO DE FALA</span></div></div>`;
         primary = running ? dr('❚❚ Pausar tempo de fala', 'talkPause', 'big') : dr('▶ Iniciar tempo de fala', 'talkStart', 'big');
-        secondary = [dr('↺ Zerar tempo', 'talkReset', 'ghost'), dr('🎲 Sortear outro', 'draw', 'ghost'), dr('Voltar para a nuvem', 'close', 'ghost')];
-      } else if (n && !drawnBefore) primary = dr('🎲 Sortear viajante', 'draw', 'big');
-      else if (n) secondary = [dr('🎲 Sortear outro', 'draw', 'ghost')];
+        secondary = [dr('↺ Zerar tempo', 'talkReset', 'ghost'), dr('🎲 Sortear outro', 'draw', 'ghost'), dr('Fechar o sorteio', 'close', 'ghost')];
+      } else if (n && !shown) { // primeiro a revelação; o sorteio fica à mão para quem preferir sortear antes
+        primary = dr('✨ Revelar respostas no telão', 'reveal', 'big');
+        if (TALK[k]) secondary = [dr(drawnBefore ? '🎲 Sortear outro' : '🎲 Sortear viajante', 'draw', 'ghost')];
+      } else if (n && TALK[k] && !drawnBefore) { primary = dr('🎲 Sortear viajante', 'draw', 'big'); secondary = hide; }
+      else if (n) secondary = [...(TALK[k] ? [dr('🎲 Sortear outro', 'draw', 'ghost')] : []), ...hide];
     }
     const warn = !onScreen ? '' : !tl.count ? '⚠ Nenhum telão aberto. <a href="/telao.html" target="_blank">Abrir telão ↗</a>' : !tl.auth ? '⚠ O telão está aberto sem login e não vai mostrar as respostas, a nuvem nem o sorteio. Abra-o neste navegador: <a href="/telao.html" target="_blank">abrir telão ↗</a>' : '';
     const more = `<div class="actions">${btn(`Ver e baixar as respostas (${n})`, 'sucAnswers', { cls: 'ghost sm', data: { k } })}${btn('↺ Reabrir o recebimento', 'sucCmd', { cls: 'ghost sm', data: { k, cmd: 'reset' }, disabled: !(ph === 'done' || ph === 'paused') })}${btn('🗑 Apagar as respostas', 'sucCmd', { cls: 'red sm', data: { k, cmd: 'clear' } })}</div>
       <p class="small" style="margin-top:8px"><a href="/painel?sala=${encodeURIComponent(room || '')}&d=${k}" target="_blank">Abrir o painel 3D original ↗</a></p>`;
-    return { title: `Dinâmica ${k.slice(1)} · ${a.title || SUC_NAME[k]}`, body, primary, secondary, more, warn, busy, onair: 'Celulares: pergunta e resposta · Telão: carro, nuvem e sorteio' };
+    return { title: `Dinâmica ${k.slice(1)} · ${a.title || SUC_NAME[k]}`, body, primary, secondary, more, warn, busy, onair: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar' };
+  }
+  // Reflexão: uma parada por vez. Abrir parada → iniciar votação → encerrar → sortear 2 projetos → próxima parada.
+  function pReflexao(step) {
+    const O = A.O, R = O.reflexao, on = rfxOnAir();
+    if (!R) return { title: 'Reflexão', body: '<p class="lead">Carregando…</p>' };
+    const cfg = R.config, n = cfg.themes.length, i = R.open, p = i === null ? null : R.paradas[i], COLORS = ['#22d3ee', '#ff2e88', '#ffd23f', '#ff6b1a'];
+    const cmd = (label, c, cls, data = {}) => btn(label, 'rfx', { cls, data: { cmd: c, ...data } });
+    const undone = k => !R.paradas[k].drawn.length, order = [...Array(n).keys()];
+    const nextIdx = i === null ? order.find(undone) : [...order.filter(k => k > i), ...order.filter(k => k < i)].find(undone);
+    const openNext = (label, cls) => (nextIdx === undefined ? null : cmd(`${label} ${pad(nextIdx + 1)} · ${esc(cfg.themes[nextIdx].t)}${label.startsWith('▶') ? '' : ' ▶'}`, 'open', cls, { idx: nextIdx }));
+    const state = q => (q.drawn.length ? '✓ sorteada' : q.phase === 'done' ? 'encerrada' : q.phase === 'run' ? 'votando' : q.phase === 'paused' ? 'pausada' : '');
+    const chips = `<div class="rfx-chips">${cfg.themes.map((t, k) => { const q = R.paradas[k]; return `<button type="button" class="chip ${k === i ? 'on' : ''} ${q.drawn.length ? 'done' : ''}" style="--c:${COLORS[k % 4]}" data-act="rfx" data-cmd="open" data-idx="${k}" title="${esc(t.q)}" ${on ? '' : 'disabled'}><b>${pad(k + 1)}</b><span>${esc(t.t)}<small>${q.votes} ${q.votes === 1 ? 'voto' : 'votos'}${state(q) ? ' · ' + state(q) : ''}</small></span></button>`; }).join('')}</div>`;
+    const more = `<div class="actions">${cmd('🤖 +5 votos de teste', 'fake', 'ghost sm', { n: 5 })}${btn('Ver os votos', 'rfxVotes', { cls: 'ghost sm' })}${btn('⬇ Exportar votos (.csv)', 'rfxCsv', { cls: 'ghost sm' })}${cmd('↺ Reiniciar a votação desta parada', 'reset', 'ghost sm')}${cmd('🗑 Limpar os votos desta parada', 'clear', 'red sm')}${cmd('🗑 Limpar tudo', 'clearAll', 'red sm')}</div>
+      <p class="small" style="margin-top:8px">Os votos de teste servem para ensaiar sem os celulares (os nomes saem marcados como "teste"). Paradas e projetos: <a href="#" data-go="reflexao">Preparar → Reflexão</a>.</p>`;
+    const base = { title: cfg.title, more, onair: 'Celulares: escolher 1 projeto · Telão: Flux Capacitor e sorteio' };
+    if (!on) return { ...base, body: `<p class="warn">A Reflexão não está na tela agora.</p>${chips}`, primary: btn('📺 Exibir no telão e nos celulares', 'goStep', { cls: 'big', data: { id: step.id } }) };
+    if (!p) { // menu das paradas
+      const total = R.paradas.reduce((a, q) => a + q.votes, 0);
+      return { ...base, body: `<p class="lead">${esc(cfg.subtitle)}. O telão mostra as ${n} paradas, os votos de cada uma e a energia total do Flux Capacitor${total ? ` (${total} votos até agora)` : ''}.</p>${chips}`,
+        primary: openNext(R.paradas.some(q => q.drawn.length) ? 'Próxima parada:' : '▶ Abrir a parada', 'big') };
+    }
+    const t = cfg.themes[i], left = rfxLeft(p), ph = p.phase;
+    const stats = `<div class="suc-stats"><div class="tcx"><b>${String(p.votes).padStart(3, '0')}</b><span>VOTOS</span></div>${ph !== 'done' ? `<div class="tcx ${ph === 'run' && left <= 15 ? 'alert' : ''}" style="--c:var(--yellow)"><b data-timer="rfx">${fmt(left)}</b><span>VOTAÇÃO</span></div>` : ''}<span class="suc-ph" data-phase="${ph}">${RFX_PHASE[ph]}${p.votes ? ` · ${p.projects} ${p.projects === 1 ? 'projeto votado' : 'projetos votados'}` : ''}</span></div>`;
+    let body = `<div class="phase">Parada ${pad(i + 1)} de ${n} · ${esc(t.t)}</div><p class="question">${esc(t.q)}</p>${stats}`, primary = null, secondary = [], busy = '';
+    if (ph === 'idle') primary = cmd(`▶ Iniciar votação (${fmt(p.remaining)})`, 'start', 'big');
+    else if (ph === 'run') { primary = cmd('⏭ Encerrar votação', 'end', 'big'); secondary = [cmd('❚❚ Pausar', 'pause', 'ghost')]; busy = 'A votação ainda está aberta. Avançar mesmo assim?'; }
+    else if (ph === 'paused') { primary = cmd('▶ Retomar votação', 'start', 'big'); secondary = [cmd('⏭ Encerrar', 'end', 'ghost')]; }
+    else if (!p.cur.length) {
+      if (p.projects >= 2) primary = cmd('🎲 Sortear 2 projetos', 'draw', 'big');
+      else { body += '<p class="warn">Para o sorteio são necessários pelo menos 2 projetos diferentes votados.</p>'; primary = openNext('Próxima parada:', 'big'); secondary = [cmd('↺ Reiniciar a votação', 'reset', 'ghost')]; }
+    } else {
+      body += `<div class="rfx-drawn">${p.cur.map((v, k) => `<div class="suc-draw on"><div class="small">🎲 PROJETO SORTEADO · 0${k + 1}</div><div class="who">${esc(v.p)}</div><div class="what">${esc(v.o)}</div>${cmd('↻ Trocar este projeto', 'swap', 'ghost xs', { k })}</div>`).join('')}</div>`;
+      primary = openNext('Próxima parada:', 'big');
+      secondary = [cmd('🎲 Sortear novamente (2)', 'draw', 'ghost'), p.show ? cmd('Ver o Flux Capacitor', 'showDraw', 'ghost', { on: '' }) : cmd('Mostrar os sorteados', 'showDraw', 'ghost', { on: 1 })];
+    }
+    secondary.push(cmd('☰ Menu das paradas', 'menu', 'ghost'));
+    if (ph === 'done' && p.tally.length) body += det('rfx-tally', `Ver os projetos votados (${p.tally.length})`, `<div class="anslist" style="margin-top:6px">${p.tally.map(x => `<p><b>${x.n}</b> · ${esc(x.p)} <span class="small">· ${esc(x.o)}</span></p>`).join('')}</div>`);
+    return { ...base, color: COLORS[i % 4], body, after: `<div class="small" style="margin-top:16px">Paradas (clique para abrir outra):</div>${chips}`, primary, secondary, busy };
+  }
+  // Preparar → Reflexão: título, tempo, paradas e a lista de projetos (um por linha)
+  function vReflexaoCfg() {
+    const R = A.O.reflexao; if (!R) return '<div class="card"><p class="lead">Carregando…</p></div>';
+    const c = R.config;
+    return `<div class="card"><h2>Reflexão · paradas e projetos</h2>
+      <p class="small">Em cada parada as pessoas escolhem 1 projeto pelo celular (com o nome do check-in), o Flux Capacitor do telão carrega e você sorteia 2 projetos. Aqui você ajusta os textos e a lista. No <a href="#" data-go="live">Ao vivo</a> a Reflexão é um passo do roteiro.</p>
+      <div class="form two" style="margin-top:12px">
+        <label class="f">Título no telão<input class="input" id="rfTitle" value="${esc(c.title)}"></label>
+        <label class="f">Subtítulo<input class="input" id="rfSub" value="${esc(c.subtitle)}"></label>
+        <label class="f">Tempo de votação por parada (segundos)<input class="input" id="rfSeconds" type="number" min="10" max="900" value="${c.voteSeconds}"><span class="small">90 = 1min30</span></label>
+        <label class="f">Votos para carregar 100% do Flux Capacitor em uma parada<input class="input" id="rfFull" type="number" min="1" max="500" value="${c.fullVotes}"></label>
+      </div>
+      <h3 style="margin-top:16px">Paradas</h3>
+      <p class="small">Uma por linha: <span class="mono">nome da parada | pergunta</span> (até 8).</p>
+      <textarea class="input mono" id="rfThemes" rows="${Math.max(6, c.themes.length + 1)}" spellcheck="false">${esc(c.themes.map(t => `${t.t} | ${t.q}`).join('\n'))}</textarea>
+      <h3 style="margin-top:16px">Projetos (${c.projects.length})</h3>
+      <p class="small">Um por linha: <span class="mono">projeto | responsável</span>. É a lista que aparece no celular e o que o telão mostra no sorteio.</p>
+      <textarea class="input mono" id="rfProjects" rows="18" spellcheck="false">${esc(c.projects.map(x => `${x.name} | ${x.owner}`).join('\n'))}</textarea>
+      <div class="actions" style="margin-top:14px"><button class="btn" data-act="rfxSaveCfg">Salvar</button><button class="btn ghost sm" data-act="rfxResetCfg" style="margin-left:auto">Restaurar o padrão</button></div>
+    </div>`;
+  }
+  async function rfxVotesDialog() {
+    const R = A.O.reflexao, d = await api('GET', '/api/admin/reflexao/votes'), list = d.votes || [];
+    dialog(`<h3>Reflexão · ${list.length} ${list.length === 1 ? 'voto' : 'votos'}</h3>
+      <div class="anslist">${list.length ? R.config.themes.map((t, k) => { const v = list.filter(x => x.parada === k); return v.length ? `<p class="small" style="margin-top:8px"><b>${pad(k + 1)} · ${esc(t.t)}</b> (${v.length})</p>${v.map(x => `<p><b>${esc(x.name)}</b> · ${esc(x.project)}</p>`).join('')}` : ''; }).join('') : '<p class="muted">Nenhum voto ainda.</p>'}</div>
+      <div class="actions" style="margin-top:12px"><button class="btn sm" data-act="rfxCsv" ${list.length ? '' : 'disabled'}>⬇ Exportar votos (.csv)</button><button class="btn ghost sm" data-close>Fechar</button></div>`);
+  }
+  async function rfxCsv() {
+    const r = await fetch('/api/admin/reflexao/votes.csv', { headers: { 'x-admin-key': A.key } });
+    if (!r.ok) throw new Error('Não foi possível exportar os votos.');
+    const link = document.createElement('a'); link.href = URL.createObjectURL(await r.blob()); link.download = 'Votos_Reflexao.csv'; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 5000); toast('Download iniciado');
   }
   // cronômetros e viradas de fase que dependem só do relógio
   function tickLive() {
     if (!A.O || A.tab !== 'live') return;
     const t = A.O.state.conn.timer, c = $('[data-timer=conn]'); if (c && t) c.textContent = fmt(timerLeft(t));
     const su = $('[data-timer=suc]'); if (su) su.textContent = fmt(sucLeft(sucAct(su.dataset.k)));
+    const rx = $('[data-timer=rfx]'), R = A.O.reflexao; if (rx && R && R.open !== null) rx.textContent = fmt(rfxLeft(R.paradas[R.open]));
     const d = A.O.state.presentation && A.O.state.presentation.draw, tk = $('[data-timer=talk]'); if (tk && d) tk.textContent = fmt(talkLeft(d.talk));
   }
   setInterval(() => {
@@ -353,7 +436,7 @@
     return `<div class="card"><h2>Roteiro do evento</h2>
       <p class="small">A ordem dos passos do evento. No <a href="#" data-go="live">Ao vivo</a> você percorre o roteiro com o botão "Próximo". Dá para mudar a qualquer momento, inclusive durante o evento.</p>
       <div class="rlist">${list.map(row).join('')}</div>
-      <div class="actions radd"><span class="small">Adicionar:</span>${add('Bloco de fala', 'stage')}${add('Aviso / intervalo', 'message')}${add('Olhos no telão', 'standby')}${add('Check-in', 'checkin')}${has('connections') ? '' : add('Conexões', 'connections')}${['d1', 'd2', 'd3', 'd4'].filter(k => !hasAct(k)).map(k => add(`Sucesso ${k.slice(1).padStart(2, '0')}`, 'sucesso', `data-activity="${k}"`)).join('')}${add('Encerramento', 'closing')}</div>
+      <div class="actions radd"><span class="small">Adicionar:</span>${add('Bloco de fala', 'stage')}${add('Aviso / intervalo', 'message')}${add('Olhos no telão', 'standby')}${add('Check-in', 'checkin')}${has('connections') ? '' : add('Conexões', 'connections')}${has('reflexao') ? '' : add('Reflexão', 'reflexao')}${['d1', 'd2', 'd3', 'd4'].filter(k => !hasAct(k)).map(k => add(`Sucesso ${k.slice(1).padStart(2, '0')}`, 'sucesso', `data-activity="${k}"`)).join('')}${add('Encerramento', 'closing')}</div>
       <div class="actions" style="margin-top:14px;align-items:center">${dirty ? '<button class="btn" data-act="rsSave">Salvar roteiro</button><button class="btn ghost" data-act="rsDiscard">Descartar alterações</button><span class="warn">alterações não salvas</span>' : '<span class="ok">✔ Roteiro salvo</span>'}<button class="btn ghost sm" data-act="rsDefault" style="margin-left:auto">Restaurar o roteiro padrão</button></div>
     </div>`;
   }
@@ -629,13 +712,32 @@
       case 'rsSave': return run(async () => { await act('settings', { settings: { steps: A.stepsDraft } }); A.stepsDraft = null; }, 'Roteiro salvo');
       // --- dinâmicas do Sucesso ---
       case 'sucDraw': return run(() => api('POST', '/api/admin/sucesso/draw', { action: el.dataset.cmd }));
+      // --- Reflexão ---
+      case 'rfx': {
+        const cmd = el.dataset.cmd, R = O.reflexao, d = el.dataset;
+        if (cmd === 'open' && R && R.open === +d.idx) return;
+        if (cmd === 'open' && R && R.open !== null && R.paradas[R.open].phase === 'run' && !confirm('A votação desta parada ainda está aberta. Ela fica pausada se você trocar de parada. Trocar mesmo assim?')) return;
+        if (cmd === 'end' && !confirm('Encerrar a votação agora?')) return;
+        if (cmd === 'clear' && !confirm('Apagar os votos e o sorteio desta parada? Não dá para desfazer.')) return;
+        if (cmd === 'clearAll' && !confirm('Apagar os votos e os sorteios de TODAS as paradas? Não dá para desfazer.')) return;
+        return run(() => api('POST', '/api/admin/reflexao', { action: cmd, idx: d.idx === undefined ? undefined : +d.idx, k: d.k === undefined ? undefined : +d.k, n: d.n === undefined ? undefined : +d.n, on: !!d.on }));
+      }
+      case 'rfxVotes': return run(() => rfxVotesDialog());
+      case 'rfxCsv': return run(() => rfxCsv());
+      case 'rfxSaveCfg': {
+        const lines = v => v.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const at = l.lastIndexOf('|'); return at < 0 ? [l, ''] : [l.slice(0, at).trim(), l.slice(at + 1).trim()]; });
+        const config = { title: $('#rfTitle').value, subtitle: $('#rfSub').value, voteSeconds: +$('#rfSeconds').value, fullVotes: +$('#rfFull').value,
+          themes: lines($('#rfThemes').value).map(([t, q]) => ({ t, q })), projects: lines($('#rfProjects').value).map(([name, owner]) => ({ name, owner })) };
+        return run(async () => { await api('POST', '/api/admin/reflexao', { action: 'config', config }); render(true); }, 'Reflexão salva');
+      }
+      case 'rfxResetCfg': if (!confirm('Voltar as paradas e os projetos para a lista original?')) return; return run(async () => { await api('POST', '/api/admin/reflexao', { action: 'resetConfig' }); render(true); }, 'Lista original restaurada');
       case 'sucAnswers': return run(() => sucAnswersDialog(el.dataset.k));
       case 'sucDownload': return sucDownload(el.dataset.type);
       case 'sucCmd': {
         const k = el.dataset.k, cmd = el.dataset.cmd, room = O.sucesso && O.sucesso.roomId;
         if (!room) return toast('As dinâmicas do Sucesso ainda estão carregando.', true);
         if (cmd === 'clear' && !confirm('Apagar as respostas desta dinâmica? Não dá para desfazer.')) return;
-        if (cmd === 'end' && !confirm('Encerrar o recebimento agora? O carro entra no portal e aparece a nuvem de palavras.')) return;
+        if (cmd === 'end' && !confirm('Encerrar o recebimento agora? O carro entra no portal. As respostas só aparecem quando você revelar.')) return;
         return run(() => api('POST', `/api/rooms/${room}/activities/${k}/command`, { action: cmd }));
       }
       case 'addPerson': return dialog(personForm(), () => { $('#fSave').onclick = () => run(async () => { await api('POST', '/api/admin/people', personFromForm()); closeDialog(); }, 'Pessoa adicionada'); });
