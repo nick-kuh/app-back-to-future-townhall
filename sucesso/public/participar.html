@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0a1f">
+<meta name="robots" content="noindex, nofollow">
+<title>Responda ao vivo · De Volta para o Sucesso</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0a1f;--panel:#17142e;--text:#f3f0ff;--muted:#bcb5da;--cyan:#22d3ee;--pink:#ff2e88;--yellow:#ffd23f;--orange:#ff6b1a;--border:#393053;--accent:var(--cyan)}
+*{box-sizing:border-box}body{margin:0;min-height:100svh;background:radial-gradient(ellipse at 90% 0,#50215a55,transparent 52%),radial-gradient(ellipse at 0 25%,#143b5444,transparent 50%),var(--bg);color:var(--text);font:16px/1.5 "Segoe UI",Arial,sans-serif}body:before{content:"";position:fixed;inset:auto 0 0;height:170px;pointer-events:none;opacity:.12;background-image:linear-gradient(var(--pink) 1px,transparent 1px),linear-gradient(90deg,var(--pink) 1px,transparent 1px);background-size:32px 32px;mask-image:linear-gradient(transparent,#000)}
+main{position:relative;max-width:600px;margin:auto;padding:24px 20px 36px}header{margin-bottom:24px}.journey{display:flex;align-items:center;gap:12px;font:700 12px/1 Consolas,monospace;letter-spacing:2px;color:var(--cyan)}.journey span:last-child{color:var(--orange)}.journey i{width:30px;height:1px;background:var(--pink)}h1{font:900 italic clamp(28px,8vw,39px)/1.05 "Arial Black",Arial,sans-serif;letter-spacing:-1px;margin:14px 0 8px;color:var(--yellow)}.room{color:var(--muted);font-size:14px;margin:0;overflow-wrap:anywhere}.connection{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:12px;margin-top:12px}.connection:before{content:"";width:7px;height:7px;border-radius:50%;background:#bcb5da}.connection[data-state=online]:before{background:var(--cyan)}.connection[data-state=offline]:before{background:var(--orange)}
+nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:20px}nav button{min-height:52px;border:1px solid var(--border);border-radius:10px;background:#17142e88;color:var(--muted);font:700 13px/1.3 "Segoe UI",Arial;cursor:pointer;padding:8px 3px}nav button span{display:block;font-size:10px;font-weight:400;margin-top:3px}nav button[aria-current=step]{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--bg))}nav button:disabled{cursor:wait}
+.card{background:linear-gradient(145deg,#211b3ef5,#131126f5);border:1px solid var(--border);border-top:3px solid var(--accent);border-radius:16px;padding:23px 22px;box-shadow:0 14px 45px #0003}.eyebrow{color:var(--accent);font:700 11px/1.4 Consolas,monospace;letter-spacing:2px;text-transform:uppercase;margin:0 0 9px}h2{font-size:clamp(21px,5.6vw,27px);line-height:1.3;margin:0 0 18px;overflow-wrap:anywhere}.status{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--border);border-radius:9px;background:#09081777;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:22px}.status[data-open=true]{border-color:#22d3ee55;color:var(--cyan)}.timer{font:700 20px/1 Consolas,monospace;color:var(--yellow);flex:none}.timer[data-urgent=true]{color:#ff9cb8}
+label{display:block;font-size:14px;font-weight:600;margin:0 0 7px}.optional{font-size:12px;font-weight:400;color:var(--muted)}input,textarea{display:block;width:100%;border:1px solid #514566;border-radius:9px;background:#0b0a1fb3;color:var(--text);font:16px/1.5 "Segoe UI",Arial;padding:12px 13px;outline:none}input::placeholder,textarea::placeholder{color:#8d85aa}input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}input{margin-bottom:19px}textarea{min-height:128px;resize:vertical}.answer-meta{display:flex;justify-content:space-between;gap:16px;margin-top:6px;font-size:12px;color:var(--muted)}.privacy{color:var(--muted);font-size:12px;margin:19px 0 15px}.submit{width:100%;min-height:52px;border:0;border-radius:9px;background:var(--yellow);color:#161025;font:800 15px/1.2 "Segoe UI",Arial;cursor:pointer;padding:14px 18px}.submit:disabled{background:#403751;color:#bcb5da;cursor:not-allowed}.submit:not(:disabled):hover{background:#ffe174}button:focus-visible,a:focus-visible{outline:3px solid var(--cyan);outline-offset:4px}.message{margin-top:15px;padding:12px 14px;border-radius:9px;background:#22d3ee11;border:1px solid #22d3ee55;color:#aff4ff;font-size:14px;overflow-wrap:anywhere}.message[data-kind=error]{background:#ff6b1a11;border-color:#ff6b1a66;color:#ffccb0}.message[hidden]{display:none}.retry{margin-top:10px;min-height:40px;border:1px solid var(--cyan);border-radius:7px;background:transparent;color:var(--cyan);padding:8px 12px;font:700 13px "Segoe UI",Arial;cursor:pointer}.retry[hidden]{display:none}footer{margin-top:20px;text-align:center;color:var(--muted);font-size:12px}.help{margin:0}.fatal{display:none}.fatal.on{display:block}body.invalid nav,body.invalid #activityCard{display:none}
+@media(min-width:600px){main{padding-top:42px}.card{padding:30px}header{margin-bottom:28px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+.retry-send{width:100%;min-height:48px}.retry:disabled{opacity:.55;cursor:wait}.pending-note{margin:12px 0 0;font-size:12px;color:var(--muted)}.pending-note[hidden]{display:none}
+.live-prompt{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:16px;padding:10px 12px;border:1px solid var(--border);border-radius:9px;color:var(--cyan);font-size:13px}
+.live-prompt[hidden],body.invalid .live-prompt{display:none}
+.live-prompt .retry{margin:0}
+.back-link{display:inline-block;margin-top:10px;padding:10px 0;color:var(--cyan);font-size:14px}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="journey"><span>2026</span><i aria-hidden="true"></i><span>2027</span></div>
+  <h1>DE VOLTA<br>PARA O SUCESSO</h1>
+  <p class="room" id="roomName">Conectando à sala…</p>
+  <div class="connection" id="connection" role="status" data-state="connecting">Conectando…</div>
+</header>
+<aside class="live-prompt" id="livePrompt" hidden>
+  <span id="livePromptText" aria-live="polite"></span>
+  <button class="retry" id="showPresented" type="button">Ir para a dinâmica</button>
+</aside>
+<nav aria-label="Escolher dinâmica" id="activities">
+  <button type="button" data-activity="d1" aria-current="step">01<span>Antes de partir</span></button>
+  <button type="button" data-activity="d2">02<span>Look Back</span></button>
+  <button type="button" data-activity="d3">03<span>Uso de IA</span></button>
+  <button type="button" data-activity="d4">04<span>Look Ahead</span></button>
+</nav>
+<section class="card" id="activityCard" aria-labelledby="question">
+  <p class="eyebrow" id="activityTitle">Dinâmica 01</p>
+  <h2 id="question">Preparando sua participação…</h2>
+  <div class="status" id="activityStatus" data-open="false"><span id="phaseText" role="status" aria-live="polite">Aguarde a conexão com a sala.</span><span class="timer" id="timer" aria-label="Tempo restante" hidden></span></div>
+  <form id="responseForm">
+    <label for="participantName">Seu nome <span class="optional" id="nameHint">(obrigatório)</span></label>
+    <input id="participantName" name="name" maxlength="80" autocomplete="name" placeholder="Como você quer aparecer no telão?" required>
+    <label for="answer">Sua resposta</label>
+    <textarea id="answer" name="answer" maxlength="200" rows="4" placeholder="Compartilhe sua ideia…" required aria-describedby="answerCount privacy"></textarea>
+    <div class="answer-meta"><span>Uma ideia pode mover o futuro.</span><span id="answerCount">0 / 200</span></div>
+    <p class="privacy" id="privacy">Sua resposta poderá aparecer no telão do evento.</p>
+    <button class="submit" id="submitButton" type="submit" disabled>Aguardando conexão…</button>
+  </form>
+  <div class="message" id="message" role="status" hidden></div>
+  <p class="pending-note" id="pendingNote" hidden>Há um envio sem confirmação. Confirme o anterior antes de enviar outra resposta.</p>
+  <button class="retry retry-send" type="button" id="retrySend" hidden>Confirmar envio anterior</button>
+  <button class="retry" type="button" id="retryConnection" hidden>Tentar conectar novamente</button>
+</section>
+<section class="card fatal" id="fatal" aria-labelledby="fatalTitle"><p class="eyebrow">Sinal não encontrado</p><h2 id="fatalTitle">Este link não parece completo.</h2><p>Escaneie novamente o QR code exibido no telão para entrar na sala.</p></section>
+<footer>
+  <p class="help">Acompanhe o telão e responda à dinâmica indicada pelo apresentador.</p>
+  <a class="back-link" href="/">← Voltar ao app dos viajantes</a>
+</footer>
+</main>
+<script>
+'use strict';
+(() => {
+  const $ = id => document.getElementById(id);
+  const keys = ['d1','d2','d3','d4'];
+  const colors = {d1:'#22d3ee',d2:'#ffd23f',d3:'#ff2e88',d4:'#ff6b1a'};
+  const drafts = new Map();
+  const pending = new Map();
+  const query = new URLSearchParams(location.search);
+  let selected = keys.includes(query.get('d')) ? query.get('d') : 'd1';
+  let roomId = '';
+  try { roomId = decodeURIComponent(location.pathname.split('/').filter(Boolean)[1] || ''); } catch {}
+  let snapshot = null, connected = false, sending = false, stopped = false;
+  let serverOffset = 0, pollTimer = null, inFlight = null, lastStatusAt = 0;
+  let pollController = null, pollEpoch = 0, refreshRequested = false, notFound = false, failures = 0;
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const uuid = () => crypto.randomUUID();
+  const storage = {
+    get(key) { try { return localStorage.getItem(key); } catch { return null; } },
+    set(key,value) { try { localStorage.setItem(key,value); } catch {} }
+  };
+  let participantId = storage.get('townhall.participantId');
+  if (!participantId || !UUID.test(participantId)) {
+    participantId = uuid(); storage.set('townhall.participantId',participantId);
+  }
+  $('participantName').value = (storage.get('townhall.name') || '').slice(0,80);
+  const setText = (id,text) => { if ($(id).textContent !== text) $(id).textContent = text; };
+  const activity = () => snapshot?.activities.find(item => item.id === selected);
+  function presentedActivity() {
+    const presentation = snapshot?.presentation;
+    if (connected && Date.now() - lastStatusAt < 12000 && presentation?.roomId === roomId) {
+      return snapshot.activities.find(item => item.id === presentation.activityId);
+    }
+  }
+  const now = () => Date.now() + serverOffset;
+  const remaining = a => a?.endsAt != null ? Math.max(0, Math.ceil((Number(a.endsAt)-now())/1000)) : Number(a?.remainingSeconds || 0);
+  const isOpen = a => !document.hidden && connected && Date.now()-lastStatusAt < 12000 && a?.phase === 'run' && (a.endsAt == null || remaining(a)>0);
+  const showMessage = (text,kind='success') => { $('message').hidden=false; $('message').dataset.kind=kind; $('message').textContent=text; };
+  const clearMessage = () => { $('message').hidden=true; $('message').textContent=''; };
+  function updateClock() {
+    const a=activity(), open=isOpen(a), time=remaining(a);
+    $('activityStatus').dataset.open=String(open);
+    $('timer').hidden=selected==='d1' || !a || a.endsAt==null && a.phase!=='paused';
+    if (!$('timer').hidden) setText('timer',String(Math.floor(time/60)).padStart(2,'0')+':'+String(time%60).padStart(2,'0'));
+    $('timer').dataset.urgent=String(time<=30);
+    let phase='Aguarde a conexão com a sala.', button='Aguardando conexão…';
+    if (!connected || Date.now()-lastStatusAt >= 12000) { phase='Reconectando. Sua resposta está preservada.'; button='Aguardando conexão…'; }
+    else if (a?.phase==='run' && (a.endsAt==null || time>0)) { phase='Recebendo respostas ao vivo'; button='Enviar resposta'; }
+    else if(a?.phase==='paused') { phase='Recebimento pausado pelo apresentador.'; button='Recebimento pausado'; }
+    else if(a?.phase==='done' || a?.endsAt!=null && time<=0) { phase='Esta rodada foi encerrada.'; button='Rodada encerrada'; }
+    else if(a) { phase='Aguarde o apresentador abrir esta dinâmica.'; button='Aguardando abertura'; }
+    const unconfirmed=pending.has(selected);
+    setText('phaseText',phase); setText('submitButton',sending?'Enviando…':unconfirmed?'Confirme o envio anterior':button);
+    $('submitButton').disabled=sending || !open || unconfirmed;
+    $('retrySend').hidden=!unconfirmed;
+    $('pendingNote').hidden=!unconfirmed;
+    $('retrySend').disabled=sending || !navigator.onLine;
+    setText('retrySend',sending?'Confirmando…':'Confirmar envio anterior');
+    const presented = presentedActivity();
+    $('livePrompt').hidden = !presented || presented.id === selected;
+    if (presented) setText('livePromptText','No telão agora: '+presented.title);
+    $('showPresented').disabled = sending;
+  }
+  function renderActivity() {
+    document.documentElement.style.setProperty('--accent',colors[selected]);
+    document.querySelectorAll('[data-activity]').forEach(button=>{
+      if(button.dataset.activity===selected) button.setAttribute('aria-current','step'); else button.removeAttribute('aria-current');
+      button.disabled=sending;
+    });
+    const a=activity();
+    if(a){
+      setText('activityTitle','Dinâmica '+selected.slice(1).padStart(2,'0')+' · '+a.title);
+      setText('question',a.question);
+      $('participantName').required=!!a.nameRequired;
+      setText('nameHint',a.nameRequired?'(obrigatório)':'(opcional)');
+      $('participantName').placeholder=a.nameRequired?'Como você quer aparecer no telão?':'Pode deixar em branco para enviar como Anônimo';
+    }
+    updateClock();
+  }
+  async function request(path,options={}) {
+    const controller = new AbortController();
+    const externalSignal=options.signal, abort=()=>controller.abort();
+    if(externalSignal?.aborted)abort();else externalSignal?.addEventListener('abort',abort,{once:true});
+    const timeout=setTimeout(()=>controller.abort(),12000);
+    try {
+      const response=await fetch(path,{...options,cache:'no-store',signal:controller.signal,headers:{Accept:'application/json',...options.headers}});
+      const result=await response.json().catch(()=>null);
+      if(!response.ok){
+        const structuredError=result && typeof result==='object' && !Array.isArray(result) && typeof result.error==='string' && result.error.length>0;
+        const error=new Error(structuredError?result.error:'Não foi possível completar a operação. Tente novamente.');
+        error.status=response.status;
+        error.confirmedRejection=Boolean(structuredError && response.status>=400 && response.status<500);
+        throw error;
+      }
+      if(!result || typeof result!=='object' || Array.isArray(result))throw new Error('Não foi possível validar a confirmação do servidor.');
+      return result;
+    } finally {clearTimeout(timeout);externalSignal?.removeEventListener('abort',abort);}
+  }
+  async function poll() {
+    clearTimeout(pollTimer);
+    if(stopped || notFound || document.hidden || !navigator.onLine)return;
+    if(inFlight){refreshRequested=true;return;}
+    refreshRequested=false;
+    const epoch=pollEpoch,startedAt=Date.now();
+    pollController=new AbortController();
+    inFlight=(async()=>{
+      try {
+        const data=await request('/api/rooms/'+encodeURIComponent(roomId)+'/status',{signal:pollController.signal});
+        if(epoch!==pollEpoch || document.hidden)return;
+        if(!data.room || !Array.isArray(data.activities) || !Number.isFinite(data.serverNow)) throw new Error('Resposta da sala inválida.');
+        snapshot=data; serverOffset=data.serverNow-(startedAt+Date.now())/2; lastStatusAt=Date.now(); connected=true;failures=0;
+        setText('roomName',data.room.name); setText('connection','Conectado à sala'); $('connection').dataset.state='online';
+        $('retryConnection').hidden=true; renderActivity();
+      } catch(error) {
+        if(epoch!==pollEpoch || document.hidden)return;
+        failures++;
+        connected=false; setText('connection',navigator.onLine?'Conexão interrompida · tentando novamente':'Sem internet · tentando reconectar'); $('connection').dataset.state='offline';
+        if(error.status===404){notFound=true;setText('roomName','Sala não encontrada');setText('connection','Confira o QR code da sala');showMessage('Não encontramos esta sala. Confira o QR code no telão.', 'error');}
+        else if(!snapshot){setText('roomName','Aguardando conexão com a sala');}
+        $('retryConnection').hidden=false; updateClock();
+      }
+    })();
+    try {await inFlight;} finally {
+      inFlight=null;pollController=null;
+      if(!stopped && !notFound && !document.hidden && navigator.onLine){
+        const base=failures?Math.min(30000,3000*2**Math.min(failures,4)):3000;
+        pollTimer=setTimeout(poll,refreshRequested?0:Math.round(base*(.85+Math.random()*.3)));
+      }
+    }
+  }
+  function refreshStatus(manual=false){
+    if(manual){notFound=false;failures=0;}
+    connected=false;lastStatusAt=0;updateClock();
+    if(!notFound){setText('connection','Atualizando a sala…');$('connection').dataset.state='connecting';poll();}
+  }
+  function selectActivity(next) {
+    if(sending || !keys.includes(next) || selected===next)return;
+    drafts.set(selected,$('answer').value); selected=next;
+    $('answer').value=drafts.get(selected)||''; setText('answerCount',$('answer').value.length+' / 200'); clearMessage();
+    const url=new URL(location.href);url.searchParams.set('d',selected);history.replaceState(null,'',url);
+    renderActivity();
+  }
+  document.querySelectorAll('[data-activity]').forEach(button=>button.addEventListener('click',()=>selectActivity(button.dataset.activity)));
+  $('showPresented').addEventListener('click',()=>selectActivity(presentedActivity()?.id));
+  $('participantName').addEventListener('input',()=>storage.set('townhall.name',$('participantName').value));
+  $('answer').addEventListener('input',()=>{setText('answerCount',$('answer').value.length+' / 200');drafts.set(selected,$('answer').value);});
+  $('retryConnection').addEventListener('click',()=>refreshStatus(true));
+  window.addEventListener('online',()=>refreshStatus());
+  window.addEventListener('offline',()=>{pollEpoch++;clearTimeout(pollTimer);pollController?.abort();connected=false;lastStatusAt=0;setText('connection','Sem internet · sua resposta está preservada');$('connection').dataset.state='offline';updateClock();});
+  document.addEventListener('visibilitychange',()=>{
+    pollEpoch++;connected=false;lastStatusAt=0;clearTimeout(pollTimer);pollController?.abort();
+    if(!document.hidden)refreshStatus();
+  });
+  function validReceipt(result,payload){
+    const r=result?.response;
+    return r && typeof r.id==='string' && UUID.test(r.id) && r.activityId===payload.activityId && r.roundId===payload.roundId
+      && (!Object.hasOwn(r,'name') || r.name===(payload.name||'Anônimo'))
+      && (!Object.hasOwn(r,'answer') || r.answer===payload.answer);
+  }
+  async function sendPayload(payload){
+    if(sending)return;
+    const selectedAtSend=payload.activityId;
+    sending=true;clearMessage();renderActivity();
+    $('participantName').readOnly=true;$('answer').readOnly=true;
+    try {
+      const receipt=await request('/api/rooms/'+encodeURIComponent(roomId)+'/responses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      if(!validReceipt(receipt,payload))throw new Error('Não foi possível validar a confirmação do envio.');
+      pending.delete(selectedAtSend);
+      // Confirming an older send must not erase a draft edited after its first attempt.
+      if(selected===selectedAtSend && $('answer').value.trim()===payload.answer){drafts.delete(selectedAtSend);$('answer').value='';setText('answerCount','0 / 200');}
+      storage.set('townhall.name',$('participantName').value.trim());
+      showMessage(receipt.duplicate?'Envio anterior confirmado! Sua resposta já está registrada no telão.':'Resposta enviada! Ela já está a caminho do telão. Obrigado por participar.');
+    } catch(error) {
+      if(error.confirmedRejection)pending.delete(selectedAtSend);
+      const message=error.confirmedRejection?error.message:'Não conseguimos confirmar o envio. Sua resposta está preservada. Use “Confirmar envio anterior”, mesmo se a rodada já tiver terminado.';
+      showMessage(message,'error');
+      if(error.status===409 || error.status===403 || !error.status)refreshStatus();
+    } finally {sending=false;$('participantName').readOnly=false;$('answer').readOnly=false;renderActivity();}
+  }
+  $('retrySend').addEventListener('click',()=>{
+    const previous=pending.get(selected);
+    if(previous && !sending)sendPayload(previous.payload);
+  });
+  $('responseForm').addEventListener('submit',async event=>{
+    event.preventDefault(); const a=activity();
+    if(sending || pending.has(selected) || !isOpen(a)) {updateClock();return;}
+    const selectedAtSend=selected, name=$('participantName').value.trim(), answer=$('answer').value.trim();
+    if(a.nameRequired && !name){showMessage('Informe seu nome para participar.','error');$('participantName').focus();return;}
+    if(!answer){showMessage('Escreva sua resposta antes de enviar.','error');$('answer').focus();return;}
+    const fields={activityId:selectedAtSend,roundId:a.roundId,participantId,name,answer};
+    const payload={...fields,clientRequestId:uuid()};
+    pending.set(selectedAtSend,{payload});
+    await sendPayload(payload);
+  });
+  if(!UUID.test(roomId)) {
+    stopped=true;document.body.classList.add('invalid');$('fatal').classList.add('on');setText('roomName','Link de participação inválido');setText('connection','Escaneie o QR code da sala');
+  } else {renderActivity();poll();setInterval(()=>{if(!document.hidden)updateClock();},500);}
+})();
+</script>
+</body>
+</html>
