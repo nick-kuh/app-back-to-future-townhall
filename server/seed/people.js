@@ -25,7 +25,7 @@ const RAW = [
   ['Felipe Zompero', 'Felipe.Zompero@unilever.com', 'Estag', 'CDIO BPC', 'Amanda Papucci', 'Make (Business Ops)'],
   ['Pedro Teixeira', 'Pedro.Teixeira2@unilever.com', 'Estag', 'CDIO BPC', 'Felipe Resck', 'Consumer'],
   ['Vinicius Santos', 'Vinicius.Santos@unilever.com', 'Estag', 'CDIO BPC', 'Vinicius Deffendi', 'Customer Development'],
-  ['Evelyn Aguiar', '', 'WL1', '', '', 'Consumer'], // time (BPC ou HC), gestor e e-mail ainda não informados: não mudam o sorteio das duplas
+  ['Evelyn Aguiar', '', 'WL1', 'CDIO BPC', 'Felipe Resck', 'Consumer'],
   ['Fermin Grandas', 'Fermin.Grandas@unilever.com', 'WL3', 'CDIO HC', 'Meenakshi Burra', 'Diretora'],
   ['Liliana Marchueta', 'Liliana.Marchueta@unilever.com', 'WL3', 'CDIO HC', 'Fermin Grandas', 'Strategy'],
   ['Jesus Regajo', 'Jesus.Regajo@unilever.com', 'WL2', 'CDIO HC', 'Fermin Grandas', 'Consumer'],
@@ -45,7 +45,7 @@ const RAW = [
   ['Kaique Oliveira', 'Kaique.Oliveira@unilever.com', 'WL1', 'Tax Reform', 'Rafael Silotto', 'Tax Reform'],
   ['Lucas Barbosa', 'Lucas.Barbosa2@unilever.com', 'Estag', 'Tax Reform', 'Rafael Silotto', 'Tax Reform'],
   ['Claudia Sawada', '', 'WL2', 'Tech Found', 'Claudia Meira', 'Architecture'],
-  ['Renato Malvino', '', 'WL2', 'Tech Found', 'Claudia Meira', 'Architecture'], // mesmos dados da Claudia Sawada (Tech Foundation)
+  ['Renato Malvino', '', 'WL2', 'Tech Found', 'Claudia Meira', 'Tech Foundation'],
   ['Liza Bornia', 'Liza.Bornia@unilever.com', 'WL2', 'Tech Found', 'Mayara Tavares', 'Cybersecurity'],
   ['Mayara Tavares', 'Mayara.Tavares@unilever.com', 'WL2', 'Tech Found', 'Claudia Meira', 'Cybersecurity'],
   ['Giovana Romão', 'Giovana.Romao@unilever.com', 'Estag', 'Tech Found', 'Mayara Tavares', 'Cybersecurity'],

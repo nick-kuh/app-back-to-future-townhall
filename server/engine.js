@@ -144,6 +144,13 @@ class Engine {
       }
       kvSet('peopleV2', true);
     }
+    // Acerto dos dois que entraram (vale uma vez, e só se a linha ainda estiver como entrou): a Evelyn é do time
+    // Consumer do BPC, com o Felipe Resck; a área do Renato é Tech Foundation, com a Claudia Meira.
+    if (!kvGet('peopleV3', false)) {
+      db.prepare("UPDATE people SET team = 'CDIO BPC', manager = 'Felipe Resck' WHERE name = 'Evelyn Aguiar' AND team = '' AND manager = ''").run();
+      db.prepare("UPDATE people SET area = 'Tech Foundation' WHERE name = 'Renato Malvino' AND area = 'Architecture' AND team = 'Tech Found'").run();
+      kvSet('peopleV3', true);
+    }
     // fotos de perfil: guardadas no banco; a pasta de fotos da instalação (se houver) entra quando o banco começa vazio
     this.fotos = createFotos();
     { // fotos que acompanham a instalação: a pasta (se houver) e o pacote criptografado (aberto com FOTOS_KEY)
