@@ -62,7 +62,7 @@ function units() {
   assert.equal(kit.segments.length, 2 + auto.blocos.length + 2); assert.ok(kit.total >= 40 && kit.total <= 70, String(kit.total));
   assert.equal(kit.segments[0].line, ''); assert.match(kit.segments[kit.segments.length - 2].line, /^Vejam só a manchete/); assert.ok(!/2027: 2027/.test(kit.text), 'manchete sem o ano repetido');
   for (const sg of kit.segments.slice(1)) assert.ok(sg.line.split(/\s+/).length <= 20, `fala longa demais: ${sg.line}`);
-  for (const k of ['BRIEFING', 'loop_parado.mp4', 'loop_falando.mp4', 'retrato_doc.png', 'ficha_doc.png', 'jornal_2027.png', 'Project Save', '12 GB', 'personagem original', 'SEGMENTO 1 · 0:00–0:06']) assert.ok(kit.text.includes(k), k);
+  for (const k of ['BRIEFING 1', 'BRIEFING 2', 'loop_parado.mp4', 'loop_falando.mp4', 'retrato_doc.png', 'ficha_doc.png', 'jornal_2027.png', 'Project Save', '12 GB', 'personagem original', 'SEGMENTO 1 · 0:00–0:06']) assert.ok(kit.text.includes(k), k);
   assert.ok(!kit.text.includes('Ana'), 'o kit não leva nomes');
   console.log('OK · palavras, roteiro automático, validação, edição, .txt e kit do vídeo');
 }
@@ -185,7 +185,7 @@ async function serverFlow() {
     // kit do vídeo do Doc: só com a senha, com as falas da mensagem atual
     r = await call('GET', '/api/admin/doc-video.txt', undefined, {}); assert.equal(r.status, 401);
     r = await call('GET', '/api/admin/doc-video.txt'); assert.equal(r.status, 200); assert.match(r.headers.get('content-disposition'), /Kit_Video_do_Doc\.txt/);
-    assert.match(r.text, /Construam 2027!/); assert.match(r.text, /BRIEFING PARA O AGENTE DE IA/);
+    assert.match(r.text, /Construam 2027!/); assert.match(r.text, /BRIEFING 2 PARA O AGENTE DE IA/);
 
     // ajustes da voz e do vídeo (endereços inválidos são descartados)
     r = await call('POST', '/api/admin/action', { type: 'settings', settings: { docVoice: false, docRate: 3, docVoiceName: 'Antonio', docVideoUrl: 'javascript:alert(1)' } }); assert.equal(r.status, 200);
