@@ -7,13 +7,14 @@ const { buildQueues, ERAS, eraOfRound } = require('./queues');
 const { computeResults, POINTS } = require('./results');
 
 const TOTAL_ROUNDS = 3;
-const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing', 'stage', 'reflexao'];
+const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing', 'stage', 'reflexao', 'doc'];
 const AUDIO_MODES = ['off', 'music', 'ambient'];
 
 // Roteiro do evento: a ordem dos passos que o Doc percorre no painel ("Próximo ▶").
 //  checkin · stage (bloco de fala: título, tema, quem fala) · connections · sucesso (dinâmica d1..d4)
-//  reflexao (as paradas com votação em projetos) · message (aviso/intervalo) · standby (olhos no telão) · closing
-const STEP_TYPES = ['checkin', 'stage', 'connections', 'sucesso', 'reflexao', 'message', 'standby', 'closing'];
+//  reflexao (as paradas com votação em projetos) · doc (Visão 2027: o Doc chega de 2027 e resume as respostas do Sucesso)
+//  message (aviso/intervalo) · standby (olhos no telão) · closing
+const STEP_TYPES = ['checkin', 'stage', 'connections', 'sucesso', 'doc', 'reflexao', 'message', 'standby', 'closing'];
 const SUCESSO_ACTS = ['d1', 'd2', 'd3', 'd4'];
 const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 function defaultSteps(stages) {
@@ -26,17 +27,18 @@ function defaultSteps(stages) {
     { type: 'stage', ...st(1) },
     { type: 'stage', ...st(2) },
     { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' },
+    { type: 'doc' },                    // Visão 2027: o Doc fecha o Sucesso com o resumo do que todo mundo escreveu
     { type: 'closing' },                // conclusão
   ].map((x, i) => ({ id: 'p' + (i + 1), ...x }));
 }
-// Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões, Reflexão
-// e cada dinâmica do Sucesso só entram uma vez (o estado delas é um só).
+// Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões, Reflexão,
+// Visão 2027 e cada dinâmica do Sucesso só entram uma vez (o estado delas é um só).
 function cleanSteps(list) {
   const out = [], ids = new Set(), once = new Set();
   for (const raw of (Array.isArray(list) ? list : []).slice(0, 40)) {
     if (!raw || !STEP_TYPES.includes(raw.type)) continue;
     if (raw.type === 'sucesso' && !SUCESSO_ACTS.includes(raw.activity)) continue;
-    const unique = raw.type === 'connections' || raw.type === 'reflexao' ? raw.type : raw.type === 'sucesso' ? raw.activity : null;
+    const unique = ['connections', 'reflexao', 'doc'].includes(raw.type) ? raw.type : raw.type === 'sucesso' ? raw.activity : null;
     if (unique) { if (once.has(unique)) continue; once.add(unique); }
     let id = typeof raw.id === 'string' && /^[a-z0-9]{1,16}$/i.test(raw.id) && !ids.has(raw.id) ? raw.id : null;
     while (!id || ids.has(id)) id = 'p' + crypto.randomBytes(4).toString('hex');
@@ -72,6 +74,11 @@ const DEFAULT_SETTINGS = {
   skip: { connections: [], reflexao: [], sucesso: [] },
   musicUrl: '',           // opcional: arquivo de áudio próprio para "Música" (senão, toca a trilha gerada no navegador)
   ambientUrl: '',         // opcional: arquivo de áudio próprio para "Trilha sonora"
+  // Visão 2027 (o Doc no telão): voz do navegador do telão lendo a fala, e um vídeo de abertura opcional
+  docVoice: true,         // o telão fala o texto (voz em português do navegador)
+  docVoiceName: '',       // parte do nome da voz preferida (ex.: "Antonio"); vazio = escolhe a melhor voz masculina em pt-BR
+  docRate: 1,             // velocidade da fala (0,7 a 1,4)
+  docVideoUrl: '',        // opcional: vídeo da chegada do Doc (ex.: feito com IA), tocado antes da fala
   agenda: [
     { time: '', title: 'Boas-vindas e check-in' },
     { time: '', title: 'Conexões · 3 viagens no tempo' },
@@ -81,6 +88,8 @@ const DEFAULT_SETTINGS = {
 const DEFAULT_MESSAGE = { title: 'Intervalo', body: 'Voltamos em 15 minutos.', emoji: '☕' };
 const defaultConn = () => ({ phase: 'idle', round: 0, played: 0, timer: null, generatedAt: null, worstLevel: null, levels: {}, resultsAt: null, repeats: false });
 const DEFAULT_SCREEN = { scene: 'auto' }; // telão: auto (segue o bloco) | clock | logo | quote
+// Visão 2027: a mensagem do Doc (gerada no servidor) e a cena no telão (play: qual parte, pausada ou não)
+const defaultDoc = () => ({ status: 'idle', message: null, error: '', rev: 0, play: null, phones: false });
 
 const now = () => Date.now();
 const iso = () => new Date().toISOString();
@@ -116,7 +125,9 @@ class Engine {
       sucessoRoom: typeof saved.sucessoRoom === 'string' ? saved.sucessoRoom : null,        // sala das dinâmicas do Sucesso (criada sozinha)
       audio: Object.assign({ mode: 'off', volume: 60, out: 'telao', beeps: true }, saved.audio || {}), // som: off | music | ambient · sai do telão ou do painel · bipes do cronômetro
       drawn: saved.drawn && typeof saved.drawn === 'object' ? saved.drawn : {}, // respostas já sorteadas por dinâmica/rodada
+      doc: Object.assign(defaultDoc(), saved.doc || {}),
     };
+    if (this.state.doc.status === 'generating') this.state.doc.status = this.state.doc.message ? 'ready' : 'idle'; // o servidor reiniciou no meio da geração
     delete this.state.conn.talk; // modelo antigo
     this.settings = Object.assign({}, DEFAULT_SETTINGS, kvGet('settings', {}));
     this.settings.skip = this.cleanSkip(this.settings.skip);
@@ -129,6 +140,15 @@ class Engine {
       const list = this.settings.steps;
       if (!list.some(x => x.type === 'reflexao')) { const at = list.findIndex(x => x.type === 'stage'); list.splice(at < 0 ? Math.min(1, list.length) : at + 1, 0, { id: 'p' + crypto.randomBytes(4).toString('hex'), type: 'reflexao' }); }
       this.settings.reflexaoStep = true;
+    }
+    // roteiros salvos antes de existir a Visão 2027 ganham o passo uma vez (depois da última dinâmica do Sucesso)
+    if (!this.settings.docStep) {
+      const list = this.settings.steps;
+      if (!list.some(x => x.type === 'doc')) {
+        const lastSuc = list.map(x => x.type).lastIndexOf('sucesso'), closing = list.findIndex(x => x.type === 'closing');
+        list.splice(lastSuc >= 0 ? lastSuc + 1 : closing >= 0 ? closing : list.length, 0, { id: 'p' + crypto.randomBytes(4).toString('hex'), type: 'doc' });
+      }
+      this.settings.docStep = true;
     }
     if (!this.stepById(this.state.step)) this.state.step = this.settings.steps[0].id;
     this.listeners = [];
@@ -604,7 +624,7 @@ class Engine {
     if (block === 'stage' && this.settings.stageMutes) this.state.audio.mode = 'off';
     // mensagem e "olhos no telão" são telas avulsas (fora do roteiro); as outras levam o cursor junto
     if (block === 'message' || block === 'standby') { this.state.detour = block; this.holdJourney(); }
-    else { this.state.detour = null; this.syncCursor({ welcome: 'checkin', connections: 'connections', closing: 'closing', stage: 'stage', reflexao: 'reflexao' }[block]); if (block === 'connections') this.releaseJourney(); else this.holdJourney(); }
+    else { this.state.detour = null; this.syncCursor({ welcome: 'checkin', connections: 'connections', closing: 'closing', stage: 'stage', reflexao: 'reflexao', doc: 'doc' }[block]); if (block === 'connections') this.releaseJourney(); else this.holdJourney(); }
     const notices = {
       message: { title: this.state.message.title, body: this.state.message.body },
       welcome: wasOff ? { title: 'Circuitos ligados', body: 'Estamos de volta. Olhe para o seu celular.' } : null,
@@ -633,7 +653,10 @@ class Engine {
     if (partial.transitionSeconds !== undefined) s.transitionSeconds = Math.max(3, Math.min(30, Math.round(Number(partial.transitionSeconds) || 15)));
     if (partial.skip !== undefined) s.skip = this.cleanSkip({ ...s.skip, ...(partial.skip && typeof partial.skip === 'object' ? partial.skip : {}) });
     // áudio próprio: só endereços http(s) ou caminhos do próprio site
-    for (const k of ['musicUrl', 'ambientUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
+    for (const k of ['musicUrl', 'ambientUrl', 'docVideoUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
+    if (partial.docVoice !== undefined) s.docVoice = !!partial.docVoice;
+    if (partial.docVoiceName !== undefined) s.docVoiceName = clip(partial.docVoiceName, 80);
+    if (partial.docRate !== undefined) s.docRate = Math.max(.7, Math.min(1.4, Math.round((Number(partial.docRate) || 1) * 100) / 100));
     if (partial.steps !== undefined) {
       const list = cleanSteps(partial.steps);
       if (!list.length) throw new Error('O roteiro precisa de pelo menos um passo.');
@@ -660,6 +683,7 @@ class Engine {
     this.resetConnections();
     db.exec("UPDATE people SET checked_in_at = NULL, token = NULL");
     this.state.presentation = null; this.state.returnStep = null;
+    this.state.doc = defaultDoc();
     this.applyStep(this.settings.steps[0].id); // o roteiro volta para o começo
   }
   // utilidades de teste
@@ -755,6 +779,49 @@ class Engine {
     this.commit(on ? { title: 'Respostas reveladas', body: 'Olhe para o telão.' } : null);
   }
 
+  /* ---------------- Visão 2027 (o Doc) ---------------- */
+  // A mensagem é escrita no servidor (server/doc.js); aqui fica o estado que o painel, o telão e os celulares leem.
+  setDocGenerating() {
+    const d = this.state.doc;
+    if (d.status === 'generating') throw Object.assign(new Error('O Doc já está escrevendo a mensagem. Aguarde.'), { status: 409 });
+    d.status = 'generating'; d.error = ''; this.commit();
+  }
+  setDocMessage(message) {
+    const d = this.state.doc;
+    d.message = message; d.status = message ? 'ready' : 'idle'; d.error = ''; d.rev = (d.rev || 0) + 1;
+    if (!message) { d.play = null; d.phones = false; }
+    this.commit();
+  }
+  setDocError(msg) { const d = this.state.doc; d.status = d.message ? 'ready' : 'idle'; d.error = String(msg || 'Não foi possível gerar a mensagem.'); this.commit(); }
+  // Cena no telão: começar, pausar/retomar, ir para outra parte. Cada comando aumenta o "seq" para o telão
+  // saber que deve pular para a parte pedida (dentro de uma parte, o telão avança sozinho no fim da fala).
+  docPlay(action, { part, total } = {}) {
+    const d = this.state.doc;
+    if (!d.message) throw Object.assign(new Error('Gere a mensagem do Doc antes.'), { status: 409 });
+    if (this.state.block !== 'doc' || this.state.presentation) throw Object.assign(new Error('Coloque a Visão 2027 no ar (no roteiro) antes.'), { status: 409 });
+    const last = Math.max(0, (Number(total) || 1) - 1), p = d.play, seq = ((p && p.seq) || 0) + 1, at = now();
+    if (action === 'start') d.play = { seq, part: 0, paused: false, at };
+    else if (action === 'stop') d.play = null;
+    else if (!p) throw Object.assign(new Error('A cena ainda não começou.'), { status: 409 });
+    else if (action === 'pause') d.play = { ...p, paused: true };
+    else if (action === 'resume') d.play = { ...p, seq, paused: false, at };
+    else if (action === 'next') d.play = { seq, part: Math.min(last, p.part + 1), paused: false, at };
+    else if (action === 'prev') d.play = { seq, part: Math.max(0, p.part - 1), paused: false, at };
+    else if (action === 'goto') d.play = { seq, part: Math.max(0, Math.min(last, Math.round(Number(part) || 0))), paused: false, at };
+    else throw Object.assign(new Error('Comando inválido.'), { status: 400 });
+    this.commit(action === 'start' ? { title: 'Visão 2027', body: 'O Doc chegou de 2027. Olhe para o telão!' } : null);
+  }
+  setDocPhones(on) {
+    const d = this.state.doc;
+    if (on && !d.message) throw Object.assign(new Error('Gere a mensagem do Doc antes.'), { status: 409 });
+    d.phones = !!on; this.commit(on ? { title: 'Mensagem do Doc', body: 'A visão de 2027 chegou no seu celular.' } : null);
+  }
+  // O que vai para todos (telão e celulares): a mensagem só depois que a cena começa ou é enviada aos celulares
+  docPublic() {
+    const d = this.state.doc, open = !!(d.play || d.phones);
+    return { status: d.status, rev: d.rev || 0, play: d.play, phones: !!d.phones, ready: !!d.message, message: open ? d.message : null };
+  }
+
   /* ---------------- roteiro do evento ---------------- */
   stepById(id) { return (this.settings.steps || []).find(x => x.id === id) || null; }
   currentStep() { return this.stepById(this.state.step) || this.settings.steps[0]; }
@@ -781,6 +848,7 @@ class Engine {
       case 'standby': this.state.block = 'standby'; break;
       case 'closing': this.state.block = 'closing'; notice = { title: 'Fim da viagem', body: this.settings.closingText }; break;
       case 'reflexao': this.state.block = 'reflexao'; notice = { title: 'Reflexão', body: 'Olhe para o seu celular.' }; break;
+      case 'doc': this.state.block = 'doc'; notice = { title: 'Visão 2027', body: 'Olhe para o telão: o Doc está chegando de 2027.' }; break;
       default: break; // sucesso: a apresentação entra em seguida
     }
     if (step.type === 'connections') this.releaseJourney(); else this.holdJourney();
@@ -826,10 +894,12 @@ class Engine {
       },
       screen: this.state.screen,
       presentation: this.presentation(),
+      doc: this.docPublic(),
       stage: this.stageInfo(),
       step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length },
       audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', beeps: this.state.audio.beeps !== false, musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
-      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 15 },
+      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 15,
+        docVoice: this.settings.docVoice !== false, docVoiceName: this.settings.docVoiceName || '', docRate: this.settings.docRate || 1, docVideoUrl: this.settings.docVideoUrl || '' },
       now: now(),
     };
   }

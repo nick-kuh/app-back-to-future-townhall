@@ -48,6 +48,37 @@ O código do Lucas está em [`sucesso/`](sucesso/) (API, banco, páginas e teste
 alterações); a ponte com este servidor está em `server/sucesso.js`. As respostas ficam em
 `data/sucesso.db` (SQLite).
 
+## 🧪 Visão 2027 · o Doc (encerramento do Sucesso)
+
+Depois da dinâmica 04, o passo **Visão 2027 · o Doc** fecha o Sucesso: o Doc (um cientista desenhado só
+para este app) chega de 2027, lê tudo o que foi escrito nas quatro dinâmicas e conta o que "viu" no futuro.
+
+1. **Gerar a mensagem** (no Painel do Doc, no passo Visão 2027; dá para gerar antes de colocar no ar).
+   - Com a variável **`ANTHROPIC_API_KEY`** no Render, quem escreve o texto é a IA (Claude). Ela recebe
+     **só os textos das respostas, sem os nomes**, e devolve: título, abertura, uma fala por dinâmica,
+     3 ou 4 manchetes do jornal de 2027 e o encerramento.
+   - Sem a chave (ou se a IA falhar), o app monta o texto com as **palavras mais citadas** em cada dinâmica.
+   - **✎ Editar o texto**: você revisa e ajusta tudo antes de ir para o telão.
+2. **🎬 Começar a cena no telão**, em partes:
+   - **Chegada**: os circuitos de tempo marcam 2027, o carro carrega até 1,21 GW, três raios, e o Doc aparece.
+   - **Abertura**, depois **uma parte por dinâmica** (com as palavras mais citadas em destaque), o
+     **jornal de 2027** (Gazeta do Futuro, girando como nos filmes) e o **encerramento** com o "2027" em letras do logo.
+   - O telão **lê o texto em voz alta** (voz em português do navegador do telão, de preferência masculina;
+     no Windows, o Microsoft Edge tem as vozes mais naturais, como a "Antonio"). As palavras acendem
+     enquanto ele fala, a boca e os braços do Doc mexem, e a música abaixa durante a fala.
+   - No painel: pausar/retomar, próxima parte, parte anterior, recomeçar, ou clicar numa parte para ir direto.
+3. **📱 Enviar a mensagem para os celulares**: cada pessoa recebe a mensagem completa para ler e guardar.
+   Enquanto a cena roda, os celulares mostram "olhe para o telão".
+4. **⬇ Baixar o .txt**: a mensagem do Doc, as palavras mais citadas e todas as respostas das quatro dinâmicas (com os nomes).
+
+Em "Mais opções" do passo: ligar/desligar a voz, escolher a voz pelo nome, a velocidade da fala,
+**🔈 Testar a voz no telão** e o **vídeo da chegada do Doc** (opcional): um .mp4 (por exemplo, feito com
+ferramentas de vídeo com IA) que o telão toca antes da fala. O navegador só libera som e voz depois de um
+clique na tela do telão.
+
+O código está em `server/doc.js` (palavras, IA, roteiro automático e .txt), `public/doc-cena.js` e
+`public/doc-cena.css` (a cena e o personagem no telão).
+
 ## 💭 Reflexão · Ato 1: O Combustível do Futuro
 
 O bloco **Reflexão** veio do protótipo `Prototipo_Ato1_SORTEIO_2_PROJETOS_RESPONSAVEIS.html` e virou

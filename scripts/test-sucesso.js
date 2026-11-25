@@ -125,7 +125,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     const step = id => call('POST', '/api/admin/step', { id });
     const state = async () => (await call('GET', '/api/state')).json;
     let ov = (await call('GET', '/api/admin/overview')).json; const steps = ov.settings.steps;
-    assert.deepEqual(steps.map(x => x.type), ['checkin', 'connections', 'stage', 'reflexao', 'stage', 'stage', 'sucesso', 'sucesso', 'sucesso', 'sucesso', 'closing']);
+    assert.deepEqual(steps.map(x => x.type), ['checkin', 'connections', 'stage', 'reflexao', 'stage', 'stage', 'sucesso', 'sucesso', 'sucesso', 'sucesso', 'doc', 'closing']);
     const stage1 = steps.find(x => x.type === 'stage');
     const of = (type, activity) => steps.find(x => x.type === type && (!activity || x.activity === activity)).id;
     assert.equal(ov.state.step, of('connections'));                 // as viagens levaram o cursor para o passo Conexões

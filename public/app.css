@@ -347,3 +347,15 @@ textarea.input{resize:none;line-height:1.4;font-size:16px;font-weight:500;min-he
 .presentation-card.compact .small{margin-top:8px!important}
 .rfx-chips:first-child{margin-top:8px}
 .warp-msg{white-space:pre-line}
+
+/* Visão 2027: a mensagem do Doc no celular */
+.docm p{font-size:16px;line-height:1.55;overflow-wrap:anywhere}
+.docm .kicker{color:var(--c,var(--cyan));margin-bottom:6px}
+.docw{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.docw span{font-size:12px;font-weight:800;color:#0b0618;background:var(--c,var(--cyan));border-radius:999px;padding:2px 10px}
+.docpaper{display:grid;gap:8px;background:#f1e8cf;color:#141414;font-family:Georgia,serif;border-radius:10px}
+.docpaper b{font-size:11px;letter-spacing:1.5px;border-bottom:3px double #141414;padding-bottom:6px}
+.docpaper span{font-weight:800;font-size:16px;line-height:1.25}
+.docpaper span::before{content:"■ ";color:#8d1313}
+.docm.end{text-align:center}
+.docyear{margin-top:10px;font:900 italic 54px var(--display);background:linear-gradient(180deg,#ff2a12,#ffab12 62%,#ffe65c);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 14px rgba(255,120,20,.45))}

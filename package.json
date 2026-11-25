@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning server/index.js",
     "dev": "node --no-warnings=ExperimentalWarning --watch server/index.js",
-    "test": "node --no-warnings=ExperimentalWarning scripts/test-matching.js && node --no-warnings=ExperimentalWarning scripts/test-flow.js && node --no-warnings=ExperimentalWarning scripts/test-sucesso.js && node --no-warnings=ExperimentalWarning --test sucesso/tests/*.test.mjs"
+    "test": "node --no-warnings=ExperimentalWarning scripts/test-matching.js && node --no-warnings=ExperimentalWarning scripts/test-flow.js && node --no-warnings=ExperimentalWarning scripts/test-sucesso.js && node --no-warnings=ExperimentalWarning scripts/test-doc.js && node --no-warnings=ExperimentalWarning --test sucesso/tests/*.test.mjs"
   },
   "repository": {
     "type": "git",
@@ -18,6 +18,7 @@
   },
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0",
     "compression": "^1.8.2",
     "dseg": "^0.46.0",
     "express": "^4.22.3",

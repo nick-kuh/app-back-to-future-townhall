@@ -9,6 +9,7 @@ const { Engine, TOTAL_ROUNDS } = require('./engine');
 const { DB_PATH, DATA_DIR } = require('./db');
 const { createSucesso } = require('./sucesso');
 const { createReflexao } = require('./reflexao');
+const doc = require('./doc');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'doc1985';
@@ -276,6 +277,38 @@ app.get('/api/admin/export', wrap(() => {
   return { now: Date.now(), event: engine.settings.eventName, counts: c,
     conexoes: engine.exportConnections(), reflexao: reflexao.exportData(), sucesso: sucesso.ready() ? sucesso.exportData(engine.state.sucessoRoom) : { roomId: null, acts: [] } };
 }));
+// Visão 2027: o Doc escreve a mensagem (IA ou roteiro automático), o Doc do painel revisa e conduz a cena no telão.
+const sucessoExport = () => (sucesso.ready() ? sucesso.exportData(engine.state.sucessoRoom) : { roomId: null, acts: [] });
+app.post('/api/admin/doc', wrapAsync(async req => {
+  const a = req.body || {};
+  switch (a.action) {
+    case 'generate': {
+      if (!sucesso.ready()) throw Object.assign(new Error('As dinâmicas do Sucesso ainda estão carregando. Tente de novo em instantes.'), { status: 503 });
+      engine.setDocGenerating();
+      try {
+        const message = await doc.generate(sucessoExport(), { useAI: a.ai !== false });
+        engine.setDocMessage(message);
+        return { ok: true, fonte: message.fonte, aviso: message.aviso || '' };
+      } catch (e) { engine.setDocError(e.message); throw e; }
+    }
+    case 'edit': {
+      const cur = engine.state.doc.message;
+      if (!cur) throw Object.assign(new Error('Gere a mensagem do Doc antes.'), { status: 409 });
+      engine.setDocMessage(doc.edit(cur, a.message || {}, sucessoExport()));
+      return { ok: true };
+    }
+    case 'clear': engine.setDocMessage(null); return { ok: true };
+    case 'testVoice': io.emit('doc:test'); return { ok: true }; // o telão fala uma frase de teste (ensaio)
+    case 'phones': engine.setDocPhones(!!a.on); return { ok: true };
+    case 'start': case 'stop': case 'pause': case 'resume': case 'next': case 'prev': case 'goto':
+      engine.docPlay(a.action, { part: a.part, total: doc.parts(engine.state.doc.message).length });
+      return { ok: true };
+    default: throw Object.assign(new Error('Comando inválido.'), { status: 400 });
+  }
+}));
+// O arquivo .txt do encerramento: a mensagem do Doc, as palavras mais citadas e todas as respostas das 4 dinâmicas.
+app.get('/api/admin/doc.txt', (req, res) => res.type('text/plain; charset=utf-8').set('Content-Disposition', 'attachment; filename="Visao_2027_Doc.txt"')
+  .send(doc.toTxt(engine.state.doc.message, sucessoExport(), engine.settings.eventName)));
 app.get('/api/admin/reflexao/votes', wrap(() => ({ votes: reflexao.votes() })));
 app.get('/api/admin/reflexao/votes.csv', (req, res) => res.type('text/csv; charset=utf-8').set('Content-Disposition', 'attachment; filename="Votos_Reflexao.csv"').send(reflexao.votesCsv()));
 
@@ -340,9 +373,11 @@ sucesso.onChange(sucessoChanged);
 function telaoStatus() {
   const list = [];
   for (const [, s] of io.of('/').sockets) if (s.data.telao) list.push(s.data.telao);
-  return { count: list.length, sound: list.some(t => !t.locked), auth: list.some(t => t.auth) };
+  const doc = list.map(t => t.doc).filter(Boolean).sort((a, b) => b.at - a.at)[0] || null; // onde a cena do Doc está no telão
+  return { count: list.length, sound: list.some(t => !t.locked), auth: list.some(t => t.auth), doc };
 }
-const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null, reflexao: reflexao.adminState() });
+const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null, reflexao: reflexao.adminState(),
+  doc: { ai: doc.hasAI(), model: doc.MODEL, parts: doc.parts(engine.state.doc.message) } });
 
 // Liga o socket à pessoa dona do token (do evento ou guardado no socket) e revalida sempre:
 // se o token foi trocado (outro aparelho assumiu o nome) ou o check-in foi desfeito, desliga.
@@ -393,7 +428,10 @@ io.on('connection', socket => {
       safeAck(ack, ok ? { ok: true, overview: adminOverview() } : { ok: false, error: 'Senha inválida.' });
     } catch (e) { console.error('[admin:hello]', e); safeAck(ack, { ok: false, error: 'Erro no servidor.' }); }
   });
-  socket.on('telao:status', payload => { socket.data.telao = { locked: !!(payload && payload.locked), auth: !!(payload && payload.auth) }; pushAdmin(); });
+  socket.on('telao:status', payload => {
+    const d = payload && payload.doc && typeof payload.doc === 'object' ? { seq: Number(payload.doc.seq) || 0, part: Number(payload.doc.part) || 0, speaking: !!payload.doc.speaking, done: !!payload.doc.done, voice: String(payload.doc.voice || '').slice(0, 80), at: Date.now() } : null;
+    socket.data.telao = { locked: !!(payload && payload.locked), auth: !!(payload && payload.auth), doc: d }; pushAdmin();
+  });
   socket.on('disconnect', () => { if (socket.data.telao) pushAdmin(); });
   socket.on('time', (payload, ack) => safeAck(ack, { now: Date.now() }));
   socket.on('error', err => console.error('[socket error]', err && err.message));

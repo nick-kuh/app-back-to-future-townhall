@@ -60,10 +60,11 @@
     S.socket.on('connect', () => S.socket.emit('hello', {}, res => { if (res && res.state) { S.state = res.state; S.offset = res.now - Date.now(); render(); } }));
     S.socket.on('state', st => { S.state = st; S.offset = st.now - Date.now(); render(); });
     S.socket.on('sucesso:pulse', () => pollScreen());
+    S.socket.on('doc:test', () => { if (window.DocCena) { DocCena.testVoice(S.state); setTimeout(report, 300); } }); // Painel do Doc: "Testar a voz no telão"
     S.socket.on('connect', () => { pollScreen(); checkAuth(); });
   }
   // Avisa o Painel do Doc como este telão está: logado (pode mostrar respostas) e com o som liberado.
-  function report() { if (S.socket && S.socket.connected) S.socket.emit('telao:status', { locked: !!(window.Trilha && Trilha.locked), auth: S.auth }); }
+  function report() { if (S.socket && S.socket.connected) S.socket.emit('telao:status', { locked: !!(window.Trilha && Trilha.locked), auth: S.auth, doc: window.DocCena ? DocCena.progress() : null }); }
   async function checkAuth() {
     try { const d = await (await fetch('/api/sucesso/screen', { cache: 'no-store', credentials: 'same-origin' })).json(); S.auth = !!d.authenticated; } catch { /* segue */ }
     report();
@@ -368,12 +369,14 @@
     message: { kind: 'circuits', ms: 2400, quote: ['Great Scott!', 'Doc Brown'] },
     standby: { kind: 'circuits', ms: 2400, quote: ['Isso é pesado, Doc.', 'Marty McFly · 1985'] },
     closing: { kind: 'end', ms: 4400, quote: ['O futuro ainda não está escrito. Ele é o que você fizer dele.', 'Doc Brown · 1990'] },
+    doc: { kind: 'fuel', ms: 3800, quote: ['Você não está pensando em quatro dimensões!', 'Doc Brown · 1990'] },
   };
   // o bloco que está no ar: identidade (para saber quando mudou) e nome (para os circuitos de tempo)
   function blockInfo(st) {
     const pr = st.presentation, i = st.step ? st.step.index : 0;
     if (pr) { const d = DYN[pr.activityId] || DYN.d1; return { id: 'sucesso:' + pr.activityId, type: 'sucesso', name: `SUCESSO ${d.n} · ${pr.title}` }; }
     if (st.reflexao || st.block === 'reflexao') return { id: 'reflexao', type: 'reflexao', name: 'REFLEXÃO' };
+    if (st.block === 'doc') return { id: 'doc', type: 'doc', name: 'VISÃO 2027' };
     switch (st.block) {
       case 'stage': return { id: 'stage:' + i, type: 'stage', name: (st.stage && st.stage.title) || 'BLOCO' };
       case 'connections': return { id: 'connections', type: 'connections', name: 'CONEXÕES' };
@@ -456,6 +459,7 @@
     if (st.presentation) return ['projection', projectionScene(st.presentation)];
     if (sc === 'logo') return ['logo', `${logo()}${flux()}`];
     if (st.reflexao) return ['reflexao', reflexaoScene(st.reflexao)];
+    if (st.block === 'doc' && window.DocCena) return ['doc', DocCena.html(st)]; // Visão 2027: o Doc chega de 2027
 
     const b = st.block;
     if (b === 'welcome') return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox()}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div></div></div>`];
@@ -500,13 +504,16 @@
     S.blk = info;
     const [key, html] = sceneFor();
     const pr = S.state.presentation, rf = key === 'reflexao' ? S.state.reflexao : null;
-    const k = `${key}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
+    const dk = key === 'doc' && S.state.doc ? `${S.state.doc.rev}:${S.state.doc.message ? 1 : 0}` : ''; // nova mensagem (ou a cena começou): monta de novo
+    const k = `${key}|${dk}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
     if (k !== S.key) {
+      if (window.DocCena) DocCena.unmount();
       S.key = k; $('#scene').innerHTML = html;
       $('#scene').classList.toggle('projection-scene', key === 'projection' || key === 'reflexao');
       $('#scene').dataset.key = key;
       mountCar(key);
       mountReflexao();
+      if (key === 'doc') DocCena.mount($('#scene'), S.state);
       if (key === 'roundEnd' || key === 'results') flash();
       if (key === 'projection') pollScreen(); else { clearTimeout(S.pollT); S.responses = null; }
       // telas calmas (bloco de fala): fundo parado e escurecido, sem raios
@@ -515,6 +522,7 @@
       const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), S.checked !== null && S.state.counts.checkedIn > S.checked); }
       if (key === 'projection') patchProjection();
       if (key === 'reflexao') patchReflexao();
+      if (key === 'doc') DocCena.update(S.state);
       const rd = $('#rankDone'); if (rd) { rd.textContent = S.state.conn.rankingDone; const b = $('#rankBar'); if (b) b.style.width = Math.round(100 * S.state.conn.rankingDone / Math.max(1, S.state.conn.rankingTotal)) + '%'; }
     }
     S.checked = S.state.counts.checkedIn;
@@ -554,9 +562,11 @@
   // som do telão (música, trilha de fundo ou silêncio, escolhido no Painel do Doc)
   function applyAudio() {
     if (!window.Trilha || !S.state || !S.state.audio) return;
-    const a = S.state.audio;
-    Trilha.apply({ mode: a.out === 'painel' ? 'off' : a.mode, beeps: a.out !== 'painel' && a.beeps !== false, volume: a.volume, musicUrl: a.musicUrl, ambientUrl: a.ambientUrl });
+    const a = S.state.audio, duck = window.DocCena && DocCena.speaking ? .22 : 1; // a música abaixa enquanto o Doc fala
+    Trilha.apply({ mode: a.out === 'painel' ? 'off' : a.mode, beeps: a.out !== 'painel' && a.beeps !== false, volume: a.volume * duck, musicUrl: a.musicUrl, ambientUrl: a.ambientUrl });
   }
+  // a cena do Doc avisa quando começa/para de falar e em que parte está: abaixa a música e conta para o Painel do Doc
+  if (window.DocCena) { let rt = null; DocCena.onChange(() => { applyAudio(); clearTimeout(rt); rt = setTimeout(report, 150); }); }
   if (window.Trilha) {
     const chip = $('#soundChip');
     Trilha.onChange(locked => { chip.hidden = !locked; report(); });

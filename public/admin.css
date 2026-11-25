@@ -328,3 +328,22 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .sklist .sk small{display:block;color:var(--muted);font-size:11px}
 .rrow .rf .btn{margin-left:auto;align-self:center;white-space:nowrap}
 @media (max-width:640px){.sklist{grid-template-columns:1fr}}
+
+/* Visão 2027 · o Doc */
+.doc-counts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.doc-count{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);border:1px solid var(--line2);border-left:3px solid var(--c);border-radius:8px;padding:5px 10px}
+.doc-count b{font:700 16px 'Share Tech Mono',monospace;color:var(--c)}
+.doc-parts{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 6px}
+.doc-parts .btn.past{opacity:.6}
+.doc-msg{margin-top:12px;background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:14px 16px;display:grid;gap:10px;font-size:13px;line-height:1.55}
+.doc-msg h3{font-size:15px;color:var(--yellow)}
+.doc-msg p b{color:var(--txt)}
+.doc-src{font-size:11px;color:var(--muted)}
+.doc-act{color:var(--c)!important;font:700 11px Orbitron;letter-spacing:1px;margin-right:4px}
+.doc-words{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.doc-words i{font-style:normal;font-size:11px;font-weight:700;color:#07060f;background:var(--c);border-radius:999px;padding:1px 8px}
+.doc-paper{display:grid;gap:4px;background:#f1e8cf;color:#141414;border-radius:6px;padding:10px 12px;font-family:Georgia,serif}
+.doc-paper b{font-size:12px;letter-spacing:2px}
+.doc-paper span{font-weight:800;font-size:13px}
+.doc-paper span::before{content:"■ ";color:#8d1313}
+.doc-cfg{margin-top:12px;display:grid;gap:10px;max-width:640px}

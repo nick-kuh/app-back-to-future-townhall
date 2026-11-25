@@ -13,16 +13,16 @@
   const PHASE_LABEL = { idle: 'sem duplas', ready: 'duplas prontas', matching: 'duplas se encontrando', talk: 'conversa em andamento', roundEnd: '88 MPH (intervalo)', ranking: 'avaliação aberta', results: 'resultados publicados' };
   const TIMER_LABEL = { matching: 'encontro', talk: 'conversa', break: 'intervalo', ranking: 'avaliação' };
   // roteiro do evento
-  const STEP_ICON = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', reflexao: '💭', message: '📣', standby: '📺', closing: '🏁' };
-  const STEP_KIND = { checkin: 'Check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', reflexao: 'Dinâmica · Reflexão', message: 'Aviso', standby: 'Olhos no telão', closing: 'Conclusão' };
-  const STEP_HINT = { checkin: 'as pessoas entram pelo nome', connections: '3 viagens em duplas e avaliação', sucesso: 'pergunta ao vivo, nuvem de palavras', reflexao: 'paradas com votação em projetos e os 2 mais votados', standby: 'celulares em pausa, atenção no telão', closing: 'agradecimento e créditos' };
+  const STEP_ICON = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', doc: '🧪', reflexao: '💭', message: '📣', standby: '📺', closing: '🏁' };
+  const STEP_KIND = { checkin: 'Check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', doc: 'Encerramento do Sucesso', reflexao: 'Dinâmica · Reflexão', message: 'Aviso', standby: 'Olhos no telão', closing: 'Conclusão' };
+  const STEP_HINT = { checkin: 'as pessoas entram pelo nome', connections: '3 viagens em duplas e avaliação', sucesso: 'pergunta ao vivo, nuvem de palavras', doc: 'o Doc chega de 2027 e resume tudo o que foi escrito', reflexao: 'paradas com votação em projetos e os 2 mais votados', standby: 'celulares em pausa, atenção no telão', closing: 'agradecimento e créditos' };
   const SUC_NAME = { d1: 'Antes de Partir', d2: 'Look Back', d3: 'Uso de IA', d4: 'Look Ahead' };
   const SUC_COLOR = { d1: 'var(--cyan)', d2: 'var(--yellow)', d3: 'var(--magenta)', d4: 'var(--orange)' };
   const SUC_PHASE = { idle: 'aguardando você iniciar', run: 'recebendo respostas', paused: 'recebimento pausado', done: 'recebimento encerrado' };
   const TALK = { d2: 120, d3: 180 }; // dinâmicas com sorteio e tempo de fala (como no painel do Lucas)
-  const stepTitle = x => (x.type === 'checkin' ? 'Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : x.type === 'reflexao' ? 'Reflexão' : 'Conclusão');
+  const stepTitle = x => (x.type === 'checkin' ? 'Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : x.type === 'reflexao' ? 'Reflexão' : x.type === 'doc' ? 'Visão 2027 · o Doc' : 'Conclusão');
   const DEFAULT_STEPS = () => [{ type: 'checkin' }, { type: 'connections' }, { type: 'stage', title: 'Bloco 1', theme: '', speaker: '' }, { type: 'reflexao' }, { type: 'stage', title: 'Bloco 2', theme: '', speaker: '' }, { type: 'stage', title: 'Bloco 3', theme: '', speaker: '' },
-    { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' }, { type: 'closing' }];
+    { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' }, { type: 'doc' }, { type: 'closing' }];
   const AUDIO_LABEL = { music: '🎵 Música', ambient: '🎼 Trilha', off: '🔇 Sem áudio' };
 
   const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'live', prep: 'roteiro', sel: null, open: new Set(), edit: null, stepsDraft: null, round: 1, offset: 0, socket: null, peopleQ: '', connected: false, lastHtml: '', pressing: false };
@@ -158,6 +158,7 @@
       return ph ? `${a.responseCount} respostas · ${ph === 'done' ? 'encerrado' : open ? 'recebendo' : ph === 'run' ? 'sem cronômetro' : ph === 'paused' ? 'pausado' : 'não iniciado'}` : '';
     }
     if (x.type === 'message') return x.body || '';
+    if (x.type === 'doc') { const d = O.state.doc || {}, n = docTotal(); return d.status === 'generating' ? 'o Doc está escrevendo…' : d.play ? (d.play.paused ? 'cena pausada' : 'cena no telão') : d.message ? `mensagem pronta${d.phones ? ' · nos celulares' : ''}` : `${n} ${n === 1 ? 'resposta' : 'respostas'} para o Doc ler`; }
     if (x.type === 'reflexao' && O.reflexao) { const R = O.reflexao, done = R.paradas.filter(p => p.top.length).length, votes = R.paradas.reduce((a, p) => a + p.votes, 0); return votes || done ? `${done} de ${R.paradas.length} paradas reveladas · ${votes} votos` : `${R.paradas.length} paradas · votação em projetos`; }
     return STEP_HINT[x.type] || '';
   }
@@ -193,13 +194,14 @@
   function panelPreview(x, n, total, live, detour) {
     const ed = editing(x), O = A.O;
     const what = { checkin: 'Celulares: cada pessoa digita o nome e embarca · Telão: QR do app', stage: 'Celulares: nome e tema do bloco · Telão calmo, com o título do bloco', connections: 'Celulares: dupla, perguntas e avaliação · Telão: cronômetros',
-      reflexao: 'Celulares: escolher 1 projeto por parada · Telão: Flux Capacitor e os 2 mais votados', sucesso: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar', message: 'Celulares e telão: este aviso', standby: 'Celulares em pausa · Telão: logo', closing: 'Celulares: agradecimento e a conexão de cada um · Telão: créditos' }[x.type];
+      reflexao: 'Celulares: escolher 1 projeto por parada · Telão: Flux Capacitor e os 2 mais votados', doc: 'Celulares: "olhe para o telão" e, depois, a mensagem · Telão: o Doc chega de 2027 e lê o resumo das 4 dinâmicas', sucesso: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar', message: 'Celulares e telão: este aviso', standby: 'Celulares em pausa · Telão: logo', closing: 'Celulares: agradecimento e a conexão de cada um · Telão: créditos' }[x.type];
     let body = `<p class="lead">${esc(what)}</p>`;
     if (x.type === 'stage') body += ed ? `<div class="form editstep">${editField('Nome do bloco', 'title', ed.title)}${editField('Tema (aparece no celular e no telão)', 'theme', ed.theme)}${editField('Quem fala (opcional)', 'speaker', ed.speaker)}${editActions}</div>`
       : `<div class="theme">${esc(x.theme || 'Sem tema definido')}</div>${x.speaker ? `<div class="speaker">com ${esc(x.speaker)}</div>` : ''}<div class="actions">${btn('✎ Editar tema', 'editStep', { cls: 'ghost sm', data: { id: x.id } })}</div>`;
     if (x.type === 'message') body += ed ? `<div class="form editstep">${editField('Emoji', 'emoji', ed.emoji)}${editField('Título', 'title', ed.title)}${editField('Texto (links viram clicáveis)', 'body', ed.body, 'textarea')}${editActions}</div>`
       : `<div class="theme">${esc(x.body || 'Sem texto.')}</div><div class="actions">${btn('✎ Editar aviso', 'editStep', { cls: 'ghost sm', data: { id: x.id } })}</div>`;
     if (x.type === 'sucesso') body += `<p class="question">${esc(sucAct(x.activity).question || '')}</p>`;
+    if (x.type === 'doc') body += `<p class="small">${docTotal()} respostas nas 4 dinâmicas · ${O.state.doc && O.state.doc.message ? 'mensagem pronta' : 'a mensagem pode ser gerada agora, antes de colocar no ar'}</p>${O.state.doc && O.state.doc.message ? '' : `<div class="actions">${btn('✨ Gerar a mensagem agora', 'docGen', { cls: 'ghost sm', disabled: O.state.doc && O.state.doc.status === 'generating' })}</div>`}`;
     if (x.type === 'reflexao' && O.reflexao) body += `<p class="small">${O.reflexao.config.themes.length} paradas · ${O.reflexao.config.projects.length} projetos na lista · <a href="#" data-go="reflexao">editar</a></p>`;
     if (SKIP_OF[x.type]) body += skipLine(SKIP_OF[x.type]);
     return `<section class="stepbox preview t-${x.type}" ${x.type === 'sucesso' ? `style="--c:${SUC_COLOR[x.activity]}"` : ''}>
@@ -212,7 +214,7 @@
   }
   // Painel do passo atual: um botão principal por vez; quando o passo não pede mais nada, o principal é "Próximo".
   function panelStep(step, i, total, next, prev) {
-    const p = ({ checkin: pCheckin, stage: pStage, connections: pConnections, sucesso: pSucesso, reflexao: pReflexao, message: pMessage, standby: pStandby, closing: pClosing })[step.type](step);
+    const p = ({ checkin: pCheckin, stage: pStage, connections: pConnections, sucesso: pSucesso, doc: pDoc, reflexao: pReflexao, message: pMessage, standby: pStandby, closing: pClosing })[step.type](step);
     // "Próximo" vira o botão principal quando o passo não pede mais nada; com algo em andamento ele fica discreto
     const nextBig = !p.primary && !p.busy;
     const nextBtn = next ? btn(`Mostrar o próximo: ${esc(stepTitle(next))} ▶`, 'goStep', { cls: nextBig ? 'big next' : 'ghost next', data: { id: next.id, guard: p.busy || '' } }) : '';
@@ -343,6 +345,76 @@
     return { title: `Dinâmica ${k.slice(1)} · ${a.title || SUC_NAME[k]}`, body, primary, secondary, more, warn, busy, onair: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar' };
   }
   // Reflexão: uma parada por vez. Abrir parada → iniciar votação → encerrar → revelar os 2 mais votados → próxima parada.
+  /* ---------- Visão 2027 · o Doc ---------- */
+  const docTotal = () => ['d1', 'd2', 'd3', 'd4'].reduce((n, k) => n + (sucAct(k).responseCount || 0), 0);
+  const DOC_SRC = { ia: '🤖 escrita pela IA (Claude)', auto: '⚙ montada com as palavras mais citadas', editado: '✎ editada por você', 'editado-ia': '🤖 escrita pela IA e ✎ editada por você' };
+  function docPreview(m) {
+    return `<div class="doc-msg">
+      <div class="doc-src">${esc(DOC_SRC[m.fonte] || '')}${m.aviso ? ` · <span class="warn">${esc(m.aviso)}</span>` : ''}</div>
+      <h3>${esc(m.titulo)}</h3>
+      <p><b>Abertura.</b> ${esc(m.abertura)}</p>
+      ${m.blocos.map(b => `<p style="--c:${SUC_COLOR[b.id]}"><b class="doc-act">${b.id.slice(1).padStart(2, '0')} · ${esc(b.titulo)}</b> ${esc(b.fala)}${b.palavras && b.palavras.length ? `<span class="doc-words">${b.palavras.map(w => `<i>${esc(w)}</i>`).join('')}</span>` : ''}</p>`).join('')}
+      <div class="doc-paper"><b>GAZETA DO FUTURO · 2027</b>${m.manchetes.map(h => `<span>${esc(h)}</span>`).join('')}</div>
+      <p><b>Encerramento.</b> ${esc(m.encerramento)}</p>
+    </div>`;
+  }
+  function pDoc() {
+    const O = A.O, d = O.state.doc || {}, m = d.message, info = O.doc || { ai: false, parts: [] }, tl = O.telao || { count: 0 }, tp = tl.doc;
+    const n = docTotal(), play = d.play, here = tp && play && tp.seq === play.seq ? tp : null, cur = play ? (here ? here.part : play.part) : -1, done = !!(here && here.done);
+    const counts = ['d1', 'd2', 'd3', 'd4'].map(k => `<span class="doc-count" style="--c:${SUC_COLOR[k]}"><b>${String(sucAct(k).responseCount || 0).padStart(2, '0')}</b> ${SUC_NAME[k]}</span>`).join('');
+    let body = `<p class="lead">O Doc chega de 2027, lê tudo o que foi escrito nas quatro dinâmicas e conta o que "viu" no futuro: uma fala por dinâmica, o jornal de 2027 e o encerramento.</p>
+      <div class="doc-counts">${counts}</div>
+      <p class="small">${info.ai ? '🤖 A IA (Claude) escreve o texto a partir das respostas, sem os nomes de quem respondeu. Você revisa antes de ir para o telão.' : '⚙ Sem IA configurada: o texto é montado com as palavras mais citadas. Para a IA escrever, defina <span class="mono">ANTHROPIC_API_KEY</span> no Render.'}</p>`;
+    if (d.status === 'generating') body += '<div class="phase">🧪 O Doc está lendo as respostas e escrevendo a mensagem… (até 1 minuto)</div>';
+    if (d.error) body += `<p class="warn">⚠ ${esc(d.error)}</p>`;
+    if (m && play) body += `<div class="doc-parts">${info.parts.map((x, i) => `<button class="btn xs ${i === cur ? '' : 'ghost'} ${i < cur ? 'past' : ''}" data-act="docCmd" data-cmd="goto" data-part="${i}" title="Pular para esta parte">${i === cur ? (play.paused ? '❚❚ ' : here && here.speaking ? '🔊 ' : '▶ ') : ''}${esc(x.label)}</button>`).join('')}</div>
+      <p class="small">${play.paused ? '❚❚ Cena pausada.' : done ? '✔ A cena terminou no telão.' : here ? `No telão agora: <b>${esc((info.parts[cur] || {}).label || '')}</b>${here.speaking ? ' · o Doc está falando' : ''}.` : tl.count ? 'Aguardando o telão…' : '⚠ Nenhum telão aberto.'} ${tp && tp.voice ? `Voz: ${esc(tp.voice)}.` : tl.count && O.settings.docVoice !== false ? 'O telão ainda não tem voz em português liberada: o texto aparece na tela, sem som.' : ''}</p>`;
+    if (m) body += play ? det('docmsg', 'Ver o texto do Doc', docPreview(m)) : docPreview(m); // durante a cena, os controles ficam à mão
+    let primary = null, secondary = [], busy = '';
+    const cmd = (label, c, cls, extra = {}) => btn(label, 'docCmd', { cls, data: { cmd: c, ...extra } });
+    if (!m) primary = btn(d.status === 'generating' ? '🧪 Escrevendo…' : '✨ Gerar a mensagem do Doc', 'docGen', { cls: 'big', disabled: d.status === 'generating' });
+    else if (!play) { primary = cmd('🎬 Começar a cena no telão', 'start', 'big'); secondary = [btn('✎ Editar o texto', 'docEdit', { cls: 'ghost' }), btn('↻ Gerar de novo', 'docGen', { cls: 'ghost', disabled: d.status === 'generating' })]; }
+    else if (play.paused) { primary = cmd('▶ Retomar a cena', 'resume', 'big'); secondary = [cmd('⏹ Parar a cena', 'stop', 'ghost')]; busy = 'A cena do Doc está pausada no telão. Avançar mesmo assim?'; }
+    else if (!done) { primary = cmd('❚❚ Pausar', 'pause', 'big'); secondary = [cmd('⏭ Próxima parte', 'next', 'ghost'), cmd('⏮ Parte anterior', 'prev', 'ghost'), cmd('↺ Recomeçar', 'start', 'ghost')]; busy = 'A cena do Doc ainda está no telão. Avançar mesmo assim?'; }
+    else if (!d.phones) { primary = btn('📱 Enviar a mensagem para os celulares', 'docPhones', { cls: 'big', data: { on: '1' } }); secondary = [cmd('↺ Repetir a cena', 'start', 'ghost')]; }
+    else secondary = [cmd('↺ Repetir a cena', 'start', 'ghost')];
+    if (m && play && !(done && !d.phones)) secondary.push(d.phones ? btn('📱 Tirar dos celulares', 'docPhones', { cls: 'ghost' }) : btn('📱 Enviar aos celulares', 'docPhones', { cls: 'ghost', data: { on: '1' } }));
+    const warn = !tl.count ? '⚠ Nenhum telão aberto. <a href="/telao.html" target="_blank">Abrir telão ↗</a>' : !tl.sound && O.settings.docVoice !== false ? '⚠ Clique uma vez na tela do telão para o navegador liberar o som e a voz do Doc.' : '';
+    const S2 = O.settings, rates = [[.85, 'mais devagar'], [.95, 'um pouco devagar'], [1, 'normal'], [1.1, 'um pouco rápido'], [1.2, 'rápido']];
+    const more = `<div class="actions">${m ? `${btn('⬇ Baixar o .txt (mensagem + todas as respostas)', 'docTxt', { cls: 'ghost sm' })}${btn('✎ Editar o texto', 'docEdit', { cls: 'ghost sm' })}${btn('↻ Gerar de novo', 'docGen', { cls: 'ghost sm', disabled: d.status === 'generating' })}` : btn('⬇ Baixar o .txt (todas as respostas)', 'docTxt', { cls: 'ghost sm' })}
+        ${info.ai ? btn('⚙ Gerar sem IA (palavras mais citadas)', 'docGen', { cls: 'ghost sm', data: { ai: '0' }, disabled: d.status === 'generating' }) : ''}${m ? btn('🗑 Apagar a mensagem', 'docClear', { cls: 'red sm' }) : ''}</div>
+      <div class="form doc-cfg">
+        <label class="sw"><input type="checkbox" id="docVoice" ${S2.docVoice !== false ? 'checked' : ''}> O telão lê o texto em voz alta (voz em português do navegador do telão)</label>
+        <label class="f">Voz preferida (parte do nome, opcional)<input class="input" id="docVoiceName" value="${esc(S2.docVoiceName || '')}" placeholder="ex.: Antonio · vazio = a melhor voz masculina em português"></label>
+        <label class="f">Velocidade da fala<select class="input" id="docRate">${rates.map(([v, l]) => `<option value="${v}" ${Math.abs((S2.docRate || 1) - v) < .01 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="f">Vídeo da chegada do Doc (opcional: .mp4 feito com IA, tocado antes da fala)<input class="input" id="docVideoUrl" value="${esc(S2.docVideoUrl || '')}" placeholder="https://… ou /videos/doc.mp4"></label>
+        <div class="actions">${btn('Salvar', 'docSaveCfg', { cls: 'sm' })}${btn('🔈 Testar a voz no telão', 'docTestVoice', { cls: 'ghost sm' })}</div>
+        <p class="small">${tp && tp.voice ? `Voz em uso no telão: <b>${esc(tp.voice)}</b>.` : 'O telão escolhe a voz quando abre. No Windows, o Microsoft Edge tem as vozes mais naturais (ex.: "Antonio").'}</p>
+      </div>`;
+    return { title: 'Visão 2027 · o Doc', body, primary, secondary, more, warn, busy, color: 'var(--orange)', onair: 'Celulares: olhe para o telão · Telão: o Doc chega de 2027' };
+  }
+  function docEditDialog() {
+    const m = A.O.state.doc && A.O.state.doc.message; if (!m) return toast('Gere a mensagem antes.', true);
+    const ta = (id, label, v, rows = 3) => `<label class="f">${label}<textarea class="input" id="${id}" rows="${rows}">${esc(v)}</textarea></label>`;
+    dialog(`<h3>✎ Texto do Doc</h3><p class="small">O telão lê exatamente este texto. As palavras de cada dinâmica (os destaques coloridos) vêm das respostas e não mudam.</p>
+      <div class="form" style="margin-top:10px"><label class="f">Título<input class="input" id="deTitulo" value="${esc(m.titulo)}"></label>
+      ${ta('deAbertura', 'Abertura', m.abertura)}
+      ${m.blocos.map(b => ta('deB_' + b.id, `${b.id.slice(1).padStart(2, '0')} · ${esc(b.titulo)}`, b.fala)).join('')}
+      ${ta('deManchetes', 'Manchetes do jornal de 2027 (uma por linha)', m.manchetes.join('\n'), 4)}
+      ${ta('deEncerramento', 'Encerramento', m.encerramento)}</div>
+      <div class="actions" style="margin-top:12px"><button class="btn" id="deSave">Salvar</button><button class="btn ghost" data-close>Cancelar</button></div>`, () => {
+      $('#deSave').onclick = () => run(async () => {
+        await api('POST', '/api/admin/doc', { action: 'edit', message: { titulo: $('#deTitulo').value, abertura: $('#deAbertura').value, encerramento: $('#deEncerramento').value,
+          manchetes: $('#deManchetes').value.split('\n').map(x => x.trim()).filter(Boolean), blocos: m.blocos.map(b => ({ id: b.id, fala: $('#deB_' + b.id).value })) } });
+        closeDialog();
+      }, 'Texto salvo');
+    });
+  }
+  async function docTxt() {
+    const r = await fetch('/api/admin/doc.txt', { headers: { 'x-admin-key': A.key } });
+    if (!r.ok) throw new Error('Não foi possível baixar o arquivo.');
+    const link = document.createElement('a'); link.href = URL.createObjectURL(await r.blob()); link.download = 'Visao_2027_Doc.txt'; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+  }
   function pReflexao(step) {
     const O = A.O, R = O.reflexao, on = rfxOnAir();
     if (!R) return { title: 'Reflexão', body: '<p class="lead">Carregando…</p>' };
@@ -504,7 +576,7 @@
     return `<div class="card"><h2>Roteiro do evento</h2>
       <p class="small">A ordem dos passos do evento. No <a href="#" data-go="live">Ao vivo</a> você abre cada passo e clica em "Mostrar" para ele ir para o telão e os celulares. Dá para mudar a qualquer momento, inclusive durante o evento. Em Conexões, Reflexão e Sucesso, o botão 🚫 marca quem coordena e não participa.</p>
       <div class="rlist">${list.map(row).join('')}</div>
-      <div class="actions radd"><span class="small">Adicionar:</span>${add('Bloco de fala', 'stage')}${add('Aviso / intervalo', 'message')}${add('Olhos no telão', 'standby')}${add('Check-in', 'checkin')}${has('connections') ? '' : add('Conexões', 'connections')}${has('reflexao') ? '' : add('Reflexão', 'reflexao')}${['d1', 'd2', 'd3', 'd4'].filter(k => !hasAct(k)).map(k => add(`Sucesso ${k.slice(1).padStart(2, '0')}`, 'sucesso', `data-activity="${k}"`)).join('')}${add('Encerramento', 'closing')}</div>
+      <div class="actions radd"><span class="small">Adicionar:</span>${add('Bloco de fala', 'stage')}${add('Aviso / intervalo', 'message')}${add('Olhos no telão', 'standby')}${add('Check-in', 'checkin')}${has('connections') ? '' : add('Conexões', 'connections')}${has('reflexao') ? '' : add('Reflexão', 'reflexao')}${has('doc') ? '' : add('Visão 2027 · o Doc', 'doc')}${['d1', 'd2', 'd3', 'd4'].filter(k => !hasAct(k)).map(k => add(`Sucesso ${k.slice(1).padStart(2, '0')}`, 'sucesso', `data-activity="${k}"`)).join('')}${add('Encerramento', 'closing')}</div>
       <div class="actions" style="margin-top:14px;align-items:center">${dirty ? '<button class="btn" data-act="rsSave">Salvar roteiro</button><button class="btn ghost" data-act="rsDiscard">Descartar alterações</button><span class="warn">alterações não salvas</span>' : '<span class="ok">✔ Roteiro salvo</span>'}<button class="btn ghost sm" data-act="rsDefault" style="margin-left:auto">Restaurar o roteiro padrão</button></div>
     </div>`;
   }
@@ -801,6 +873,24 @@
         return run(async () => { await api('POST', '/api/admin/reflexao', { action: 'config', config }); render(true); }, 'Reflexão salva');
       }
       case 'rfxResetCfg': if (!confirm('Voltar as paradas e os projetos para a lista original?')) return; return run(async () => { await api('POST', '/api/admin/reflexao', { action: 'resetConfig' }); render(true); }, 'Lista original restaurada');
+      // --- Visão 2027 (o Doc) ---
+      case 'docGen': {
+        const d = O.state.doc || {};
+        if (d.message && !confirm('Gerar a mensagem de novo? O texto atual (e as suas edições) será substituído.')) return;
+        if (!docTotal() && !confirm('Ainda não há respostas nas dinâmicas. Gerar uma mensagem genérica mesmo assim?')) return;
+        return run(async () => { const r = await api('POST', '/api/admin/doc', { action: 'generate', ai: el.dataset.ai !== '0' }); if (r.aviso) toast(r.aviso, true); else toast(r.fonte === 'ia' ? 'Mensagem escrita pela IA ✨' : 'Mensagem pronta'); });
+      }
+      case 'docEdit': return docEditDialog();
+      case 'docCmd': {
+        const c = el.dataset.cmd;
+        if (c === 'stop' && !confirm('Parar a cena do Doc? O telão volta para a tela de espera.')) return;
+        return run(() => api('POST', '/api/admin/doc', { action: c, part: el.dataset.part === undefined ? undefined : +el.dataset.part }));
+      }
+      case 'docPhones': return run(() => api('POST', '/api/admin/doc', { action: 'phones', on: !!el.dataset.on }), el.dataset.on ? 'Mensagem enviada para os celulares 📱' : 'Mensagem tirada dos celulares');
+      case 'docClear': return confirmRun('Apagar a mensagem do Doc? Dá para gerar de novo depois.', () => api('POST', '/api/admin/doc', { action: 'clear' }), 'Mensagem apagada');
+      case 'docTxt': return run(() => docTxt(), 'Download iniciado');
+      case 'docTestVoice': return run(() => api('POST', '/api/admin/doc', { action: 'testVoice' }), 'O telão vai falar uma frase de teste');
+      case 'docSaveCfg': return run(() => act('settings', { settings: { docVoice: $('#docVoice').checked, docVoiceName: $('#docVoiceName').value, docRate: +$('#docRate').value, docVideoUrl: $('#docVideoUrl').value } }), 'Ajustes do Doc salvos');
       case 'sucAnswers': return run(() => sucAnswersDialog(el.dataset.k));
       case 'sucDownload': return sucDownload(el.dataset.type);
       case 'sucCmd': {

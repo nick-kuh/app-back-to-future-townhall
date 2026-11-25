@@ -153,7 +153,8 @@
     }
     if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}`;
     const c = S.state.conn, g = S.me && S.me.group, t = c.timer;
-    const content = JSON.stringify([S.state.message, S.state.event, S.state.settings, S.state.block === 'stage' ? S.state.stage : '', S.me && S.me.person, S.me && S.me.skip, g && g.partners, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result, t ? t.kind : '']);
+    const dc = S.state.doc || {}, docKey = S.state.block === 'doc' ? [dc.status, !!dc.play, dc.phones, dc.phones ? dc.rev : 0] : ''; // Visão 2027: espera, cena no telão, mensagem no celular
+    const content = JSON.stringify([docKey, S.state.message, S.state.event, S.state.settings, S.state.block === 'stage' ? S.state.stage : '', S.me && S.me.person, S.me && S.me.skip, g && g.partners, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result, t ? t.kind : '']);
     let h = 0; for (let i = 0; i < content.length; i++) h = (h * 31 + content.charCodeAt(i)) >>> 0;
     return ['app', S.state.block, c.phase, c.round, '', g ? g.id : '', g && g.missing ? 'miss' : '', S.me && S.me.ranking ? 'ranked' : '', S.editing ? 'edit' : '', S.me && S.me.result ? 'res' : '', h].join('|');
   }
@@ -168,6 +169,7 @@
       case 'stage': return { id: 'stage:' + i, msg: `PRÓXIMA PARADA: ${(st.stage && st.stage.title) || 'BLOCO'}` };
       case 'connections': return { id: 'connections', msg: 'RUMO ÀS CONEXÕES' };
       case 'closing': return { id: 'closing', msg: 'FIM DA VIAGEM · CONTINUA…' };
+      case 'doc': return { id: 'doc', msg: 'DESTINO: 2027' };
       case 'message': return { id: 'message' };
       case 'standby': return { id: 'standby' };
       default: return { id: 'welcome', msg: 'CIRCUITOS DE TEMPO LIGADOS' };
@@ -227,7 +229,7 @@
     else if (!S.state || !S.me) app.innerHTML = vLoading();
     else {
       const b = S.state.block;
-      app.innerHTML = b === 'standby' ? vStandby() : b === 'stage' ? vStage() : b === 'welcome' ? vWelcome() : b === 'message' ? vMessage() : b === 'closing' ? vClosing() : vConnections();
+      app.innerHTML = b === 'standby' ? vStandby() : b === 'stage' ? vStage() : b === 'welcome' ? vWelcome() : b === 'message' ? vMessage() : b === 'closing' ? vClosing() : b === 'doc' ? vDoc() : vConnections();
     }
     // "olhos no telão" e blocos de fala: tela calma, fundo parado
     const calm = !presentation && S.screen === 'app' && !!S.state && !!S.me && ['standby', 'stage'].includes(S.state.block);
@@ -468,6 +470,28 @@
     return `${vHeader()}
       <div class="panel glow msgbox"><div class="e">🕰️</div><h2>Fim da viagem</h2><p>${esc(S.state.event.closingText)}</p></div>
       ${r && r.match ? `<div class="panel center"><div class="kicker">Sua conexão</div><div class="polaroids"><div class="polaroid"><div class="photo">${av(r.match)}</div><div class="cap">${esc(first(r.match.name))}</div></div></div><div class="pname" style="font-size:18px">${esc(r.match.name)}</div></div>` : ''}`;
+  }
+  // Visão 2027: enquanto o Doc fala no telão, o celular pede para olhar para lá; depois, a mensagem fica no celular.
+  const DOC_C = { d1: 'var(--cyan)', d2: 'var(--yellow)', d3: 'var(--magenta)', d4: 'var(--orange)' };
+  function vDoc() {
+    const d = S.state.doc || {}, m = d.message;
+    if (d.phones && m) {
+      return `${vHeader()}
+        <section class="panel glow presentation-card" style="--c:var(--orange)"><div class="kicker">MENSAGEM DO DOC · DIRETO DE 2027</div><h1>${esc(m.titulo)}</h1></section>
+        <div class="panel docm"><p>${esc(m.abertura)}</p></div>
+        ${(m.blocos || []).map(b => `<div class="panel docm" style="--c:${DOC_C[b.id] || 'var(--cyan)'}"><div class="kicker">${b.id.slice(1).padStart(2, '0')} · ${esc(b.titulo)}</div><p>${esc(b.fala)}</p>${b.palavras && b.palavras.length ? `<div class="docw">${b.palavras.map(w => `<span>${esc(w)}</span>`).join('')}</div>` : ''}</div>`).join('')}
+        <div class="panel docpaper"><b>GAZETA DO FUTURO · 1º DE JANEIRO DE 2027</b>${(m.manchetes || []).map(h => `<span>${esc(h)}</span>`).join('')}</div>
+        <div class="panel glow docm end"><p>${esc(m.encerramento)}</p><div class="docyear">2027</div></div>`;
+    }
+    return `<div class="spacer"></div>
+      <div class="logo sm dim"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div></div>
+      <div class="standby">
+        <div class="power">${d.play ? '👀' : '⚡'}</div>
+        <div class="st-title">${d.play ? 'OLHE PARA O TELÃO' : 'O DOC ESTÁ CHEGANDO'}</div>
+        <p class="muted">${d.play ? 'O Doc acabou de chegar de 2027 com uma mensagem para vocês.' : 'Um sinal vindo de 2027 está chegando ao telão.'}</p>
+        <div class="flux" style="margin:18px auto 0"><i></i><i></i><i></i><b></b></div>
+      </div>
+      <div class="spacer"></div>`;
   }
   function vStandby() {
     const me = S.me.person;
