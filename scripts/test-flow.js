@@ -6,8 +6,32 @@ const { Engine } = require('../server/engine');
 const e = new Engine();
 e.updateSettings({ autoFlow: false }); // primeira parte: fluxo manual (o painel no modo manual)
 const people = e.listPeople();
-assert.strictEqual(people.length, 47, '47 pessoas na lista inicial');
-assert.strictEqual(e.listQuestions().length, 42, '42 perguntas no banco');
+assert.strictEqual(people.length, 48, '48 pessoas na lista inicial');
+assert(!people.some(p => p.name === 'Jonathan Toledo'), 'Jonathan Toledo saiu da lista');
+assert.deepStrictEqual(people.filter(p => ['Evelyn Aguiar', 'Renato Malvino'].includes(p.name)).map(p => [p.name, p.wl, p.area, p.team, p.manager]),
+  [['Evelyn Aguiar', 'WL1', 'Consumer', 'CDIO BPC', 'Felipe Resck'], ['Renato Malvino', 'WL2', 'Tech Foundation', 'Tech Found', 'Claudia Meira']]);
+// banco do "Speed Dating": 30 perguntas em três categorias de 10
+assert.strictEqual(e.listQuestions().length, 30, '30 perguntas no banco');
+for (const c of ['quebragelo', 'conexao', 'alem']) assert.strictEqual(e.listQuestions().filter(q => q.cat === c).length, 10, `10 perguntas em ${c}`);
+// tempos das Conexões: 2 minutos de conversa por viagem e 40 segundos para a dupla se encontrar
+assert.strictEqual(e.settings.roundSeconds, 120); assert.strictEqual(e.settings.findSeconds, 40);
+assert.strictEqual(e.publicState().settings.roundSeconds, 120); assert.strictEqual(e.publicState().settings.findSeconds, 40);
+{ // sorteio das perguntas (server/queues.js)
+  const { buildQueues, catKey } = require('../server/queues');
+  const questions = e.listQuestions(), byId = Object.fromEntries(questions.map(q => [q.id, q]));
+  const groups = Array.from({ length: 23 }, (_, i) => [i * 2 + 1, i * 2 + 2]);
+  const rodada = buildQueues({ groups, round: 2, questions, seenByPerson: {} });
+  assert(rodada.every(q => q.length === 30 && new Set(q).size === 30), 'cada dupla recebe o banco inteiro, sem repetir');
+  assert(rodada.every(q => q.slice(0, 10).every(id => byId[id].cat === 'conexao')), 'viagem 2: as 10 de Conexão primeiro');
+  assert.strictEqual(new Set(rodada.map(q => q[0])).size, 10, 'as primeiras perguntas se espalham por toda a categoria');
+  assert(new Set(rodada.map(q => q.join())).size > 20, 'a ordem é sorteada para cada dupla');
+  const mix = buildQueues({ groups, round: 1, questions, seenByPerson: {}, mode: 'mix' });
+  for (const q of mix) for (let i = 0; i < 30; i += 3) assert.strictEqual(new Set(q.slice(i, i + 3).map(id => byId[id].cat)).size, 3, 'modo mix: uma pergunta de cada categoria a cada três');
+  const seen = buildQueues({ groups: [[1, 2]], round: 1, questions, seenByPerson: { 1: questions.slice(0, 9).map(q => q.id), 2: [questions[10].id] } });
+  assert.strictEqual(seen[0].length, 20, 'perguntas já vistas por alguém da dupla ficam de fora');
+  assert.strictEqual(seen[0][0], questions[9].id, 'sobrou uma de Quebra-gelo: ela vem primeiro');
+  assert.strictEqual(catKey('[Além do Óbvio]'), 'alem'); assert.strictEqual(catKey('Quebra-gelo'), 'quebragelo'); assert.strictEqual(catKey('conexão'), 'conexao'); assert.strictEqual(catKey('passado'), 'conexao'); assert.strictEqual(catKey('xyz'), null);
+}
 
 // check-in de 40 pessoas via token (simula celulares)
 const tokens = {};
@@ -62,9 +86,21 @@ for (let r = 1; r <= 3; r++) {
   assert.strictEqual(me.group.partners[0].wl, undefined, 'viajante não vê o WL da dupla');
   const firsts = e.groupsOfRound(r).map(g => g.queue[0]);
   assert(new Set(firsts).size >= Math.min(firsts.length, 10), 'duplas começam em perguntas diferentes');
-  const era = ['presente', 'passado', 'futuro'][r - 1];
+  // perguntas sorteadas, uma categoria por viagem: 1 · Quebra-gelo, 2 · Conexão, 3 · Além do óbvio
+  const cat = ['quebragelo', 'conexao', 'alem'][r - 1];
   const qs = Object.fromEntries(e.listQuestions().map(q => [q.id, q]));
-  assert.strictEqual(qs[me.group.queue[0].id].era, era, `rodada ${r} começa com pergunta da era ${era}`);
+  for (const g of e.groupsOfRound(r)) {
+    assert.strictEqual(qs[g.queue[0]].cat, cat, `rodada ${r} começa com pergunta da categoria ${cat}`);
+    assert.strictEqual(new Set(g.queue).size, g.queue.length, 'a fila não repete pergunta');
+    const mainLen = g.queue.findIndex(id => qs[id].cat !== cat);
+    assert(g.queue.slice(mainLen < 0 ? g.queue.length : mainLen).every(id => qs[id].cat !== cat), 'a categoria da viagem vem inteira antes das outras');
+  }
+  assert.strictEqual(me.group.queue[0].cat, cat, 'o celular recebe a categoria da pergunta');
+  assert.strictEqual(e.publicState().conn.cats[cat].key, cat, 'as categorias vão no estado público');
+  { // sorteio: as duplas não recebem todas a mesma ordem
+    const orders = new Set(e.groupsOfRound(r).map(g => g.queue.slice(0, 6).join()));
+    assert(orders.size > 1, 'cada dupla tem a sua própria ordem de perguntas');
+  }
   e.startTalk();
   assert.strictEqual(e.state.conn.phase, 'talk');
   assert.strictEqual(e.state.conn.timer.kind, 'talk');
@@ -131,20 +167,21 @@ e.resetConnections(); e.generate(); e.reveal(1); e.startTalk();
   assert.strictEqual(e.groupStep(partnerId, 1, 1).position, 2, 'toque com posição atual avança');
 }
 // banco de perguntas: recusado durante a conversa, preserva ids ao substituir
-assert.throws(() => e.replaceQuestions([{ era: 'presente', text: 'x' }]), /conversa em andamento/);
+assert.throws(() => e.replaceQuestions([{ cat: 'quebragelo', text: 'x' }]), /conversa em andamento/);
 e.endTalk();
 {
   const before = e.listQuestions();
-  const list = before.map(q => ({ era: q.era, text: q.text, active: q.id !== before[0].id }));
-  list.push({ era: 'futuro', text: 'Pergunta nova de teste?' });
+  const list = before.map(q => ({ cat: q.cat, text: q.text, active: q.id !== before[0].id }));
+  list.push({ era: 'futuro', text: 'Pergunta nova de teste?' }); // o prefixo antigo (era) ainda é aceito: futuro = Além do óbvio
   list.splice(1, 1);
   e.replaceQuestions(list);
   const after = e.listQuestions();
   assert.strictEqual(after.find(q => q.id === before[0].id).active, false, 'id preservado e inativa respeitada');
   assert(!after.some(q => q.id === before[1].id), 'pergunta removida some');
   assert.strictEqual(after.filter(q => q.text === 'Pergunta nova de teste?').length, 1, 'nova pergunta inserida');
+  assert.strictEqual(after.find(q => q.text === 'Pergunta nova de teste?').cat, 'alem', 'era antiga vira categoria');
   e.resetQuestions();
-  assert.strictEqual(e.listQuestions().length, 42, 'banco padrão restaurado');
+  assert.strictEqual(e.listQuestions().length, 30, 'banco padrão restaurado');
 }
 // ids inexistentes em duplas não quebram resultados
 e.reveal(2); e.startTalk(); e.endTalk(); e.reveal(3); e.startTalk(); e.endTalk();

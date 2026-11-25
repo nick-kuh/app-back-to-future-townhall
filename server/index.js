@@ -9,6 +9,7 @@ const { Engine, TOTAL_ROUNDS } = require('./engine');
 const { DB_PATH, DATA_DIR } = require('./db');
 const { createSucesso } = require('./sucesso');
 const { createReflexao } = require('./reflexao');
+const { createCenas } = require('./cenas');
 const doc = require('./doc');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -27,6 +28,10 @@ const sucesso = createSucesso({ dbPath: process.env.SUCESSO_DB_PATH || path.join
 // Bloco Reflexão (paradas com votação em projetos): está no ar quando o roteiro está nesse passo e não há dinâmica do Sucesso na tela
 const reflexao = createReflexao();
 const reflexaoOnAir = () => engine.state.block === 'reflexao' && !engine.state.presentation;
+// Cenas do deck do townhall (plano de voo, almanaque 2026, reconhecimento, intervalo, estratégia 2027, 88 MPH…):
+// a cena no ar é a do passo atual do roteiro, quando não há dinâmica do Sucesso nem tela avulsa por cima
+const cenas = createCenas();
+const cenaOnAir = () => (engine.state.block === 'cena' && !engine.state.presentation ? engine.currentStep().cena || null : null);
 
 app.disable('x-powered-by');
 app.use(require('compression')()); // gzip: páginas e scripts chegam mais rápido no Wi-Fi do evento
@@ -50,11 +55,23 @@ sucesso.mount(app, { isAdmin });
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { etag: true, maxAge: 0 }));
 
+// Fotos nas cenas: quem fala nas boas-vindas e os indicados dos prêmios ganham a foto de perfil quando o nome escrito
+// na cena aponta para uma pessoa só da lista. "Giovana & Lucas" são duas pessoas (até duas fotos).
+function withPhotos(c) {
+  if (!c || (c.kind !== 'boasvindas' && c.kind !== 'reconhecimento')) return c;
+  const people = engine.listPeople(), of = nome => String(nome || '').split(/\s*(?:&|\/| e )\s*/i).map(n => engine.photoByName(n, people)).filter(Boolean).slice(0, 2);
+  if (c.kind === 'boasvindas') return { ...c, pessoas: (c.pessoas || []).map(p => ({ ...p, fotos: of(p.nome) })) };
+  return { ...c, premios: c.premios.map(p => ({ ...p, indicados: p.indicados.map(x => ({ ...x, fotos: of(x.nome) })) })) };
+}
 // Estado público + situação da dinâmica do Sucesso em exibição (fase, cronômetro, quantidade de respostas)
 function publicState() {
   const s = engine.publicState();
   if (s.presentation) s.presentation.live = sucesso.ready() ? sucesso.live(engine.state.presentation) : null;
   s.reflexao = reflexaoOnAir() ? reflexao.publicState() : null;
+  const kind = cenaOnAir();
+  s.cena = kind ? withPhotos(cenas.publicState(kind, { steps: engine.settings.steps, index: s.step.index })) : null;
+  s.evento = cenas.evento();                                         // nome do evento e circuitos de tempo (check-in, créditos)
+  s.creditos = engine.state.block === 'closing' ? cenas.creditos() : null;
   return s;
 }
 // Estado da pessoa + o que ela já respondeu na dinâmica em exibição e se foi a sorteada
@@ -79,7 +96,13 @@ const wrapAsync = fn => (req, res) => {
 const adminOnly = (req, res, next) => (isAdmin(req) ? next() : res.status(401).json({ error: 'Senha de admin inválida.' }));
 
 /* ---------- participante ---------- */
-app.get('/api/people', wrap(() => engine.listPeople().filter(p => p.active).map(p => ({ id: p.id, name: p.name, checkedIn: !!p.checkedInAt }))));
+app.get('/api/people', wrap(() => engine.listPeople().filter(p => p.active).map(p => ({ id: p.id, name: p.name, checkedIn: !!p.checkedInAt, ...(p.photo ? { photo: p.photo } : {}) }))));
+// Foto de perfil. O endereço leva a versão da foto (?v=…): o navegador pode guardar para sempre e busca de novo quando ela muda.
+app.get('/api/photo/:id', (req, res) => {
+  const f = /^\d{1,9}$/.test(req.params.id) ? engine.fotos.get(req.params.id) : null;
+  if (!f) return res.status(404).json({ error: 'Sem foto.' });
+  res.set({ 'Content-Type': f.mime, 'Cache-Control': req.query.v === f.version ? 'public, max-age=31536000, immutable' : 'no-cache', 'X-Content-Type-Options': 'nosniff' }).send(f.data);
+});
 app.post('/api/checkin', wrap(req => engine.checkin(req.body.personId, req.body.token)));
 app.post('/api/checkout', wrap(req => engine.checkout(req.body.token)));
 app.get('/api/me', wrap(req => {
@@ -162,11 +185,35 @@ app.post('/api/admin/action', wrap(req => {
     case 'openRanking': engine.openRanking(); break;
     case 'computeResults': engine.computeResults(); break;
     case 'resetConnections': engine.resetConnections(); break;
-    case 'resetEvent': reflexao.clearAll({ silent: true }); engine.resetEvent(); sucesso.clearRoom(engine.state.sucessoRoom).catch(e => console.error('[sucesso] limpar sala:', e.message)); break;
+    case 'resetEvent': reflexao.clearAll({ silent: true }); cenas.resetState({ silent: true }); engine.resetEvent(); sucesso.clearRoom(engine.state.sucessoRoom).catch(e => console.error('[sucesso] limpar sala:', e.message)); break;
     case 'testCheckinAll': engine.testCheckinAll(); break;
     case 'testRandomRankings': engine.testRandomRankings(); break;
     default: throw new Error('Ação desconhecida: ' + a.type);
   }
+  return { ok: true };
+}));
+
+// Reiniciar: tudo de uma vez ou um bloco por vez. Apaga o que foi feito durante o evento ou o ensaio (check-ins, duplas,
+// votos, respostas, prêmios revelados, cronômetros). Não mexe no que foi preparado: pessoas, fotos, perguntas, roteiro,
+// textos e conteúdo das cenas.
+//   scope: all (keepCheckins opcional) · checkin · connections · reflexao · sucesso · sucesso:d1..d4 · doc · cenas ·
+//          cena:<almanaque|reconhecimento|intervalo|visao|mph> · roteiro (só volta para o primeiro passo)
+app.post('/api/admin/reset', wrapAsync(async req => {
+  const b = req.body || {}, scope = String(b.scope || ''), room = engine.state.sucessoRoom, bad = () => { throw Object.assign(new Error('Não sei reiniciar isso.'), { status: 400 }); };
+  if (scope === 'all') {
+    dropPresentation(); reflexao.clearAll({ silent: true }); cenas.resetState({ silent: true });
+    engine.resetEvent({ keepCheckins: !!b.keepCheckins });
+    await sucesso.clearRoom(room).catch(e => console.error('[sucesso] limpar sala:', e.message));
+  } else if (scope === 'checkin') engine.resetCheckins();
+  else if (scope === 'connections') engine.resetConnections();
+  else if (scope === 'reflexao') reflexao.clearAll();
+  else if (scope === 'sucesso') { if (!sucesso.ready()) bad(); await sucesso.clearRoom(room); }
+  else if (/^sucesso:d[1-4]$/.test(scope)) { if (!sucesso.ready()) bad(); await sucesso.clearActivity(room, scope.slice(8)); }
+  else if (scope === 'doc') engine.setDocMessage(null);
+  else if (scope === 'cenas') cenas.resetState();
+  else if (scope.startsWith('cena:')) cenas.resetKind(scope.slice(5));
+  else if (scope === 'roteiro') return goStep(engine.settings.steps[0].id);
+  else bad();
   return { ok: true };
 }));
 
@@ -184,6 +231,7 @@ async function ensureRoom() {
 async function goStep(id) {
   const step = engine.stepById(id);
   if (!step) throw Object.assign(new Error('Esse passo não está mais no roteiro.'), { status: 404 });
+  if (step.type === 'cena' && engine.state.step !== step.id) cenas.enter(step.cena); // vindo de outro passo, a cena começa do início (voltar de um aviso rápido não recomeça)
   if (step.type === 'sucesso') {
     if (!sucesso.ready()) throw Object.assign(new Error('As dinâmicas do Sucesso ainda estão carregando. Tente de novo em instantes.'), { status: 503 });
     const selection = await sucesso.prepare(await ensureRoom(), step.activity);
@@ -271,6 +319,17 @@ app.post('/api/admin/reflexao', wrap(req => {
   }
   return { ok: true };
 }));
+// Cenas do deck: comandos do Doc (mês do almanaque, cerimônia dos prêmios, cronômetro do intervalo, 88 MPH) e o conteúdo.
+app.post('/api/admin/cena', wrap(req => {
+  const a = req.body || {};
+  if (a.action === 'config') { cenas.setConfig(a.config || {}); return { ok: true }; }
+  if (a.action === 'resetConfig') { cenas.resetConfig(a.key ? String(a.key) : null); return { ok: true }; }
+  if (a.action === 'resetState') { cenas.resetState(); return { ok: true }; }
+  const kind = String(a.kind || '');
+  if (cenaOnAir() !== kind) throw Object.assign(new Error('Coloque essa cena no ar (no roteiro) antes.'), { status: 409 });
+  cenas.command(kind, a);
+  return { ok: true };
+}));
 // Página de extração de dados (/dados.html): tudo o que o evento gerou, em um pedido só.
 app.get('/api/admin/export', wrap(() => {
   const c = engine.publicState().counts;
@@ -321,6 +380,10 @@ app.post('/api/admin/people', wrap(req => engine.addPerson(req.body || {})));
 app.put('/api/admin/people/:id', wrap(req => engine.updatePerson(req.params.id, req.body || {})));
 app.delete('/api/admin/people/:id', wrap(req => { engine.deletePerson(req.params.id); return { ok: true }; }));
 app.post('/api/admin/people/import', wrap(req => engine.importPeople(req.body.rows || [], req.body.mode || 'merge')));
+// Fotos de perfil: várias de uma vez (o nome de cada arquivo diz de quem é), ou a de uma pessoa
+app.post('/api/admin/photos', wrap(req => engine.importPhotos((req.body || {}).files || [])));
+app.put('/api/admin/people/:id/photo', wrap(req => { engine.setPhoto(req.params.id, (req.body || {}).data); return { ok: true }; }));
+app.delete('/api/admin/people/:id/photo', wrap(req => { engine.removePhoto(req.params.id); return { ok: true }; }));
 app.post('/api/admin/form/import', wrap(req => engine.importForm(req.body.rows || [], req.body.keyColumn)));
 
 app.post('/api/admin/questions', wrap(req => { engine.addQuestion(req.body || {}); return { ok: true }; }));
@@ -350,8 +413,11 @@ function pushAdmin() {
 }
 // O evento saiu da Reflexão (outro passo, aviso, dinâmica do Sucesso): a votação em andamento fica pausada.
 engine.onChange(() => { if (!reflexaoOnAir()) reflexao.hold(); });
+engine.onChange(() => cenas.sync(cenaOnAir())); // saiu de uma cena: o que estava tocando para
 engine.onChange(pushAll);
 reflexao.onChange(pushAll);
+cenas.onChange(pushAll);
+cenas.onPulse(p => io.emit('cena:pulse', p));   // carga do Flux Capacitor subindo com os toques dos celulares
 // Resposta nova ou comando numa dinâmica do Sucesso: celulares, telão e painel atualizam na hora.
 let pulseTimer = null, expiryTimer = null;
 function armExpiry() { // o prazo de recebimento acaba sem nenhum comando: avisa os aparelhos nessa hora
@@ -381,7 +447,7 @@ function telaoStatus() {
   const doc = list.map(t => t.doc).filter(Boolean).sort((a, b) => b.at - a.at)[0] || null; // onde a cena do Doc está no telão
   return { count: list.length, sound: list.some(t => !t.locked), auth: list.some(t => t.auth), doc };
 }
-const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null, reflexao: reflexao.adminState(),
+const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null, reflexao: reflexao.adminState(), cenas: cenas.adminState(),
   doc: { ai: doc.hasAI(), model: doc.MODEL, parts: doc.parts(engine.state.doc.message) } });
 
 // Liga o socket à pessoa dona do token (do evento ou guardado no socket) e revalida sempre:
@@ -425,6 +491,14 @@ io.on('connection', socket => {
       engine.submitRanking(pid, ranks);
       if (typeof ack === 'function') ack({ ok: true });
     } catch (e) { if (typeof ack === 'function') ack({ ok: false, error: e.message }); }
+  });
+  // Reconhecimento: cada toque no celular ("aplauso") soma energia ao Flux Capacitor do telão
+  socket.on('cena:tap', (payload, ack) => {
+    try {
+      const pid = bind(socket, payload && payload.token);
+      if (!pid || cenaOnAir() !== 'reconhecimento') return safeAck(ack, { ok: false });
+      safeAck(ack, { ok: cenas.tap(pid, engine.publicState().counts.checkedIn) });
+    } catch (e) { safeAck(ack, { ok: false }); }
   });
   socket.on('admin:hello', (payload, ack) => {
     try {

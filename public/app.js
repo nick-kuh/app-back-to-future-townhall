@@ -10,7 +10,8 @@
   const MONTHS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
   const PALETTE = ['#ff6a00', '#ff2d95', '#2ee6d6', '#39ff6a', '#ffd21f', '#b980ff', '#ff5c5c', '#5cffd6', '#ffa94d', '#7fb2ff', '#f58cff', '#a8ff5c'];
   const color = name => PALETTE[[...String(name || '')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
-  const av = (p, cls = '') => `<div class="av ${cls}" style="--c:${color(p.name)}">${esc(ini(p.name))}</div>`;
+  // avatar: a foto de perfil por cima das iniciais (se a foto não carregar, ficam as iniciais)
+  const av = (p, cls = '') => `<div class="av ${cls} ${p.photo ? 'ph' : ''}" style="--c:${color(p.name)}">${esc(ini(p.name))}${p.photo ? `<img src="${esc(p.photo)}" alt="" decoding="async">` : ''}</div>`;
   const ERA_KEYS = ['presente', 'passado', 'futuro'];
   // escapa o texto e depois transforma URLs em links (o href nasce do texto já escapado)
   const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
@@ -103,6 +104,8 @@
       if (S.me && S.me.group && S.me.group.id === groupId && S.me.group.position !== position) { S.me.group.position = position; patchQuestion(true); }
     });
     S.socket.on('notify', n => { toast(`${n.title || ''}${n.body ? ' · ' + n.body : ''}`); });
+    // Reconhecimento: a carga do Flux Capacitor sobe com os toques de todo mundo
+    S.socket.on('cena:pulse', p => { const c = currentCena(); if (c && p && p.kind === c.kind && c.live) { c.live.carga = p.carga; patchCharge(); } });
   }
   function hello() {
     S.socket.emit('hello', { token: S.token }, res => {
@@ -137,6 +140,10 @@
   function currentReflexao() {
     return (S.screen === 'app' && S.me && S.state && !currentPresentation() && S.state.reflexao) || null;
   }
+  // Cena do deck do townhall no ar (plano de voo, almanaque, reconhecimento, intervalo, estratégia 2027, 88 MPH…): a atenção é no telão
+  function currentCena() {
+    return (S.screen === 'app' && S.me && S.state && !currentPresentation() && S.state.block === 'cena' && S.state.cena) || null;
+  }
   // Quem coordena um bloco faz o login (conta presença), mas não participa dele: nada de dupla, voto ou resposta.
   const sitsOut = block => !!(S.me && S.me.skip && S.me.skip[block]);
   const coordinating = what => `<div class="panel glow msgbox"><div class="e">🎬</div><h2>Você está na coordenação</h2><p>Você não participa ${what}. Acompanhe pelo telão.</p></div>`;
@@ -150,6 +157,13 @@
     if (rf) {
       const c = rf.cur, mine = (S.me.reflexao && S.me.reflexao.votes) || [], d = c && c.top;
       return ['reflexao', rf.open === null ? 'menu' : rf.open, c ? rfPhase(c) : '', mine.filter(Boolean).length, d ? `${d.at}:${rfShown(d) ? 'ok' : 'suspense'}:${d.items.map(v => v.votes).join()}` : '', rf.rev, S.rfSending ? 'env' : '', S.rfProjects ? 'lista' : '', sitsOut('reflexao') ? 'fora' : ''].join('|');
+    }
+    const cn = currentCena();
+    if (cn) { // o que muda a tela do celular em cada cena (o resto é atualizado por cima)
+      const l = cn.live || {}, sub = cn.kind === 'reconhecimento' ? [l.fase, l.premio, l.passo, (l.feitos || []).join('.')].join(':') : cn.kind === 'intervalo' ? ivPhase(cn) : cn.kind === 'mph' ? (l.at ? (serverNow() - l.at >= MPH_MS ? 'chegou' : 'indo:' + l.at) : 'antes')
+        : cn.kind === 'almanaque' ? `${l.mes}:${l.pagina ? 1 : 0}` : cn.kind === 'agenda' ? cn.itens.map(x => x.estado[0] || '-').join('') : '';
+      let h = 0; const content = JSON.stringify([cn.titulo, cn.kicker, cn.itens && cn.kind === 'agenda' ? cn.itens : '', cn.texto, cn.frase, cn.pessoas, cn.quem, cn.pergunta, cn.chegada, cn.premios, S.me.person]); for (let i = 0; i < content.length; i++) h = (h * 31 + content.charCodeAt(i)) >>> 0;
+      return ['cena', cn.kind, sub, h].join('|');
     }
     if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}`;
     const c = S.state.conn, g = S.me && S.me.group, t = c.timer;
@@ -170,6 +184,7 @@
       case 'connections': return { id: 'connections', msg: 'RUMO ÀS CONEXÕES' };
       case 'closing': return { id: 'closing', msg: 'FIM DA VIAGEM · CONTINUA…' };
       case 'doc': return { id: 'doc', msg: 'DESTINO: 2027' };
+      case 'cena': return st.cena ? { id: 'cena:' + st.cena.kind, msg: `DESTINO: ${st.cena.name}` } : { id: 'cena' };
       case 'message': return { id: 'message' };
       case 'standby': return { id: 'standby' };
       default: return { id: 'welcome', msg: 'CIRCUITOS DE TEMPO LIGADOS' };
@@ -208,6 +223,24 @@
       }
       return show();
     }
+    if (n[0] === 'cena' || p[0] === 'cena') {
+      stopWarp();
+      if (prev && n[0] === 'cena' && !moved) {
+        const [, kind, sub] = n, was = p[0] === 'cena' && p[1] === kind ? p[2] : '';
+        if (kind === 'mph' && sub.startsWith('indo') && sub !== was) { // o Doc acelerou: o celular também vai a 88 MPH
+          const c = currentCena(), left = MPH_MS - (serverNow() - c.live.at);
+          beep('ok'); buzz([80, 40, 80]); if (left > 900) return warp('ACELERANDO ATÉ 2027…', render, left);
+        }
+        if (kind === 'mph' && sub === 'chegou' && was !== 'chegou') { beep('result'); buzz([120, 60, 120, 60, 240]); flashSky(); }
+        if (kind === 'reconhecimento' && sub !== was) {
+          const passo = sub.split(':')[2], fase = sub.split(':')[0];
+          if (fase === 'cerimonia' && passo === 'carga') { beep('ok'); buzz([80, 40, 160]); flashSky(); }                 // hora de carregar o Flux Capacitor
+          else if (fase === 'cerimonia' && passo === 'vencedor') { beep('result'); buzz([120, 60, 120, 60, 240]); flashSky(); } // vencedor revelado
+        }
+        if (kind === 'intervalo' && sub === 'done' && was === 'run') { beep('end'); buzz([200, 80, 200]); flashSky(); }
+      }
+      return show();
+    }
     const enteringPhase = ph => n[0] === 'app' && n[1] === 'connections' && n[2] === ph && !(p[1] === 'connections' && p[2] === ph && p[3] === n[3]);
     const quiet = b => b === 'standby' || b === 'stage'; // telas calmas: ao sair delas, o celular chama a atenção
     if (prev && quiet(p[1]) && n[1] && !quiet(n[1])) { beep('ok'); buzz([80, 40, 160]); flashSky(); }
@@ -220,10 +253,11 @@
   }
   function render() {
     const app = $('#app');
-    const presentation = currentPresentation(), reflexao = currentReflexao();
+    const presentation = currentPresentation(), reflexao = currentReflexao(), cena = currentCena();
     const typing = document.activeElement && document.activeElement.id === 'ans', searching = document.activeElement && document.activeElement.id === 'rfQ';
     if (presentation) app.innerHTML = vPresentation(presentation);
     else if (reflexao) app.innerHTML = vReflexao(reflexao);
+    else if (cena) app.innerHTML = vCena(cena);
     else if (S.screen === 'splash') app.innerHTML = vSplash();
     else if (S.screen === 'identify') app.innerHTML = S.pick ? vConfirm() : vIdentify();
     else if (!S.state || !S.me) app.innerHTML = vLoading();
@@ -232,7 +266,7 @@
       app.innerHTML = b === 'standby' ? vStandby() : b === 'stage' ? vStage() : b === 'welcome' ? vWelcome() : b === 'message' ? vMessage() : b === 'closing' ? vClosing() : b === 'doc' ? vDoc() : vConnections();
     }
     // "olhos no telão" e blocos de fala: tela calma, fundo parado
-    const calm = !presentation && S.screen === 'app' && !!S.state && !!S.me && ['standby', 'stage'].includes(S.state.block);
+    const calm = !presentation && S.screen === 'app' && !!S.state && !!S.me && (['standby', 'stage'].includes(S.state.block) || (!!cena && CENA_CALM.includes(cena.kind)));
     document.body.classList.toggle('off', calm);
     if (window.Delorean3D) Delorean3D.pause(calm);
     const ans = $('#ans'); if (ans) { ans.value = S.answerDraft; countAnswer(); if (typing && !ans.disabled) { ans.focus(); ans.setSelectionRange(ans.value.length, ans.value.length); } }
@@ -251,6 +285,7 @@
     if (pr) { const n = $('#sucCount'); if (n && pr.live) n.textContent = pr.live.responseCount; return; }
     const rf = currentReflexao();
     if (rf) { const n = $('#rfCount'); if (n && rf.cur) n.textContent = rf.cur.votes; return; }
+    if (currentCena()) { patchCharge(); return; }
     const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), true); }
     const rp = $('#rankProgress'); if (rp) rp.textContent = `${S.state.conn.rankingDone} de ${S.state.conn.rankingTotal} viajantes já avaliaram`;
     if (S.screen === 'identify' && !S.pick) refreshPeopleSoon();
@@ -386,6 +421,78 @@
     }
     return `${vHeader()}${head(`REFLEXÃO · PARADA ${t.n}`, t.t, t.q, t.c, `<p class="small center" style="margin-top:10px">Votos no Flux Capacitor: <b id="rfCount">${c.votes}</b></p>`)}${body}`;
   }
+  /* ---- Cenas do deck do townhall ----
+   * A atenção é no telão: o celular mostra onde o evento está (ato, tema, quem fala). Em algumas cenas ele participa:
+   * a agenda completa, o cronômetro do intervalo, o botão que carrega o Flux Capacitor na cerimônia dos prêmios
+   * (cada toque soma energia no telão), o vencedor de cada prêmio e a chegada a 2027. */
+  const CENA_CALM = ['boasvindas', 'almanaque', 'ia', 'visao', 'manifesto'];
+  const ACT_C = ['var(--cyan)', 'var(--orange)', 'var(--yellow)', 'var(--green)'];
+  const MPH_MS = 6000;
+  const plain = s => String(s ?? '').replace(/\*/g, '');
+  const ivPhase = c => { const l = c.live; return l.phase === 'run' && l.endsAt && l.endsAt <= serverNow() ? 'done' : l.phase; };
+  const ivLeft = c => { const l = c.live, ph = ivPhase(c); return ph === 'run' ? Math.max(0, Math.ceil((l.endsAt - serverNow()) / 1000)) : ph === 'done' ? 0 : l.remaining; };
+  const actLine = c => (c.ato ? `${c.ato.n} · ${c.ato.nome}` : 'CDIO HC + BPC · TOWNHALL 2026');
+  // tela calma, no estilo do logo: ato, título e quem fala
+  const cenaLook = (c, title, who, note) => `<div class="spacer"></div>
+      <div class="logo sm dim"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div></div>
+      <div class="stage">
+        <div class="kicker">${esc(actLine(c))}</div><i class="st-arrow"></i>
+        <div class="st-theme ${title.length > 22 ? 'long' : ''}"><span>${esc(title)}</span></div>
+        ${who ? `<p class="st-speaker">com ${esc(who)}</p>` : ''}
+        <p class="muted">${note || '👀 Olhe para o telão.'}</p>
+      </div>
+      <div class="spacer"></div>`;
+  const cenaCard = (c, kicker, title, extra = '', color = 'var(--yellow)') => `<section class="panel glow presentation-card compact" style="--c:${color}"><div class="kicker">${esc(kicker)}</div><h1>${esc(title)}</h1>${extra}</section>`;
+  function patchCharge() { // barra de carga do Flux Capacitor (cerimônia dos prêmios)
+    const c = currentCena(), bar = $('#cgBar'); if (!c || !bar || !c.live) return;
+    const v = Math.max(0, Math.min(1, c.live.carga || 0)); bar.style.width = (v * 100).toFixed(1) + '%';
+    const n = $('#cgNum'); if (n) n.textContent = `${(v * 1.21).toFixed(2).replace('.', ',')} / 1,21 GW`;
+  }
+  function vCena(c) {
+    const l = c.live || {};
+    if (c.kind === 'agenda') {
+      return `${vHeader()}${cenaCard(c, c.kicker, plain(c.titulo), `<p class="small center">${esc(c.data)} · ${esc(c.inicio)} – ${esc(c.fim)} · ${c.total} min</p>`, 'var(--cyan)')}
+        ${c.atos.map((a, k) => `<div class="panel ag" style="--c:${ACT_C[k]}"><div class="ag-h"><b>${esc(a.n)} · ${esc(a.nome)}</b><span>${esc(a.de)} – ${esc(a.ate)}</span></div>
+          ${c.itens.filter(x => x.ato === k + 1).map(x => `<div class="ag-it ${x.estado}"><b>${esc(x.hora)}</b><span>${esc(x.t)}<small>${esc(x.d)}</small></span><i>${x.estado === 'agora' ? 'NO AR' : x.estado === 'feito' ? '✓' : x.min + '′'}</i></div>`).join('')}</div>`).join('')}`;
+    }
+    if (c.kind === 'intervalo') {
+      const ph = ivPhase(c), msg = { idle: 'O intervalo já vai começar.', run: 'Volte antes de o relógio zerar.', paused: '❚❚ Cronômetro pausado pelo Doc.', done: '⚡ A DeLorean está abastecida. Volte ao seu lugar!' }[ph];
+      return `${vHeader()}${cenaCard(c, actLine(c), plain(c.titulo), '', 'var(--green)')}
+        <div class="panel center"><div class="countdown green ${ph === 'done' ? 'hurry' : ''}" id="ivCd">${fmt(ivLeft(c))}</div><p class="muted" style="margin-top:12px">${esc(msg)}</p></div>
+        <div class="panel"><p class="myans" style="margin-top:0">☕ ${esc(c.texto)}</p></div>`;
+    }
+    if (c.kind === 'mph') {
+      const arrived = l.at && serverNow() - l.at >= MPH_MS;
+      return arrived ? `${vHeader()}<div class="panel glow msgbox"><div class="e">🏁</div><h2>${esc(c.chegada)}</h2><p>${esc(c.depois)}</p><div class="docyear">2027</div></div>`
+        : cenaLook(c, '88 MPH', '', l.at ? '⚡ Acelerando…' : `${esc(c.antes)}<br>👀 Olhe para o telão.`);
+    }
+    if (c.kind === 'reconhecimento') {
+      const win = p => (p.vencedor === undefined ? null : p.indicados[p.vencedor]);
+      if (l.fase === 'cerimonia' && c.premios[l.premio]) {
+        const p = c.premios[l.premio], w = win(p), head = cenaCard(c, `O PRÊMIO 2026 DE ${p.k}`, p.n, l.passo === 'categoria' ? `<p class="small center">${esc(p.porque)}</p>` : '');
+        if (l.passo === 'carga') return `${vHeader()}${head}
+          <div class="panel glow center"><div class="kicker">FAÇAM BARULHO!</div><p class="muted">Cada toque carrega o Flux Capacitor do telão.</p>
+            <button class="btn charge" data-action="tapCharge">⚡ CARREGAR</button>
+            <div class="ebar" style="margin-top:14px"><i id="cgBar" style="width:${((l.carga || 0) * 100).toFixed(1)}%"></i></div><p class="small" id="cgNum" style="margin-top:6px"></p></div>`;
+        if (l.passo === 'vencedor' && w) return `${vHeader()}${head}
+          <div class="panel glow center"><div class="kicker">E O PRÊMIO VAI PARA…</div><div class="polaroids"><div class="polaroid"><div class="photo">${av({ name: w.nome, photo: (w.fotos || [])[0] })}</div><div class="cap">${esc(first(w.nome))} · 2026</div></div></div>
+            <div class="pname">${esc(w.nome)}</div><p class="small" style="margin-top:6px;color:var(--cyan)">${esc(w.projeto)}</p><p class="myans">“${esc(p.citacao)}”</p></div>`;
+        const list = l.passo === 'categoria' ? '' : `<div class="panel"><div class="kicker">Indicados</div>${p.indicados.map(x => `<div class="rf-drawn"><b>${esc(x.nome)}</b><span>${esc(x.projeto)}</span></div>`).join('')}</div>`;
+        return `${vHeader()}${head}${list}<div class="panel center"><p class="muted">${l.passo === 'sorteio' ? '🥁 O raio vai cair… olhos no telão!' : '👀 Olhe para o telão.'}</p></div>`;
+      }
+      if (l.fase === 'premios' || l.fase === 'hall') {
+        return `${vHeader()}${cenaCard(c, actLine(c), l.fase === 'hall' ? c.hallTitulo : plain(c.premiosTitulo))}
+          <div class="panel"><div class="rf-list">${c.premios.map(p => { const w = p.feito && win(p); return `<div class="rf-item ${w ? 'ok' : ''}" style="--c:var(--yellow)"><b>${w ? '🏆' : '✉️'}</b><span>${esc(p.n)}<small>${w ? `${esc(w.nome)} · ${esc(w.projeto)}` : esc(p.k)}</small></span></div>`; }).join('')}</div></div>
+          <div class="panel center"><p class="muted">👀 Olhe para o telão.</p></div>`;
+      }
+      return cenaLook(c, c.name, l.fase === 'tributo' ? c.fala : '', l.fase === 'tributo' ? '🎬 Tributo · olhe para o telão.' : '');
+    }
+    if (c.kind === 'boasvindas') return cenaLook(c, 'Boas-vindas', (c.pessoas || []).map(p => p.nome).join(', '));
+    if (c.kind === 'almanaque') return cenaLook(c, 'Jornada 2026', c.quem, l.pagina ? `📄 ${c.stats.entregues} entregas · ${esc(c.stats.beneficiosTxt)} em benefícios<br>👀 Olhe para o telão.` : l.mes >= 0 ? `📅 ${esc(c.meses[l.mes])} de 2026<br>👀 Olhe para o telão.` : '');
+    if (c.kind === 'visao') return cenaLook(c, plain(c.titulo), c.quem);
+    if (c.kind === 'manifesto') return cenaLook(c, 'Manifesto 2027', c.quem, `${esc(c.titulo)} <b style="color:var(--yellow)">${esc(c.pergunta)}</b><br>👀 Olhe para o telão.`);
+    return cenaLook(c, plain(c.titulo || c.name), c.quem);
+  }
   // Bloco de fala: o celular mostra o nome e o tema do bloco e fica quieto.
   function vStage() {
     const st = S.state.stage || {}, theme = (st.theme || '').trim();
@@ -404,7 +511,7 @@
 
   function vSplash() {
     return `<div class="spacer"></div>${logo()}
-      <p class="muted center" style="margin-top:18px">Três viagens no tempo, três conversas.</p>
+      <p class="muted center" style="margin-top:18px">CDIO HC + BPC · Townhall 2026</p>
       <div class="spacer"></div>
       <button class="btn" data-action="start">⚡ Embarcar na DeLorean</button>`;
   }
@@ -552,12 +659,13 @@
     </svg></div>`;
   }
   function questionCard(g, round) {
-    const q = g.queue[g.position], era = roundEra(round), n = g.queue.length;
+    const q = g.queue[g.position];
     if (!q) return `<div class="question"><div class="ic">🛸</div><div class="k">SEM PERGUNTAS</div><div class="q">O banco de perguntas está vazio. Conversem livremente!</div></div>`;
-    const eraQ = S.state.conn.eras[q.era] || era;
-    return `<div class="question" id="qcard">
-      <div class="ic">${esc(eraQ.icon || '⚡')}</div>
-      <div class="k">PERGUNTA ${g.position + 1}${n ? ' DE ' + n : ''} · ${esc(eraQ.label)}</div>
+    // só a pergunta e a categoria dela: a tela não mostra quantas perguntas já foram nem quantas faltam
+    const cat = ((S.state.conn.cats || {})[q.cat]) || { icon: '⚡', label: '', color: '' };
+    return `<div class="question" id="qcard" ${cat.color ? `style="--qc:${esc(cat.color)}"` : ''}>
+      <div class="ic">${esc(cat.icon || '⚡')}</div>
+      ${cat.label ? `<div class="k">${esc(cat.label)}</div>` : ''}
       <div class="q">${esc(q.text)}</div>
     </div>`;
   }
@@ -568,7 +676,7 @@
       const card = $('#qcard'); if (card) card.dataset.pos = String(g.position);
       const prev = $('#qprev'), next = $('#qnext');
       if (prev) prev.disabled = g.position <= 0;
-      if (next) { next.disabled = g.position >= g.queue.length - 1; next.textContent = g.position >= g.queue.length - 1 ? 'Última pergunta' : 'Próxima →'; }
+      if (next) next.disabled = g.position >= g.queue.length - 1;
       if (animate) buzz(25);
     }
   }
@@ -613,7 +721,7 @@
           <div id="qbox">${questionCard(g, r)}</div>
           <div class="qnav">
             <button class="btn ghost prev" id="qprev" data-action="prev" ${g.position <= 0 ? 'disabled' : ''}>←</button>
-            <button class="btn" id="qnext" data-action="next" ${g.position >= g.queue.length - 1 ? 'disabled' : ''}>${g.position >= g.queue.length - 1 ? 'Última pergunta' : 'Próxima →'}</button>
+            <button class="btn" id="qnext" data-action="next" ${g.position >= g.queue.length - 1 ? 'disabled' : ''}>Próxima →</button>
           </div>`;
       }
       const last = r >= c.totalRounds;
@@ -683,6 +791,12 @@
       if (viewKey() !== S.lastKey) maybeRender();
       return;
     }
+    const cn = currentCena();
+    if (cn) { // cenas do deck: cronômetro do intervalo; o fim do prazo e a chegada aos 88 viram a tela sozinhos
+      const cd = $('#ivCd'); if (cd && cn.kind === 'intervalo') cd.textContent = fmt(ivLeft(cn));
+      if (!warp._hold && viewKey() !== S.lastKey) maybeRender();
+      return;
+    }
     const c = S.state.conn, t = c.timer; if (!t) return;
     const left = t.paused ? t.remaining : Math.max(0, Math.round((t.endsAt - serverNow()) / 1000));
     const pt = $('#pauseTag'); if (pt) pt.style.display = t.paused ? 'inline-block' : 'none';
@@ -747,6 +861,12 @@
           finally { S.rfSending = false; maybeRender(true); }
           break;
         }
+        case 'tapCharge': { // cada toque soma energia no telão (o servidor limita a 12 por segundo por pessoa)
+          const c = currentCena(); if (!c || !c.live) break;
+          buzz(12); el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit');
+          S.socket.emit('cena:tap', { token: S.token });
+          break;
+        }
         case 'pick': S.pick = S.people.find(p => p.id === +el.dataset.id) || null; maybeRender(true); break;
         case 'unpick': S.pick = null; maybeRender(true); break;
         case 'checkin': {
@@ -800,6 +920,8 @@
     if (e.target.id === 'rfQ') { S.rfQ = e.target.value; const l = $('#rfList'); if (l) l.innerHTML = vProjects(); }
   });
   document.addEventListener('change', e => { if (e.target.id === 'anon') S.anon = e.target.checked; });
+  // foto de perfil que não carregou: sai, e as iniciais que estavam por baixo aparecem
+  document.addEventListener('error', e => { const t = e.target; if (t && t.tagName === 'IMG' && t.parentNode && t.parentNode.classList.contains('av')) { t.parentNode.classList.remove('ph'); t.remove(); } }, true);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (S.socket && S.socket.connected) hello(); wakeLock(); unlockAudio(); } });
   document.addEventListener('pointerdown', unlockAudio, { passive: true });
   document.addEventListener('touchstart', unlockAudio, { passive: true });

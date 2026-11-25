@@ -86,12 +86,12 @@
     },
     // Conexões: uma linha por pergunta que cada dupla teve (as que apareceram durante a conversa)
     duplas() {
-      const rows = [['Viagem', 'Era', 'Dupla', 'Pessoa 1', 'Área 1', 'WL 1', 'Pessoa 2', 'Área 2', 'WL 2', 'Pessoa 3 (trio)', 'Ordem', 'Pergunta', 'Era da pergunta']];
+      const rows = [['Viagem', 'Era', 'Dupla', 'Pessoa 1', 'Área 1', 'WL 1', 'Pessoa 2', 'Área 2', 'WL 2', 'Pessoa 3 (trio)', 'Ordem', 'Pergunta', 'Categoria da pergunta']];
       for (const r of D.data.conexoes.rounds) for (const g of r.groups) {
         const m = g.members, base = [r.round, `${r.era.label} ${r.era.year}`, g.code, m[0] ? m[0].name : '', m[0] ? m[0].area : '', m[0] ? m[0].wl : '', m[1] ? m[1].name : '', m[1] ? m[1].area : '', m[1] ? m[1].wl : '', m[2] ? m[2].name : ''];
         const shown = g.questions.filter(q => q.shown);
         if (!shown.length) rows.push([...base, '', r.talked ? '' : '(a conversa ainda não aconteceu)', '']);
-        shown.forEach((q, i) => rows.push([...base, i + 1, q.text, q.era]));
+        shown.forEach((q, i) => rows.push([...base, i + 1, q.text, q.cat]));
       }
       return ['Conexoes_Duplas_e_Perguntas.csv', rows];
     },

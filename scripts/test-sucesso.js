@@ -124,15 +124,17 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     // ---------- roteiro do evento ----------
     const step = id => call('POST', '/api/admin/step', { id });
     const state = async () => (await call('GET', '/api/state')).json;
-    let ov = (await call('GET', '/api/admin/overview')).json; const steps = ov.settings.steps;
-    assert.deepEqual(steps.map(x => x.type), ['checkin', 'connections', 'stage', 'reflexao', 'stage', 'stage', 'sucesso', 'sucesso', 'sucesso', 'sucesso', 'doc', 'closing']);
-    const stage1 = steps.find(x => x.type === 'stage');
+    let ov = (await call('GET', '/api/admin/overview')).json; let steps = ov.settings.steps;
+    // roteiro padrão: a agenda do townhall em 4 atos (cenas do deck + Conexões, Reflexão e Sucesso)
+    assert.deepEqual(steps.map(x => (x.type === 'cena' ? 'cena:' + x.cena : x.type === 'sucesso' ? x.activity : x.type)),
+      ['checkin', 'cena:agenda', 'cena:boasvindas', 'connections', 'cena:almanaque', 'cena:ia', 'reflexao', 'cena:reconhecimento', 'cena:intervalo', 'cena:visao', 'cena:manifesto', 'd1', 'd2', 'd3', 'd4', 'doc', 'cena:mph', 'closing']);
     const of = (type, activity) => steps.find(x => x.type === type && (!activity || x.activity === activity)).id;
     assert.equal(ov.state.step, of('connections'));                 // as viagens levaram o cursor para o passo Conexões
     assert.ok(ov.sucesso.roomId); assert.equal(ov.sucesso.acts.d3.responseCount, 3);
-    // sair do passo Conexões segura a viagem; voltar solta
-    stage1.title = 'Abertura'; stage1.theme = 'O ano que passou'; stage1.speaker = 'Diretoria';
-    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { steps } }); assert.equal(r.status, 200);
+    // bloco de fala (continua disponível para adicionar ao roteiro): sair do passo Conexões segura a viagem; voltar solta
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { steps: [...steps, { type: 'stage', title: 'Abertura', theme: 'O ano que passou', speaker: 'Diretoria' }] } }); assert.equal(r.status, 200);
+    ov = (await call('GET', '/api/admin/overview')).json; steps = ov.settings.steps; assert.equal(ov.state.step, of('connections'));
+    const stage1 = steps.find(x => x.type === 'stage'); assert.ok(stage1);
     r = await call('POST', '/api/admin/action', { type: 'setAudio', mode: 'music', volume: 70 }); assert.equal(r.status, 200);
     st = await state(); assert.equal(st.audio.mode, 'music'); assert.equal(st.audio.volume, 70);
     r = await step(stage1.id); assert.equal(r.status, 200);

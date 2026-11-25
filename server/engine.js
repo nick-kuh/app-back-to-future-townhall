@@ -3,32 +3,44 @@
 const crypto = require('crypto');
 const { db, kvGet, kvSet, seedIfEmpty, resetQuestions } = require('./db');
 const { generateRounds, checkGroups, pairKey } = require('./matching');
-const { buildQueues, ERAS, eraOfRound } = require('./queues');
+const { buildQueues, ERAS, eraOfRound, CATEGORIES, catKey, catOfRound, QUESTION_MODES } = require('./queues');
 const { computeResults, POINTS } = require('./results');
+const { KINDS: CENA_KINDS, META: CENA_META } = require('./cenas');
+const { createFotos } = require('./fotos');
 
 const TOTAL_ROUNDS = 3;
-const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing', 'stage', 'reflexao', 'doc'];
+const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing', 'stage', 'reflexao', 'doc', 'cena'];
 const AUDIO_MODES = ['off', 'music', 'ambient'];
 
 // Roteiro do evento: a ordem dos passos que o Doc percorre no painel ("Próximo ▶").
 //  checkin · stage (bloco de fala: título, tema, quem fala) · connections · sucesso (dinâmica d1..d4)
 //  reflexao (as paradas com votação em projetos) · doc (Visão 2027: o Doc chega de 2027 e resume as respostas do Sucesso)
+//  cena (uma cena do deck do townhall: plano de voo, boas-vindas, almanaque 2026, IA, reconhecimento, intervalo,
+//        estratégia 2027, manifesto, 88 MPH; o conteúdo e os comandos ficam em server/cenas.js)
 //  message (aviso/intervalo) · standby (olhos no telão) · closing
-const STEP_TYPES = ['checkin', 'stage', 'connections', 'sucesso', 'doc', 'reflexao', 'message', 'standby', 'closing'];
+const STEP_TYPES = ['checkin', 'stage', 'connections', 'sucesso', 'doc', 'reflexao', 'cena', 'message', 'standby', 'closing'];
 const SUCESSO_ACTS = ['d1', 'd2', 'd3', 'd4'];
 const clip = (v, n) => String(v ?? '').trim().slice(0, n);
-function defaultSteps(stages) {
-  const st = i => Object.assign({ title: `Bloco ${i + 1}`, theme: '', speaker: '' }, (stages || [])[i] || {});
+// Roteiro padrão: a agenda do townhall (deck v18) em 4 atos. Conexões, Reflexão e as dinâmicas do Sucesso são os
+// blocos interativos de sempre; os outros passos são as cenas do deck.
+//   ATO I · Reconectar: chegada (check-in) · plano de voo · boas-vindas · Conexões
+//   ATO II · Rebobinar 2026: Jornada 2026 (almanaque) · IA em 2026 + Reflexão
+//   ATO III · Reconhecer: Reconhecimento 2026 · intervalo
+//   ATO IV · Avançar para 2027: Visão 2027 (estratégia) · Manifesto 2027 + Sucesso 01 a 04 + o Doc · 88 MPH · créditos
+function defaultSteps() {
+  const cena = k => ({ type: 'cena', cena: k });
   return [
     { type: 'checkin' },                // a porta de entrada: é por aqui que todo mundo faz o login
+    cena('agenda'), cena('boasvindas'),
     { type: 'connections' },
-    { type: 'stage', ...st(0) },
+    cena('almanaque'), cena('ia'),
     { type: 'reflexao' },
-    { type: 'stage', ...st(1) },
-    { type: 'stage', ...st(2) },
+    cena('reconhecimento'), cena('intervalo'),
+    cena('visao'), cena('manifesto'),
     { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' },
-    { type: 'doc' },                    // Visão 2027: o Doc fecha o Sucesso com o resumo do que todo mundo escreveu
-    { type: 'closing' },                // conclusão
+    { type: 'doc' },                    // Visão 2027 do Doc: fecha o Sucesso com o resumo do que todo mundo escreveu
+    cena('mph'),
+    { type: 'closing' },                // créditos
   ].map((x, i) => ({ id: 'p' + (i + 1), ...x }));
 }
 // Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões, Reflexão,
@@ -38,7 +50,8 @@ function cleanSteps(list) {
   for (const raw of (Array.isArray(list) ? list : []).slice(0, 40)) {
     if (!raw || !STEP_TYPES.includes(raw.type)) continue;
     if (raw.type === 'sucesso' && !SUCESSO_ACTS.includes(raw.activity)) continue;
-    const unique = ['connections', 'reflexao', 'doc'].includes(raw.type) ? raw.type : raw.type === 'sucesso' ? raw.activity : null;
+    if (raw.type === 'cena' && !CENA_KINDS.includes(raw.cena)) continue;
+    const unique = ['connections', 'reflexao', 'doc'].includes(raw.type) ? raw.type : raw.type === 'sucesso' ? raw.activity : raw.type === 'cena' ? 'cena:' + raw.cena : null;
     if (unique) { if (once.has(unique)) continue; once.add(unique); }
     let id = typeof raw.id === 'string' && /^[a-z0-9]{1,16}$/i.test(raw.id) && !ids.has(raw.id) ? raw.id : null;
     while (!id || ids.has(id)) id = 'p' + crypto.randomBytes(4).toString('hex');
@@ -47,6 +60,7 @@ function cleanSteps(list) {
     if (raw.type === 'stage') { step.title = clip(raw.title, 60) || 'Bloco'; step.theme = clip(raw.theme, 200); step.speaker = clip(raw.speaker, 80); }
     if (raw.type === 'message') { step.emoji = clip(raw.emoji, 8) || '📣'; step.title = clip(raw.title, 80) || 'Aviso'; step.body = clip(raw.body, 600); }
     if (raw.type === 'sucesso') step.activity = raw.activity;
+    if (raw.type === 'cena') step.cena = raw.cena;
     out.push(step);
   }
   return out;
@@ -54,9 +68,10 @@ function cleanSteps(list) {
 const PHASES = ['idle', 'ready', 'matching', 'talk', 'roundEnd', 'ranking', 'results'];
 
 const DEFAULT_SETTINGS = {
-  eventName: 'Townhall · De Volta ao Futuro',
-  roundSeconds: 240,      // conversa
-  findSeconds: 60,        // tempo para a dupla se encontrar antes da conversa
+  eventName: 'CDIO HC + BPC · Townhall 2026',
+  roundSeconds: 120,      // conversa de cada viagem (2 minutos)
+  findSeconds: 40,        // tempo para a dupla se encontrar antes da conversa
+  questionMode: 'rodada', // perguntas sorteadas: 'rodada' = uma categoria por viagem · 'mix' = as três categorias misturadas em toda viagem
   breakSeconds: 6,        // "88 MPH!" entre uma viagem e a próxima
   rankingSeconds: 120,    // avaliação fecha sozinha depois disso (ou quando todos avaliarem)
   autoFlow: true,         // viagens e avaliação avançam sozinhas
@@ -112,6 +127,41 @@ const normText = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 class Engine {
   constructor() {
     seedIfEmpty();
+    // Atualização da lista pedida pela organização (vale uma vez, para bancos que já tinham a lista antiga):
+    // sai Jonathan Toledo; entram Evelyn Aguiar e Renato Malvino.
+    const added = []; // quem entrou na lista agora (para buscar a foto no pacote da instalação)
+    if (!kvGet('peopleV2', false)) {
+      const byName = name => db.prepare('SELECT id FROM people WHERE name = ?').get(name);
+      const out = byName('Jonathan Toledo');
+      if (out) {
+        // quem já está em duplas sorteadas não pode sumir da lista: fica marcado como ausente
+        if (this.allGroups().some(g => g.members.includes(out.id))) db.prepare('UPDATE people SET active = 0 WHERE id = ?').run(out.id);
+        else for (const sql of ['DELETE FROM people WHERE id = ?', 'DELETE FROM rankings WHERE person_id = ?', 'DELETE FROM results WHERE person_id = ?', 'DELETE FROM seen WHERE person_id = ?', 'DELETE FROM photos WHERE person_id = ?']) db.prepare(sql).run(out.id);
+      }
+      let order = db.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM people').get().m;
+      for (const p of require('./seed/people').filter(x => ['Evelyn Aguiar', 'Renato Malvino'].includes(x.name))) {
+        if (!byName(p.name)) added.push(Number(db.prepare('INSERT INTO people (name, email, wl, team, manager, area, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)').run(p.name, p.email, p.wl, p.team, p.manager, p.area, ++order).lastInsertRowid));
+      }
+      kvSet('peopleV2', true);
+    }
+    // Acerto dos dois que entraram (vale uma vez, e só se a linha ainda estiver como entrou): a Evelyn é do time
+    // Consumer do BPC, com o Felipe Resck; a área do Renato é Tech Foundation, com a Claudia Meira.
+    if (!kvGet('peopleV3', false)) {
+      db.prepare("UPDATE people SET team = 'CDIO BPC', manager = 'Felipe Resck' WHERE name = 'Evelyn Aguiar' AND team = '' AND manager = ''").run();
+      db.prepare("UPDATE people SET area = 'Tech Foundation' WHERE name = 'Renato Malvino' AND area = 'Architecture' AND team = 'Tech Found'").run();
+      kvSet('peopleV3', true);
+    }
+    // fotos de perfil: guardadas no banco; a pasta de fotos da instalação (se houver) entra quando o banco começa vazio
+    this.fotos = createFotos();
+    { // fotos que acompanham a instalação: a pasta (se houver) e o pacote criptografado (aberto com FOTOS_KEY)
+      const people = db.prepare('SELECT id, name FROM people').all();
+      this.fotos.seedFromDir(people);
+      const r = this.fotos.seedFromPack(people);
+      for (const id of added) this.fotos.seedFor(id, people); // quem entrou na lista agora ganha a foto que já está no pacote
+      const quiet = process.env.DB_PATH === ':memory:'; // nos testes, sem avisos
+      if (r && r.locked) { if (!quiet) console.warn(`[fotos] o pacote de fotos da instalação não foi aberto: ${r.reason}. O app segue com as iniciais.`); }
+      else if (r && !quiet) console.log(`[fotos] ${r.matched} fotos de perfil carregadas do pacote da instalação.`);
+    }
     const saved = kvGet('state', {});
     this.state = {
       block: BLOCKS.includes(saved.block) ? saved.block : 'welcome',
@@ -132,9 +182,26 @@ class Engine {
     delete this.state.conn.talk; // modelo antigo
     this.settings = Object.assign({}, DEFAULT_SETTINGS, kvGet('settings', {}));
     this.settings.skip = this.cleanSkip(this.settings.skip);
+    if (!QUESTION_MODES.includes(this.settings.questionMode)) this.settings.questionMode = 'rodada';
+    // Ajustes das Conexões pedidos pela organização (valem uma vez; o que for mudado depois no painel fica):
+    // 2 minutos de conversa por viagem e 40 segundos para a dupla se encontrar.
+    if (!this.settings.connV2) {
+      this.settings.roundSeconds = DEFAULT_SETTINGS.roundSeconds; this.settings.findSeconds = DEFAULT_SETTINGS.findSeconds;
+      this.settings.connV2 = true;
+    }
+    // Banco de perguntas antigo (eras presente/passado/futuro) dá lugar ao banco do "Speed Dating" em três categorias.
+    if (db.prepare("SELECT COUNT(*) AS n FROM questions WHERE era IN ('presente', 'passado', 'futuro')").get().n && !['matching', 'talk'].includes(this.state.conn.phase)) {
+      resetQuestions(); db.exec('DELETE FROM seen WHERE question_id NOT IN (SELECT id FROM questions)');
+    }
     if (this.state.screen.scene === 'clock') this.state.screen.scene = 'auto'; // o modo "relógio" do telão saiu
+    // Roteiro na agenda do townhall (deck v18): vale uma vez para quem tinha o roteiro antigo guardado; depois,
+    // o que for mudado em Preparar → Roteiro fica.
+    if (!this.settings.agendaV18) {
+      this.settings.steps = null; this.settings.agendaV18 = true;
+      if (!kvGet('settings', {}).eventName || this.settings.eventName === 'Townhall · De Volta ao Futuro') this.settings.eventName = DEFAULT_SETTINGS.eventName;
+    }
     const steps = cleanSteps(this.settings.steps);
-    this.settings.steps = steps.length ? steps : defaultSteps(this.settings.stages); // versões antigas guardavam só os blocos de fala
+    this.settings.steps = steps.length ? steps : defaultSteps();
     delete this.settings.stages;
     // roteiros salvos antes de existir o bloco Reflexão ganham o passo uma vez (depois do primeiro bloco de fala)
     if (!this.settings.reflexaoStep) {
@@ -170,7 +237,7 @@ class Engine {
     return {
       id: r.id, name: r.name, email: r.email || '', wl: r.wl || '', team: r.team || '', manager: r.manager || '',
       area: r.area || '', active: !!r.active, checkedInAt: r.checked_in_at || null, token: r.token || null,
-      form: parse(r.form_json, null), sortOrder: r.sort_order || 0,
+      form: parse(r.form_json, null), sortOrder: r.sort_order || 0, photo: this.fotos.url(r.id),
     };
   }
   listPeople() {
@@ -192,6 +259,7 @@ class Engine {
   publicPerson(p, withHints = false, full = false) {
     if (!p) return null;
     const out = full ? { id: p.id, name: p.name, area: p.area, wl: p.wl, team: p.team } : { id: p.id, name: p.name };
+    if (p.photo) out.photo = p.photo; // foto de perfil (quem não tem aparece com as iniciais)
     if (withHints && this.settings.showFormHints && p.form) {
       out.hints = Object.entries(p.form).filter(([, v]) => String(v || '').trim()).map(([q, a]) => ({ q, a: String(a) }));
     }
@@ -224,6 +292,7 @@ class Engine {
     const max = db.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM people').get().m;
     const r = db.prepare('INSERT INTO people (name, email, wl, team, manager, area, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(name, String(f.email || '').trim().toLowerCase(), normalizeWl(f.wl), String(f.team || '').trim(), String(f.manager || '').trim(), String(f.area || '').trim(), max + 1);
+    this.fotos.seedFor(r.lastInsertRowid, this.listPeople()); // se as fotos da instalação têm a foto dessa pessoa, ela já entra com foto
     this.commit();
     return this.personById(r.lastInsertRowid);
   }
@@ -241,6 +310,7 @@ class Engine {
     if (f.checkedIn !== undefined) { fields.push('checked_in_at = ?'); vals.push(f.checkedIn ? (p.checkedInAt || iso()) : null); if (!f.checkedIn) { fields.push('token = ?'); vals.push(null); } }
     if (f.form !== undefined) { fields.push('form_json = ?'); vals.push(f.form ? JSON.stringify(f.form) : null); }
     if (fields.length) { vals.push(p.id); db.prepare(`UPDATE people SET ${fields.join(', ')} WHERE id = ?`).run(...vals); }
+    if (f.name !== undefined) this.fotos.seedFor(p.id, this.listPeople()); // nome corrigido: pode passar a casar com uma foto da instalação
     this.commit();
     return this.personById(p.id);
   }
@@ -250,8 +320,16 @@ class Engine {
     db.prepare('DELETE FROM rankings WHERE person_id = ?').run(Number(id));
     db.prepare('DELETE FROM results WHERE person_id = ?').run(Number(id));
     db.prepare('DELETE FROM seen WHERE person_id = ?').run(Number(id));
+    this.fotos.remove(id);
     this.commit();
   }
+  /* ---------------- fotos de perfil ---------------- */
+  // Várias de uma vez (o nome do arquivo diz de quem é), uma só para uma pessoa, ou remover.
+  importPhotos(files) { const r = this.fotos.importMany(files, this.listPeople()); this.commit(); return r; }
+  setPhoto(id, data) { if (!this.personById(id)) throw new Error('Pessoa não encontrada.'); this.fotos.setOne(id, data); this.commit(); }
+  removePhoto(id) { this.fotos.remove(id); this.commit(); }
+  // A foto de alguém pelo nome escrito em uma cena ("Caio Souza", "Monserrat Diaz"): só quando o nome aponta para uma pessoa só
+  photoByName(name, people) { const p = this.fotos.match(name, people || this.listPeople()); return p ? this.fotos.url(p.id) : null; }
   importPeople(rows, mode = 'merge') {
     const clean = rows.map(r => ({
       name: String(r.name || '').trim(), email: String(r.email || '').trim().toLowerCase(), wl: normalizeWl(r.wl),
@@ -276,6 +354,7 @@ class Engine {
         else { ins.run(r.name, r.email, r.wl, r.team, r.manager, r.area, ++order); inserted++; }
       }
       db.exec('COMMIT');
+      this.fotos.prune(); // lista substituída: as fotos de quem saiu vão junto
       this.commit();
       return { inserted, updated, total: clean.length };
     } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -308,7 +387,8 @@ class Engine {
 
   /* ---------------- perguntas ---------------- */
   listQuestions() {
-    return db.prepare('SELECT * FROM questions ORDER BY sort_order, id').all().map(q => ({ id: q.id, text: q.text, era: q.era, active: !!q.active, sortOrder: q.sort_order }));
+    // a coluna "era" do banco guarda a categoria da pergunta (quebragelo | conexao | alem)
+    return db.prepare('SELECT * FROM questions ORDER BY sort_order, id').all().map(q => ({ id: q.id, text: q.text, cat: catKey(q.era) || 'quebragelo', active: !!q.active, sortOrder: q.sort_order }));
   }
   guardQuestions() {
     if (this.state.conn.phase === 'talk') throw new Error('Há uma conversa em andamento. Encerre-a antes de mexer no banco de perguntas.');
@@ -317,19 +397,19 @@ class Engine {
     if (this.state.conn.phase === 'matching') this.assignQueues(this.state.conn.round);
     this.commit();
   }
-  addQuestion({ text, era }) {
+  addQuestion({ text, cat, era }) {
     this.guardQuestions();
     const t = String(text || '').trim();
     if (!t) throw new Error('Texto da pergunta obrigatório.');
     const max = db.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM questions').get().m;
-    db.prepare('INSERT INTO questions (text, era, sort_order) VALUES (?, ?, ?)').run(t, ERAS[era] ? era : 'presente', max + 1);
+    db.prepare('INSERT INTO questions (text, era, sort_order) VALUES (?, ?, ?)').run(t, catKey(cat ?? era) || 'quebragelo', max + 1);
     this.afterQuestionsChange();
   }
   updateQuestion(id, f) {
     this.guardQuestions();
     const fields = [], vals = [];
     if (f.text !== undefined) { const t = String(f.text).trim(); if (!t) throw new Error('Texto da pergunta obrigatório.'); fields.push('text = ?'); vals.push(t); }
-    if (f.era !== undefined) { fields.push('era = ?'); vals.push(ERAS[f.era] ? f.era : 'presente'); }
+    if (f.cat !== undefined || f.era !== undefined) { fields.push('era = ?'); vals.push(catKey(f.cat ?? f.era) || 'quebragelo'); }
     if (f.active !== undefined) { fields.push('active = ?'); vals.push(bool(f.active)); }
     if (fields.length) { vals.push(Number(id)); db.prepare(`UPDATE questions SET ${fields.join(', ')} WHERE id = ?`).run(...vals); }
     this.afterQuestionsChange();
@@ -349,14 +429,15 @@ class Engine {
       for (const q of list) {
         const t = String(q.text || '').trim();
         if (!t) continue;
-        const era = ERAS[q.era] ? q.era : 'presente';
+        const cat = catKey(q.cat ?? q.era) || 'quebragelo';
         const active = (q.active === false || q.active === 0) ? 0 : 1;
         const found = byText.get(normText(t));
-        if (found && !keep.has(found.id)) { upd.run(t, era, active, ++i, found.id); keep.add(found.id); }
-        else { const r = ins.run(t, era, active, ++i); keep.add(Number(r.lastInsertRowid)); }
+        if (found && !keep.has(found.id)) { upd.run(t, cat, active, ++i, found.id); keep.add(found.id); }
+        else { const r = ins.run(t, cat, active, ++i); keep.add(Number(r.lastInsertRowid)); }
       }
       const del = db.prepare('DELETE FROM questions WHERE id = ?');
       for (const q of existing) if (!keep.has(q.id)) del.run(q.id);
+      db.exec('DELETE FROM seen WHERE question_id NOT IN (SELECT id FROM questions)');
       db.exec('COMMIT');
     } catch (err) { db.exec('ROLLBACK'); throw err; }
     this.afterQuestionsChange();
@@ -408,7 +489,7 @@ class Engine {
     const questions = this.listQuestions();
     const seenByPerson = {};
     for (const s of db.prepare('SELECT person_id, question_id FROM seen').all()) (seenByPerson[s.person_id] = seenByPerson[s.person_id] || []).push(s.question_id);
-    const queues = buildQueues({ groups: groups.map(g => g.members), round, questions, seenByPerson });
+    const queues = buildQueues({ groups: groups.map(g => g.members), round, questions, seenByPerson, mode: this.settings.questionMode });
     const upd = db.prepare('UPDATE groups SET queue = ?, position = 0 WHERE id = ?');
     groups.forEach((g, i) => upd.run(JSON.stringify(queues[i]), g.id));
   }
@@ -467,7 +548,7 @@ class Engine {
   startTalk() {
     const c = this.state.conn;
     if (c.phase !== 'matching') throw new Error('Revele as duplas antes de iniciar a conversa.');
-    const dur = Math.max(10, Number(this.settings.roundSeconds) || 240);
+    const dur = Math.max(10, Number(this.settings.roundSeconds) || 120);
     c.phase = 'talk';
     c.played = Math.max(c.played || 0, c.round);
     this.startTimer('talk', dur);
@@ -641,7 +722,8 @@ class Engine {
   }
   updateSettings(partial) {
     const s = this.settings;
-    if (partial.roundSeconds !== undefined) s.roundSeconds = Math.max(10, Math.min(3600, Number(partial.roundSeconds) || 240));
+    if (partial.roundSeconds !== undefined) s.roundSeconds = Math.max(10, Math.min(3600, Number(partial.roundSeconds) || 120));
+    if (partial.questionMode !== undefined) { s.questionMode = QUESTION_MODES.includes(partial.questionMode) ? partial.questionMode : 'rodada'; if (this.state.conn.phase === 'matching') this.assignQueues(this.state.conn.round); }
     if (partial.findSeconds !== undefined) s.findSeconds = Math.max(0, Math.min(600, Number(partial.findSeconds) || 0));
     if (partial.breakSeconds !== undefined) s.breakSeconds = Math.max(0, Math.min(120, Number(partial.breakSeconds) || 0));
     if (partial.rankingSeconds !== undefined) s.rankingSeconds = Math.max(0, Math.min(1800, Number(partial.rankingSeconds) || 0));
@@ -681,12 +763,23 @@ class Engine {
     this.state.screen = { scene: ok.includes(scene) ? scene : 'auto' };
     this.commit();
   }
-  resetEvent() {
+  // Reiniciar tudo: o roteiro volta para o primeiro passo e somem check-ins, duplas, avaliações e a mensagem do Doc.
+  // keepCheckins: as pessoas continuam a bordo (útil para recomeçar com a sala já cheia). Pessoas, fotos, perguntas,
+  // roteiro e textos não são tocados. (Reflexão, Sucesso e cenas são reiniciados pelo servidor, que conhece esses blocos.)
+  resetEvent({ keepCheckins = false } = {}) {
     this.resetConnections();
-    db.exec("UPDATE people SET checked_in_at = NULL, token = NULL");
-    this.state.presentation = null; this.state.returnStep = null;
+    if (!keepCheckins) db.exec("UPDATE people SET checked_in_at = NULL, token = NULL");
+    this.state.presentation = null; this.state.returnStep = null; this.state.drawn = {};
     this.state.doc = defaultDoc();
+    this.state.screen = Object.assign({}, DEFAULT_SCREEN);
     this.applyStep(this.settings.steps[0].id); // o roteiro volta para o começo
+  }
+  // Reiniciar o check-in: todo mundo escolhe o nome de novo. As Conexões vão junto, porque as duplas dependem de quem está a bordo.
+  resetCheckins() {
+    db.exec('DELETE FROM groups; DELETE FROM seen; DELETE FROM rankings; DELETE FROM results;');
+    this.clearTimer(); this.state.conn = defaultConn();
+    db.exec("UPDATE people SET checked_in_at = NULL, token = NULL");
+    this.commit();
   }
   // utilidades de teste
   testCheckinAll() { db.prepare('UPDATE people SET checked_in_at = COALESCE(checked_in_at, ?) WHERE active = 1').run(iso()); this.commit(); }
@@ -851,6 +944,10 @@ class Engine {
       case 'closing': this.state.block = 'closing'; notice = { title: 'Fim da viagem', body: this.settings.closingText }; break;
       case 'reflexao': this.state.block = 'reflexao'; notice = { title: 'Reflexão', body: 'Olhe para o seu celular.' }; break;
       case 'doc': this.state.block = 'doc'; notice = { title: 'Visão 2027', body: 'Olhe para o telão: o Doc está chegando de 2027.' }; break;
+      case 'cena': // cena do deck: atenção no telão; o som segue a regra dos blocos de fala (no intervalo, a música entra)
+        this.state.block = 'cena';
+        if (this.settings.stageMutes) this.state.audio.mode = step.cena === 'intervalo' ? 'music' : 'off';
+        notice = { title: CENA_META[step.cena].name, body: 'Olhe para o telão.' }; break;
       default: break; // sucesso: a apresentação entra em seguida
     }
     if (step.type === 'connections') this.releaseJourney(); else this.holdJourney();
@@ -889,7 +986,7 @@ class Engine {
       counts: { checkedIn: checked.length, total: active.length },
       conn: {
         phase: c.phase, round: c.round, totalRounds: TOTAL_ROUNDS, played: c.played || 0,
-        era: eraOfRound(Math.max(1, c.round || 1)), eras: ERAS, timer: c.timer, worstLevel: c.worstLevel,
+        era: eraOfRound(Math.max(1, c.round || 1)), eras: ERAS, cats: CATEGORIES, timer: c.timer, worstLevel: c.worstLevel,
         generatedAt: c.generatedAt, resultsAt: c.resultsAt, rankingDone, rankingTotal,
         mutualPairs: (c.phase === 'results' && this.settings.showMutualOnScreen) ? this.mutualPairs() : [],
         mutualCount: c.phase === 'results' ? this.mutualPairs().length : 0,
@@ -898,9 +995,9 @@ class Engine {
       presentation: this.presentation(),
       doc: this.docPublic(),
       stage: this.stageInfo(),
-      step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length },
+      step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length, type: this.currentStep().type, cena: this.currentStep().cena || null },
       audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', beeps: this.state.audio.beeps !== false, musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
-      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 15,
+      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, questionMode: this.settings.questionMode, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 15,
         docVoice: this.settings.docVoice !== false, docVoiceName: this.settings.docVoiceName || '', docRate: this.settings.docRate || 1, docVideoUrl: this.settings.docVideoUrl || '', docVideoFull: !!this.settings.docVideoFull },
       now: now(),
     };
@@ -929,7 +1026,7 @@ class Engine {
         group = {
           id: g.id, round: c.round, code: String(g.idx + 1).padStart(2, '0'),
           partners: g.members.filter(id => id !== p.id).map(id => this.publicPerson(people[id], true)).filter(Boolean),
-          queue: g.queue.map(id => questions[id]).filter(Boolean).map(q => ({ id: q.id, text: q.text, era: q.era })),
+          queue: g.queue.map(id => questions[id]).filter(Boolean).map(q => ({ id: q.id, text: q.text, cat: q.cat })),
           position: Math.min(g.position, Math.max(0, g.queue.length - 1)),
           flags: checkGroups([g.members], people).detail[0],
         };
@@ -950,16 +1047,16 @@ class Engine {
     const c = this.state.conn, played = c.played || 0;
     const byId = Object.fromEntries(this.listPeople().map(p => [p.id, p]));
     const who = id => { const p = byId[id]; return p ? { id: p.id, name: p.name, area: p.area, wl: p.wl, team: p.team } : { id, name: '(removido)', area: '', wl: '', team: '' }; };
-    const questions = Object.fromEntries(db.prepare('SELECT id, text, era FROM questions').all().map(q => [q.id, q]));
+    const questions = Object.fromEntries(this.listQuestions().map(q => [q.id, { ...q, catName: CATEGORIES[q.cat].name }]));
     const groups = this.allGroups(), rankings = this.rankingsMap(), code = g => String(g.idx + 1).padStart(2, '0');
     const results = Object.fromEntries(db.prepare('SELECT * FROM results').all().map(r => [r.person_id, r]));
     const rounds = [];
     for (let r = 1; r <= TOTAL_ROUNDS; r++) {
       const era = eraOfRound(r), talked = r <= played; // a conversa da viagem aconteceu (ou está acontecendo)
-      rounds.push({ round: r, era: { label: era.label, year: era.year }, talked, groups: groups.filter(g => g.round === r).map(g => ({
+      rounds.push({ round: r, era: { label: era.label, year: era.year }, cat: this.settings.questionMode === 'mix' ? 'As três categorias' : catOfRound(r).name, talked, groups: groups.filter(g => g.round === r).map(g => ({
         code: code(g), members: g.members.map(who),
         // fila de perguntas da dupla; "shown" = até onde a dupla chegou durante a conversa
-        questions: g.queue.map((id, i) => ({ text: (questions[id] || {}).text || '(pergunta removida)', era: (questions[id] || {}).era || '', shown: talked && i <= g.position })),
+        questions: g.queue.map((id, i) => ({ text: (questions[id] || {}).text || '(pergunta removida)', cat: (questions[id] || {}).catName || '', shown: talked && i <= g.position })),
       })) });
     }
     const ids = [...new Set(groups.filter(g => g.round <= played).flatMap(g => g.members))];
@@ -987,7 +1084,7 @@ class Engine {
       const groups = this.groupsOfRound(r);
       const chk = checkGroups(groups.map(g => g.members), byId);
       rounds.push({
-        round: r, era: eraOfRound(r), level: (c.levels || {})[r] || null, check: { ok: chk.ok, total: chk.total },
+        round: r, era: eraOfRound(r), cat: catOfRound(r), level: (c.levels || {})[r] || null, check: { ok: chk.ok, total: chk.total },
         groups: groups.map((g, i) => ({
           id: g.id, code: String(g.idx + 1).padStart(2, '0'), position: g.position, queueLen: g.queue.length,
           currentQuestion: g.queue.length ? (db.prepare('SELECT text FROM questions WHERE id = ?').get(g.queue[Math.min(g.position, g.queue.length - 1)]) || {}).text : null,
@@ -1000,8 +1097,8 @@ class Engine {
     })).filter(r => r.person);
     return {
       state: this.state, settings: this.settings, now: now(),
-      people: people.map(p => ({ id: p.id, name: p.name, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.active && p.checkedInAt && !inRounds.has(p.id) && !this.skips('connections', p.id)) })),
-      rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, points: POINTS,
+      people: people.map(p => ({ id: p.id, name: p.name, photo: p.photo, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.active && p.checkedInAt && !inRounds.has(p.id) && !this.skips('connections', p.id)) })),
+      rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, cats: CATEGORIES, points: POINTS, fotosSeed: this.fotos.seedStatus(),
       counts: this.publicState().counts,
     };
   }
