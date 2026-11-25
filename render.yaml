@@ -7,7 +7,7 @@ services:
     name: townhall-de-volta-ao-futuro
     runtime: docker
     repo: https://github.com/nick-kuh/app-back-to-future-townhall
-    branch: claude/nice-ptolemy-l4hnfq
+    branch: main
     plan: free
     region: virginia
     healthCheckPath: /health
