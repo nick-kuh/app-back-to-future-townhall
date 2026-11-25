@@ -26,10 +26,14 @@
   const TALK = { d2: 120, d3: 180 }; // dinâmicas com sorteio e tempo de fala (como no painel do Lucas)
   const stepTitle = x => (x.type === 'checkin' ? 'Chegada · Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : x.type === 'reflexao' ? 'Reflexão' : x.type === 'doc' ? 'Visão 2027 · o Doc' : x.type === 'cena' ? cenaMeta(x).name : 'Créditos');
   // roteiro padrão: a agenda do townhall em 4 atos (o mesmo do servidor)
+  // ("Como a IA nos ajudou" é o próprio bloco Reflexão e o "Manifesto 2027" é o bloco Sucesso: um passo só para cada)
+  const NO_TRANSITION = x => ['sucesso', 'doc', 'closing'].includes(x.type) || (x.type === 'cena' && ['boasvindas', 'reconhecimento', 'intervalo', 'visao', 'mph'].includes(x.cena)); // passos que entram direto
   const DEFAULT_STEPS = () => { const cena = k => ({ type: 'cena', cena: k }), suc = k => ({ type: 'sucesso', activity: k });
-    return [{ type: 'checkin' }, cena('agenda'), cena('boasvindas'), { type: 'connections' }, cena('almanaque'), cena('ia'), { type: 'reflexao' }, cena('reconhecimento'), cena('intervalo'),
-      cena('visao'), cena('manifesto'), suc('d1'), suc('d2'), suc('d3'), suc('d4'), { type: 'doc' }, cena('mph'), { type: 'closing' }]; };
-  const AUDIO_LABEL = { music: '🎵 Música', ambient: '🎼 Trilha', off: '🔇 Sem áudio' };
+    return [{ type: 'checkin' }, cena('agenda'), cena('boasvindas'), { type: 'connections' }, cena('almanaque'), { type: 'reflexao' }, cena('reconhecimento'), cena('intervalo'),
+      cena('visao'), suc('d1'), suc('d2'), suc('d3'), suc('d4'), { type: 'doc' }, cena('mph'), { type: 'closing' }].map(x => (NO_TRANSITION(x) ? { ...x, transition: false } : x)); };
+  const AUDIO_LABEL = { music: '🎵 Música', ambient: '🎼 Trilha', spotify: '🎧 Spotify', off: '🔇 Sem áudio' };
+  const SP = window.Spoti || null; // Spotify de quem está no painel (public/spotify.js)
+  const spState = () => (SP ? SP.state : { configured: false, connected: false, player: null, devices: [], error: '' });
 
   const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'live', prep: 'roteiro', sel: null, open: new Set(), edit: null, stepsDraft: null, round: 1, offset: 0, socket: null, peopleQ: '', connected: false, lastHtml: '', pressing: false };
 
@@ -83,7 +87,8 @@
   const PREP = [['roteiro', 'Roteiro'], ['cenas', 'Agenda e cenas'], ['reflexao', 'Reflexão'], ['people', 'Pessoas'], ['questions', 'Perguntas'], ['config', 'Ajustes'], ['tests', 'Testes']];
   function render(force) {
     if (!A.O) return;
-    renderStatus(); renderAudio();
+    if (SP) spConfigure();
+    renderStatus(); renderAudio(); micAuto();
     if (A.pressing) { clearTimeout(A.renderLater); A.renderLater = setTimeout(() => render(force), 250); return; }
     const view = A.tab === 'live' ? 'live' : 'prep-' + A.prep;
     if (!force && ['prep-config', 'prep-tests', 'prep-reflexao', 'prep-cenas'].includes(view) && $('#main').dataset.view === view) return;
@@ -138,16 +143,25 @@
   /* ---------- som: três botões sempre à mão (música animada, trilha de fundo, sem áudio) ---------- */
   function renderAudio() {
     const O = A.O; if (!O) return;
-    const a = O.state.audio || { mode: 'off', volume: 60, out: 'telao' }, key = JSON.stringify([a, O.telao]), beeps = a.beeps !== false;
-    if (window.Trilha) Trilha.apply({ mode: a.out === 'painel' ? a.mode : 'off', beeps: a.out === 'painel' && beeps, volume: a.volume, musicUrl: O.settings.musicUrl, ambientUrl: O.settings.ambientUrl });
+    const a = O.state.audio || { mode: 'off', volume: 60, out: 'telao' }, sp = spState(), pl = sp.player, beeps = a.beeps !== false;
+    const key = JSON.stringify([a, O.telao, sp.configured, sp.connected, pl && [pl.name, pl.artists, pl.playing], sp.error]);
+    const own = a.mode === 'spotify' ? 'off' : a.mode; // no modo Spotify a trilha do app fica calada (a música vem do Spotify)
+    if (window.Trilha) Trilha.apply({ mode: a.out === 'painel' ? own : 'off', beeps: a.out === 'painel' && beeps, volume: a.volume, musicUrl: O.settings.musicUrl, ambientUrl: O.settings.ambientUrl });
+    // modo Spotify: ao entrar nele o Spotify toca; ao sair, pausa (vale para o painel que está conectado ao Spotify)
+    if (SP && sp.connected && A.spMode !== undefined && A.spMode !== a.mode && Date.now() - (A.spQuiet || 0) > 3000) {
+      if (a.mode === 'spotify') SP.play().catch(e => toast(e.message, true)); else if (A.spMode === 'spotify') SP.pause().catch(() => {});
+    }
+    A.spMode = a.mode;
     if (key === A.audioKey || A.pressing) return;
     A.audioKey = key;
     const tl = O.telao || { count: 0 };
     // som no telão: com música ligada e nenhum telão aberto, avisa; com o telão aberto mas ainda sem clique, pede o clique (os bipes também dependem dele)
-    const warn = a.out === 'painel' ? '' : !tl.count ? (a.mode === 'off' ? '' : 'abra o telão') : !tl.sound && (a.mode !== 'off' || beeps) ? 'clique na tela do telão para liberar o som' : '';
+    const warn = a.mode === 'spotify' && !sp.connected ? 'conecte o Spotify neste painel (clique em 🎧)' : a.out === 'painel' ? '' : !tl.count ? (own === 'off' ? '' : 'abra o telão') : !tl.sound && (own !== 'off' || beeps) ? 'clique na tela do telão para liberar o som' : '';
+    const track = pl && pl.name ? `${pl.playing ? '♪' : '❚❚'} ${pl.name}${pl.artists ? ' · ' + pl.artists : ''}` : 'nada tocando';
     $('#audioCtl').innerHTML = `<button type="button" class="k" data-act="audioOut" data-out="${a.out === 'painel' ? 'telao' : 'painel'}" title="Clique para trocar: o som pode sair do computador do telão ou deste painel">SOM · ${a.out === 'painel' ? 'este painel' : 'telão'} ⇄</button>
       ${warn ? `<span class="warn">⚠ ${warn}</span>` : ''}
-      ${['music', 'ambient', 'off'].map(m => `<button type="button" class="${a.mode === m ? 'on' : ''}" data-act="audio" data-mode="${m}">${AUDIO_LABEL[m]}</button>`).join('')}
+      ${['music', 'ambient', 'spotify', 'off'].map(m => `<button type="button" class="${a.mode === m ? 'on' : ''}" data-act="audio" data-mode="${m}" ${m === 'spotify' ? 'title="A música do seu Spotify: o que você escolher lá toca no evento"' : ''}>${AUDIO_LABEL[m]}</button>`).join('')}
+      ${sp.connected ? `<button type="button" class="spchip" data-act="spOpen" title="Spotify: o que está tocando, playlists, busca e aparelhos">${esc(track)} ▾</button>` : ''}
       <button type="button" class="beeps ${beeps ? 'on' : ''}" data-act="audioBeeps" data-on="${beeps ? '' : 1}" title="Bipes do cronômetro: um aos 30 segundos e um por segundo nos últimos 10. Tocam mesmo com 'Sem áudio'.">⏱ Bipes</button>
       <input type="range" min="0" max="100" step="5" value="${a.volume}" data-act="audioVol" title="Volume" aria-label="Volume">`;
   }
@@ -304,6 +318,144 @@
     if (x.cena === 'mph') return C.state.mph.at ? 'chegamos a 2027' : '';
     return '';
   }
+  // quem conduz um bloco (Preparar → Agenda e cenas → Quem conduz): "Fulano e Beltrana"
+  const hostNames = k => { const l = ((A.O.cenas.config.anfitrioes || {})[k] || []); return l.length > 1 ? `${l.slice(0, -1).join(', ')} e ${l[l.length - 1]}` : l[0] || ''; };
+
+  /* ---------- microfone dos aplausos (Reconhecimento) ----------
+   * Na cerimônia dos prêmios, o Flux Capacitor do telão carrega com o barulho da sala. Quem ouve é o microfone do
+   * computador (ou celular) em que este painel está aberto: o som não é gravado nem enviado, só o volume é medido
+   * aqui mesmo, e o painel manda para o servidor "quanto a carga anda" algumas vezes por segundo.
+   *   - "silêncio da sala": o painel acompanha sozinho os momentos mais quietos;
+   *   - acima disso, quanto mais alto, mais rápido carrega (aplauso forte enche em uns 7 segundos);
+   *   - sensibilidade: quantos decibéis acima do silêncio valem como "aplauso forte" (ajuste fino, ou "Calibrar"). */
+  const MIC_GATE = 6, MIC_FILL = 7, clamp01 = v => Math.max(0, Math.min(1, v));
+  const Mic = { on: false, starting: false, stream: null, ctx: null, src: null, an: null, buf: null, timer: null, floor: null, avg: -100, level: 0, acc: 0, last: 0, sent: 0, err: '', cal: null,
+    span: Math.max(8, Math.min(44, +localStorage.getItem('bttf.micSpan') || 28)) };
+  const micMode = () => ((A.O && A.O.cenas && A.O.cenas.config.reconhecimento.carga) || 'mic');
+  const recOnAir = () => { const O = A.O; if (!O || !O.cenas) return false; const { step } = liveStep(); return step.type === 'cena' && step.cena === 'reconhecimento' && O.state.block === 'cena' && !O.state.presentation; };
+  const micCharging = () => { if (!recOnAir() || micMode() === 'toques') return false; const s = A.O.cenas.state.reconhecimento; return s.fase === 'cerimonia' && s.passo === 'carga'; };
+  async function micStart(auto) {
+    if (Mic.on || Mic.starting) return;
+    Mic.starting = true; Mic.err = '';
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error('sem acesso'), { name: 'NoApi' });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
+      const C = new (window.AudioContext || window.webkitAudioContext)(); if (C.state === 'suspended') await C.resume().catch(() => {});
+      const an = C.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0; const src = C.createMediaStreamSource(stream); src.connect(an);
+      Object.assign(Mic, { on: true, stream, ctx: C, src, an, buf: new Float32Array(an.fftSize), floor: null, avg: -100, level: 0, acc: 0, last: performance.now(), sent: 0, cal: null });
+      stream.getTracks().forEach(t => t.addEventListener('ended', () => micStop(true)));
+      localStorage.setItem('bttf.mic', '1'); Mic.timer = setInterval(micTick, 80);
+    } catch (e) {
+      const n = e && e.name;
+      Mic.err = n === 'NoApi' ? 'Este navegador não libera o microfone aqui. Abra o painel pelo endereço https, no Chrome ou no Edge.' : n === 'NotAllowedError' || n === 'SecurityError' ? 'O navegador bloqueou o microfone. Clique no cadeado ao lado do endereço, libere o microfone e tente de novo.'
+        : n === 'NotFoundError' ? 'Nenhum microfone encontrado neste aparelho.' : `Não deu para ligar o microfone (${(e && e.message) || e}).`;
+      if (!auto) toast(Mic.err, true);
+    } finally { Mic.starting = false; render(true); }
+  }
+  function micStop(keep) {
+    clearInterval(Mic.timer); if (Mic.stream) Mic.stream.getTracks().forEach(t => t.stop()); if (Mic.ctx) Mic.ctx.close().catch(() => {});
+    Object.assign(Mic, { on: false, stream: null, ctx: null, src: null, an: null, level: 0, acc: 0, cal: null });
+    if (!keep) localStorage.removeItem('bttf.mic');
+    render(true);
+  }
+  // já foi ligado antes neste navegador e a permissão continua valendo: liga sozinho quando o Reconhecimento entra no ar
+  function micAuto() {
+    if (Mic.on || Mic.starting || Mic.autoTried || localStorage.getItem('bttf.mic') !== '1' || !recOnAir() || micMode() === 'toques') return;
+    Mic.autoTried = true;
+    const go = () => micStart(true);
+    if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: 'microphone' }).then(p => { if (p.state === 'granted') go(); }).catch(() => {}); // sem a permissão, espera o clique em "Ligar o microfone"
+  }
+  function micTick() {
+    if (!Mic.on) return;
+    const t = performance.now(), dt = Math.min(1.5, (t - Mic.last) / 1000); Mic.last = t;
+    Mic.an.getFloatTimeDomainData(Mic.buf); let sum = 0; for (let i = 0; i < Mic.buf.length; i++) sum += Mic.buf[i] * Mic.buf[i];
+    const db = 20 * Math.log10(Math.sqrt(sum / Mic.buf.length) + 1e-6);   // −120 (silêncio total) … 0 (o máximo do microfone)
+    const charging = micCharging();
+    Mic.avg += (db - Mic.avg) * Math.min(1, dt / .3);
+    // "silêncio da sala": acompanha os momentos mais quietos. Desce rápido sempre que a sala fica mais quieta; sobe bem devagar,
+    // e nunca durante a carga ou a calibragem (senão os próprios aplausos virariam "silêncio"). Microfones que cortam o som
+    // baixo entregam silêncio absoluto: o piso não desce de −65 dB.
+    if (Mic.floor === null) Mic.floor = db; else if (db < Mic.floor) Mic.floor += (db - Mic.floor) * Math.min(1, dt / .4); else if (!charging && !Mic.cal) Mic.floor += (db - Mic.floor) * Math.min(1, dt / 25);
+    Mic.floor = Math.max(-65, Mic.floor);
+    const x = clamp01((db - Mic.floor - MIC_GATE) / Mic.span);
+    Mic.level += (x - Mic.level) * (x > Mic.level ? .65 : .22);           // sobe rápido, desce devagar (como um medidor de volume)
+    if (Mic.cal) { Mic.cal.peak = Math.max(Mic.cal.peak, Mic.avg); if (t >= Mic.cal.until) micCalDone(); }
+    if (charging) {
+      Mic.acc += Mic.level > .08 ? Math.pow(Mic.level, 1.5) * dt / MIC_FILL : -dt * .02; // aplauso forte enche em ~7 s; no silêncio, a carga escorre devagar
+      if (t - Mic.sent >= 240 && A.socket && A.socket.connected) { Mic.sent = t; A.socket.emit('cena:mic', { delta: Mic.acc, nivel: Mic.level }); Mic.acc = 0; }
+    } else Mic.acc = 0;
+    const bar = $('#micLvl'); if (bar) { bar.style.width = (Mic.level * 100).toFixed(0) + '%'; bar.parentNode.classList.toggle('loud', Mic.level > .6); }
+  }
+  // "Calibrar": por 4 segundos ouve uma salva de palmas de teste e ajusta a sensibilidade para ela valer como aplauso forte
+  function micCal() { if (!Mic.on || Mic.cal) return; Mic.cal = { until: performance.now() + 4000, peak: -120 }; render(true); toast('👏 Peça uma salva de palmas agora (4 segundos)…'); }
+  function micCalDone() {
+    const gain = Mic.cal.peak - Mic.floor - MIC_GATE; Mic.cal = null;
+    if (gain < 6) toast('Quase não ouvi diferença entre o silêncio e as palmas. Aproxime o microfone da sala e tente de novo.', true);
+    else { Mic.span = Math.max(8, Math.min(44, gain * .9)); localStorage.setItem('bttf.micSpan', Mic.span.toFixed(1)); toast('Microfone calibrado ✔ Palmas como essas enchem o Flux Capacitor em uns 7 segundos.'); }
+    render(true);
+  }
+  function micBox() {
+    if (micMode() === 'toques') return '';
+    const sens = Math.round((44 - Mic.span) / 4) + 1; // 1 (pouco sensível) … 10 (muito sensível)
+    return `<div class="micbox ${Mic.on ? 'on' : ''}">
+      <div class="mich"><b>🎤 Microfone dos aplausos</b><span class="pill ${Mic.on ? 'on' : 'off'}">${Mic.on ? 'ouvindo a sala' : Mic.starting ? 'ligando…' : 'desligado'}</span>${Mic.on ? btn('Desligar', 'micOff', { cls: 'ghost xs' }) : btn('🎤 Ligar o microfone', 'micOn', { cls: 'xs', disabled: Mic.starting })}</div>
+      ${Mic.err ? `<div class="sb-warn">${esc(Mic.err)}</div>` : ''}
+      ${Mic.on ? `<div class="micmeter" title="Som da sala agora"><i id="micLvl" style="width:${(Mic.level * 100).toFixed(0)}%"></i></div>
+        <div class="microw"><label class="small">Sensibilidade <input type="range" min="1" max="10" step="1" value="${sens}" data-act="micSens" aria-label="Sensibilidade do microfone"></label>${btn(Mic.cal ? '👏 Ouvindo as palmas…' : '🎚 Calibrar com uma salva de palmas', 'micCal', { cls: 'ghost xs', disabled: !!Mic.cal })}</div>` : ''}
+      <p class="small">Este aparelho ouve a sala: quanto mais aplausos e barulho, mais rápido o Flux Capacitor do telão carrega (aplauso forte enche em uns 7 segundos). ${Mic.on ? 'Teste agora: bata palmas e veja a barra subir. Se subir pouco, aumente a sensibilidade ou use "Calibrar".' : 'Ligue antes da cerimônia: o navegador pede a permissão do microfone uma vez.'} O som não é gravado. O botão "+15% de carga" continua valendo como reserva.</p></div>`;
+  }
+
+  /* ---------- Spotify: a música do evento vem da conta de quem está no painel ---------- */
+  const spItem = (x, sub) => `<button type="button" class="spitem" data-act="spPlay" data-uri="${esc(x.uri)}" title="Tocar agora">${x.image ? `<img src="${esc(x.image)}" alt="" loading="lazy">` : '<span class="noart">♪</span>'}<span class="t"><b>${esc(x.name)}</b><small>${esc(sub || '')}</small></span><i>▶</i></button>`;
+  function spPaint() { // atualiza "tocando agora" e os aparelhos, se a janela do Spotify estiver aberta
+    const now = $('#spNow'), dev = $('#spDev'); if (!now || !dev || !SP) return;
+    const s = SP.state, p = s.player, set = (el, html) => { if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; } };
+    set(now, `${s.error ? `<div class="sb-warn" style="margin-bottom:10px">${esc(s.error)}</div>` : ''}<div class="spnow">${p && p.image ? `<img src="${esc(p.image)}" alt="">` : '<div class="noart">♪</div>'}
+      <div class="t"><b>${esc(p && p.name ? p.name : 'Nada tocando agora')}</b><span>${esc(p && p.name ? p.artists : 'Escolha uma música no seu Spotify, ou toque uma playlist aqui embaixo.')}</span><small>${p && p.device ? `🔊 tocando em: ${esc(p.device.name)}` : 'Nenhum aparelho com o Spotify ativo'}</small></div>
+      <div class="ctl"><button class="btn ghost" data-act="spPrev" title="Música anterior">⏮</button><button class="btn" data-act="spToggle">${p && p.playing ? '⏸ Pausar' : '▶ Tocar'}</button><button class="btn ghost" data-act="spNext" title="Próxima música">⏭</button></div></div>`);
+    const cur = p && p.device ? p.device.id : '', list = s.devices.some(d => d.id === cur) || !cur ? s.devices : [{ id: cur, name: p.device.name }, ...s.devices];
+    set(dev, `<div class="spdev"><label class="small">Onde toca <select class="input" data-act="spDevice">${list.length ? '' : '<option value="">(abra o Spotify em um aparelho)</option>'}${list.map(d => `<option value="${esc(d.id)}" ${d.id === cur ? 'selected' : ''}>${esc(d.name)}${d.id === s.local ? ' (este navegador)' : ''}</option>`).join('')}</select></label>
+      <button class="btn ghost xs" data-act="spDevs" title="Procurar de novo os aparelhos com o Spotify aberto">↻ Atualizar</button><button class="btn ghost xs" data-act="spLocal" title="Faz este navegador virar um aparelho do Spotify: o som sai deste computador">🔊 Tocar neste computador</button>
+      ${p && p.device && p.device.canVolume && p.device.volume !== null ? `<label class="small">Volume do Spotify <input type="range" min="0" max="100" step="5" value="${p.device.volume}" data-act="spVol"></label>` : ''}</div>`);
+  }
+  function spDialog() {
+    if (!SP) return toast('O Spotify não carregou nesta página. Recarregue o painel.', true);
+    const s = SP.state, close = '<button class="btn ghost" data-close style="margin-left:auto">Fechar</button>';
+    if (!s.configured) return dialog(`<h3>🎧 Spotify</h3><p>Para tocar a música do seu Spotify no evento, falta uma preparação de uns 5 minutos (uma vez só): criar um "app" na página de desenvolvedores do Spotify e colar o código dele aqui.</p>
+      <p class="small" style="margin-top:8px">O passo a passo está em Preparar → Ajustes → Spotify. O Spotify exige conta Premium.</p><div class="actions" style="margin-top:14px"><button class="btn" data-act="spCfg">Abrir o passo a passo</button>${close}</div>`);
+    if (!s.connected) return dialog(`<h3>🎧 Spotify</h3>${s.error ? `<div class="sb-warn" style="margin-bottom:10px">${esc(s.error)}</div>` : ''}<p>Conecte a sua conta do Spotify a este painel. Você vai para a página do Spotify, autoriza e volta para cá.</p>
+      <p class="small" style="margin-top:8px">A conexão fica guardada só neste navegador. Depois de conectar, escolha a música no seu Spotify (celular ou computador) e use o botão "🎧 Spotify" da barra de som.</p>
+      <div class="actions" style="margin-top:14px"><button class="btn" data-act="spLogin">Conectar ao Spotify</button>${close}</div>`);
+    dialog(`<h3>🎧 Spotify</h3><div id="spNow"></div><div id="spDev"></div>
+      <div class="spcols"><div><h4>Suas playlists</h4><div id="spLists" class="splist"><p class="small">Carregando…</p></div></div>
+        <div><h4>Buscar</h4><form id="spForm" class="spsearch"><input class="input" id="spQ" placeholder="Música, artista ou playlist" autocomplete="off"><button class="btn sm" type="submit">Buscar</button></form><div id="spRes" class="splist"><p class="small">Digite e aperte Enter. Um toque em ▶ já toca no evento.</p></div></div></div>
+      <p class="small" style="margin-top:10px">O que você escolher no aplicativo do Spotify também aparece aqui. Com o botão "🎧 Spotify" da barra de som ligado, a música do app fica calada; ao trocar para "Sem áudio" (ou entrar num bloco de fala), o Spotify pausa.</p>
+      <div class="actions" style="margin-top:12px"><button class="btn ghost sm" data-act="spLogout">Desconectar do Spotify</button>${close}</div>`, d => {
+      d.classList.add('wide'); spPaint(); SP.refresh(); SP.devices().catch(() => {});
+      SP.playlists().then(list => { const el = $('#spLists'); if (el) el.innerHTML = list.length ? list.map(x => spItem(x, [x.owner, x.total !== null ? `${x.total} músicas` : ''].filter(Boolean).join(' · '))).join('') : '<p class="small">Nenhuma playlist na sua conta.</p>'; })
+        .catch(e => { const el = $('#spLists'); if (el) el.innerHTML = `<p class="small" style="color:var(--amber)">${esc(e.message)}</p>`; });
+      $('#spForm').onsubmit = e => {
+        e.preventDefault(); const el = $('#spRes'); el.innerHTML = '<p class="small">Buscando…</p>';
+        SP.search($('#spQ').value).then(r => { el.innerHTML = [...r.tracks.map(x => spItem(x, x.artists)), ...r.playlists.map(x => spItem(x, `playlist${x.owner ? ' · ' + x.owner : ''}`))].join('') || '<p class="small">Nada encontrado.</p>'; })
+          .catch(err => { el.innerHTML = `<p class="small" style="color:var(--amber)">${esc(err.message)}</p>`; });
+      };
+    });
+  }
+  const spCfgState = () => { const s = spState(), p = s.player; return !SP ? '' : !s.configured ? '<span class="pill off">falta o Client ID</span>' : !s.connected ? '<span class="pill hot">app configurado · falta conectar a conta</span> <button class="btn sm" data-act="spLogin">Conectar ao Spotify</button>'
+    : `<span class="pill on">conectado ✔</span> <span class="small">${p && p.name ? `tocando: ${esc(p.name)}${p.device ? ' · ' + esc(p.device.name) : ''}` : 'nada tocando agora'}</span> <button class="btn ghost sm" data-act="spOpen">Abrir o Spotify do painel</button> <button class="btn ghost sm" data-act="spLogout">Desconectar</button>`; };
+  // O Client ID do Spotify fica nos ajustes do servidor. Como o servidor gratuito esquece os ajustes quando reinicia,
+  // o navegador de quem configurou guarda uma cópia e devolve ao servidor sozinho (a conexão em si já mora no navegador).
+  function spConfigure() {
+    const srv = A.O.settings.spotifyClientId || ''; let local = ''; try { local = localStorage.getItem('bttf.spotify.cid') || ''; } catch { /* sem armazenamento */ }
+    if (srv) { if (srv !== local) { try { localStorage.setItem('bttf.spotify.cid', srv); } catch { /* segue */ } } }
+    else if (local && !A.spRestored) { A.spRestored = true; act('settings', { settings: { spotifyClientId: local } }).catch(() => { A.spRestored = false; }); }
+    SP.configure(srv || local);
+  }
+  if (SP) {
+    SP.onChange(() => { renderAudio(); spPaint(); const c = $('#spCfgState'); if (c) c.innerHTML = spCfgState(); });
+    SP.handleRedirect().then(ok => { if (ok) toast('Spotify conectado 🎧 Agora é só escolher a música e ligar o botão "🎧 Spotify".'); else if (SP.state.error) toast(SP.state.error, true); });
+  }
+
   function pCena(step) {
     const O = A.O, C = O.cenas, k = step.cena, cfg = C.config[k], st = C.state[k] || {}, note = `<p class="small" style="margin-top:10px">${cfgLink(k)} em Preparar → Agenda e cenas.</p>`;
     const out = { onair: CENA_AIR[k] };
@@ -317,7 +469,7 @@
     } else if (k === 'almanaque') {
       const m = st.mes, its = m >= 0 ? cfg.itens.filter(x => x.m === m) : [], dl = its.filter(x => x.k === 'E').length, off = new Set(st.off || []);
       out.body = `<div class="phase">${st.pagina ? 'No telão: o ano em uma página' : m >= 0 ? `No telão: ${C.months[m]} · ${dl} ${dl === 1 ? 'entregue' : 'entregues'} de ${its.length} ${its.length === 1 ? 'item' : 'itens'}${st.tocando ? ' · tocando o ano' : ''}` : 'No telão: o almanaque em branco, pronto para começar'}</div>
-        <p class="small">${C.stats.entregues} entregas · ${esc(C.stats.beneficiosTxt)} em benefícios · com ${esc(cfg.quem)}</p>
+        <p class="small">${C.stats.entregues} entregas · ${esc(C.stats.beneficiosTxt)} em benefícios · com ${esc(hostNames(k) || cfg.quem)}</p>
         <div class="subtabs" style="margin:10px 0">${C.months.map((n, i) => `<button class="${m === i && !st.pagina ? 'on' : ''}" data-act="cena" data-kind="almanaque" data-a="mes" data-mes="${i}" title="${cfg.itens.filter(x => x.m === i).length} itens">${n}</button>`).join('')}</div>
         ${m >= 0 && !st.pagina ? det('almItens', `O que aparece em ${C.months[m]} (${its.length})`, `<ul class="small" style="margin:6px 0 0 18px">${its.map(x => `<li><b>${esc(C.tipos[x.k])}${x.bu ? ' · ' + esc(C.bus[x.bu]) : ''}</b> · ${esc(x.t)}</li>`).join('')}</ul>`) : ''}`;
       out.primary = st.pagina ? cenaBtn('← Voltar ao almanaque', k, 'pagina', { cls: 'big' }) : st.tocando ? cenaBtn('⏸ Pausar o ano', k, 'tocar', { cls: 'big' }) : cenaBtn(m >= 11 ? '★ Mostrar o ano em uma página' : m >= 0 ? '▶ Continuar tocando o ano' : '▶ Tocar o ano (um mês a cada 3 s)', k, m >= 11 ? 'pagina' : 'tocar', { cls: 'big', data: m >= 11 ? { on: 1 } : {} });
@@ -332,7 +484,8 @@
       const P = cfg.premios, done = new Set(st.feitos), p = st.premio !== null ? P[st.premio] : null, w = p ? p.indicados[p.vencedor - 1] : null, next = P.findIndex((x, i) => !done.has(i));
       const list = `<div class="tblwrap"><table class="tbl">${P.map((x, i) => `<tr><td>${done.has(i) ? '🏆' : '✉️'} <b>${esc(x.n)}</b><div class="small">${esc(x.k)}</div></td><td class="small">${done.has(i) ? `revelado: <b>${esc(x.indicados[x.vencedor - 1].nome)}</b>` : `lacrado · vencedor definido: ${esc(x.indicados[x.vencedor - 1].nome)}`}</td><td class="r">${cenaBtn(done.has(i) ? 'Refazer a cerimônia' : 'Abrir a cerimônia', k, 'abrir', { cls: 'ghost xs', data: { premio: i } })}</td></tr>`).join('')}</table></div>`;
       const back = cenaBtn('← Todos os prêmios', k, 'fase', { cls: 'ghost', data: { fase: 'premios' } });
-      if (st.fase === 'intro') { out.body = `<div class="phase">No telão: a abertura</div><p class="lead">${esc(cfg.abertura.join(' ').replace(/\*/g, ''))}</p><p class="small">${esc(cfg.aberturaSub)}</p>`; out.primary = cenaBtn('▶ Tributo', k, 'fase', { cls: 'big', data: { fase: 'tributo' } }); out.secondary = [cenaBtn('Pular para os prêmios ⚡', k, 'fase', { cls: 'ghost', data: { fase: 'premios' } })]; }
+      const mode = cfg.carga || 'mic', byMic = mode !== 'toques', how = mode === 'mic' ? 'os aplausos da sala (microfone deste painel) carregam' : mode === 'ambos' ? 'os aplausos (microfone deste painel) e os toques nos celulares carregam' : 'cada toque nos celulares soma energia';
+      if (st.fase === 'intro') { out.body = `<div class="phase">No telão: a abertura</div><p class="lead">${esc(cfg.abertura.join(' ').replace(/\*/g, ''))}</p><p class="small">${esc(cfg.aberturaSub)}${hostNames(k) ? ` · com ${esc(hostNames(k))}` : ''}</p>`; out.primary = cenaBtn('▶ Tributo', k, 'fase', { cls: 'big', data: { fase: 'tributo' } }); out.secondary = [cenaBtn('Pular para os prêmios ⚡', k, 'fase', { cls: 'ghost', data: { fase: 'premios' } })]; }
       else if (st.fase === 'tributo') {
         out.body = `<div class="phase">No telão: o tributo</div><p class="lead">${esc(cfg.tributo.replace(/\*/g, ''))}</p><p class="small">Fala: ${esc(cfg.fala)}</p>
           <p class="small" style="margin-top:6px">${cfg.video ? `Vídeo-tributo configurado · ${st.video ? 'tocando no telão' : 'pausado'}.` : `Sem vídeo configurado: arraste o arquivo do vídeo para a tela do telão, ou cole o endereço dele em ${cfgLink('reconhecimento', 'Agenda e cenas → Reconhecimento')}. Sem vídeo, este espaço fica para a fala da liderança.`}</p>`;
@@ -348,15 +501,17 @@
         const pct = Math.round((st.carga || 0) * 100);
         out.body = `<div class="phase">Cerimônia · ${esc(p.n)} (${esc(p.k)}) · no telão: ${REC_PASSO[st.passo]}</div>
           <p class="small">Indicados: ${esc(p.indicados.map(x => x.nome).join(' · '))}</p><p class="small">Vencedor definido: <b>${esc(w.nome)}</b> (${esc(w.projeto)}) · “${esc(p.citacao)}”</p>
-          ${st.passo === 'carga' ? `<p style="margin-top:10px">Flux Capacitor: <b id="recPct">${pct}%</b> · cada toque nos celulares soma energia; com 100% o raio cai sozinho.</p><div class="bar"><i id="recBar" style="width:${pct}%"></i></div>` : ''}`;
+          ${st.passo === 'carga' ? `<p style="margin-top:10px">Flux Capacitor: <b id="recPct">${pct}%</b> · ${how}; com 100% o raio cai sozinho.</p><div class="bar"><i id="recBar" style="width:${pct}%"></i></div>` : ''}
+          ${byMic && !Mic.on && ['indicados', 'carga'].includes(st.passo) ? '<div class="sb-warn" style="margin-top:8px">🎤 O microfone está desligado: sem ele os aplausos não carregam o Flux Capacitor. Ligue logo abaixo (ou use "+15% de carga").</div>' : ''}`;
         if (st.passo === 'categoria') out.primary = cenaBtn('Conhecer os indicados →', k, 'indicados', { cls: 'big' });
-        else if (st.passo === 'indicados') { out.primary = cenaBtn('⚡ Carregar o Flux Capacitor (celulares)', k, 'carregar', { cls: 'big' }); out.secondary = [cenaBtn('Raio agora ⚡ (sem a carga)', k, 'raio', { cls: 'ghost' })]; }
+        else if (st.passo === 'indicados') { out.primary = cenaBtn(`⚡ Carregar o Flux Capacitor (${mode === 'mic' ? 'aplausos' : mode === 'ambos' ? 'aplausos e celulares' : 'celulares'})`, k, 'carregar', { cls: 'big' }); out.secondary = [cenaBtn('Raio agora ⚡ (sem a carga)', k, 'raio', { cls: 'ghost' })]; }
         else if (st.passo === 'carga') { out.primary = cenaBtn('⚡ +15% de carga', k, 'carga', { cls: 'big', data: { v: .15 } }); out.secondary = [cenaBtn('Raio agora ⚡', k, 'raio', { cls: 'ghost' })]; }
         else if (st.passo === 'sorteio') { out.secondary = [cenaBtn('Revelar já', k, 'vencedor', { cls: 'ghost' })]; out.busy = 'O sorteio está acontecendo no telão. Avançar mesmo assim?'; out.primary = '<span class="phase">🥁 O holofote está girando…</span>'; }
         else { out.primary = cenaBtn(next >= 0 ? 'Voltar aos prêmios →' : 'Grande final · Hall da Fama ★', k, 'fase', { cls: 'big', data: { fase: next >= 0 ? 'premios' : 'hall' } }); out.secondary = [cenaBtn('Bis ✦ (refazer esta cerimônia)', k, 'abrir', { cls: 'ghost', data: { premio: st.premio } })]; }
         if (st.passo !== 'vencedor') out.secondary = [...(out.secondary || []), back];
         if (st.passo !== 'vencedor' && st.passo !== 'sorteio') out.busy = 'A cerimônia deste prêmio ainda não terminou. Avançar mesmo assim?';
       }
+      out.body = (out.body || '') + micBox();
       if (cfg.exemplo) out.warn = `⚠ Os indicados e os vencedores ainda são os <b>nomes de exemplo</b> do deck (o telão avisa isso na tela dos prêmios). Troque em ${cfgLink('reconhecimento', 'Preparar → Agenda e cenas → Reconhecimento')}.`;
       out.more = note;
     } else if (k === 'intervalo') {
@@ -365,10 +520,10 @@
         <div class="clock ${ph === 'paused' ? 'paused' : ''}"><b data-timer="iv">${fmt(ivLeft())}</b><span>intervalo</span></div><p class="small">${esc(cfg.texto)}</p>`;
       out.primary = ph === 'idle' ? cenaBtn(`▶ Iniciar intervalo (${cfg.min} min)`, k, 'start', { cls: 'big' }) : ph === 'run' ? cenaBtn('⏸ Pausar', k, 'pause', { cls: 'big' }) : ph === 'paused' ? cenaBtn('▶ Retomar', k, 'resume', { cls: 'big' }) : null;
       out.secondary = [cenaBtn('+1 min', k, 'add', { cls: 'ghost', data: { seconds: 60 } }), cenaBtn('−1 min', k, 'add', { cls: 'ghost', data: { seconds: -60 } }), cenaBtn('↺ Zerar', k, 'reset', { cls: 'ghost' })];
-      out.more = `<div class="actions" style="align-items:center"><span class="small">Começar com:</span>${[5, 10, 15, 20].map(n => cenaBtn(`${n} min`, k, 'start', { cls: 'ghost xs', data: { min: n } })).join('')}</div><p class="small" style="margin-top:8px">O cronômetro continua contando se você mostrar outro passo. A música entra sozinha neste passo (desligue em Ajustes → "Desligar o som ao exibir um bloco de fala").</p>${note}`;
+      out.more = `<div class="actions" style="align-items:center"><span class="small">Começar com:</span>${[5, 10, 15, 20].map(n => cenaBtn(`${n} min`, k, 'start', { cls: 'ghost xs', data: { min: n } })).join('')}</div><p class="small" style="margin-top:8px">O cronômetro continua contando se você mostrar outro passo. A música entra sozinha neste passo${O.settings.spotifyBreak ? ' (o seu Spotify, como escolhido em Ajustes → Spotify)' : ''}; para não entrar, desligue em Ajustes → "Desligar o som ao exibir um bloco de fala". Para trocar a música do app pelo seu Spotify aqui, veja <a href="#" data-go="config">Ajustes → Spotify</a>.</p>${note}`;
       out.busy = ph === 'run' ? 'O intervalo ainda não terminou. Avançar mesmo assim?' : '';
     } else if (k === 'visao') {
-      out.body = `<div class="theme">${esc(cfg.titulo)}</div><div class="speaker">com ${esc(cfg.quem)} · ${cfg.min} min</div>
+      out.body = `<div class="theme">${esc(cfg.titulo)}</div><div class="speaker">com ${esc(hostNames(k) || cfg.quem)} · ${cfg.min} min</div>
         <p class="lead">O telão mostra a <b>Estratégia CDIO LATAM 2027</b> (o arquivo original, sem alterações) dentro de uma moldura. Ela é interativa: os filtros e os pilares são clicados <b>direto na tela do telão</b>.</p>
         <div class="actions"><a class="btn ghost sm" href="/estrategia-2027.html" target="_blank">Abrir a estratégia em outra aba ↗</a></div>
         <label class="sw" style="margin-top:10px"><input type="checkbox" data-act="cena" data-kind="visao" data-a="intro" ${st.intro ? 'checked' : ''}> Começar pela abertura em vídeo da página (senão, vai direto para o mapa da estratégia, como no deck)</label>${note}`;
@@ -736,15 +891,17 @@
         : x.type === 'message' ? `${f('emoji', '📣', 'w0')}${f('title', 'Título do aviso', 'w2')}${f('body', 'Texto do aviso', 'w3')}`
         : `<span class="fixed">${esc(stepTitle(x))}<small>${x.type === 'cena' ? esc(cenaMeta(x).hint) : x.type === 'sucesso' && TALK[x.activity] ? 'pergunta ao vivo, nuvem, sorteio e tempo de fala' : STEP_HINT[x.type]}</small></span>${SKIP_OF[x.type] ? `<button class="btn ghost xs" data-act="skipEdit" data-block="${x.type}" title="Quem coordena ou não participa deste bloco">🚫 Fora deste bloco (${skipIds(x.type).length})</button>` : ''}`;
       return `<div class="rrow ${!dirty && x.id === O.state.step ? 'now' : ''}"><span class="n">${i + 1}</span><span class="ic" title="${STEP_KIND[x.type]}">${stepIcon(x)}</span><div class="rf">${fields}</div>
-        <div class="rc">${!dirty && x.id === O.state.step ? '<span class="pill hot">no ar</span>' : ''}<button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'} title="Subir">↑</button><button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="1" ${i < list.length - 1 ? '' : 'disabled'} title="Descer">↓</button><button class="btn ghost xs" data-act="rsDel" data-i="${i}" ${list.length > 1 ? '' : 'disabled'} title="Remover">✕</button></div></div>`;
+        <div class="rc">${!dirty && x.id === O.state.step ? '<span class="pill hot">no ar</span>' : ''}${['message', 'standby'].includes(x.type) ? '' : `<button class="btn ghost xs trb ${x.transition === false ? 'off' : ''}" data-act="rsTr" data-i="${i}" title="${x.transition === false ? 'Este passo entra direto, sem a transição do filme. Clique para ligar a transição.' : 'Este passo entra com a transição do filme (88 MPH). Clique para ele entrar direto.'}">${x.transition === false ? '⏭ direto' : '⚡ transição'}</button>`}<button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'} title="Subir">↑</button><button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="1" ${i < list.length - 1 ? '' : 'disabled'} title="Descer">↓</button><button class="btn ghost xs" data-act="rsDel" data-i="${i}" ${list.length > 1 ? '' : 'disabled'} title="Remover">✕</button></div></div>`;
     };
     const add = (label, type, extra = '') => `<button class="btn ghost xs" data-act="rsAdd" data-type="${type}" ${extra}>＋ ${label}</button>`;
     return `<div class="card"><h2>Roteiro do evento</h2>
       <p class="small">O roteiro padrão segue a agenda do townhall em 4 atos (as cenas do deck mais Conexões, Reflexão e Sucesso). O conteúdo de cada cena fica em <a href="#" data-go="cenas">Agenda e cenas</a>.</p>
+      <p class="small">Em cada passo, o botão <b>⚡ transição</b> / <b>⏭ direto</b> escolhe se ele entra com a viagem no tempo (os segundos de 88 MPH no telão e nos celulares) ou direto. Os nomes e as fotos de quem conduz cada bloco ficam em <a href="#" data-go="cenas" data-sec="anfitrioes">Agenda e cenas → Quem conduz</a>.</p>
       <p class="small">A ordem dos passos do evento. No <a href="#" data-go="live">Ao vivo</a> você abre cada passo e clica em "Mostrar" para ele ir para o telão e os celulares. Dá para mudar a qualquer momento, inclusive durante o evento. Em Conexões, Reflexão e Sucesso, o botão 🚫 marca quem coordena e não participa.</p>
       <div class="rlist">${list.map(row).join('')}</div>
       <div class="actions radd"><span class="small">Adicionar:</span>${add('Bloco de fala', 'stage')}${add('Aviso / intervalo', 'message')}${add('Olhos no telão', 'standby')}${add('Check-in', 'checkin')}${has('connections') ? '' : add('Conexões', 'connections')}${has('reflexao') ? '' : add('Reflexão', 'reflexao')}${has('doc') ? '' : add('Visão 2027 · o Doc', 'doc')}${['d1', 'd2', 'd3', 'd4'].filter(k => !hasAct(k)).map(k => add(`Sucesso ${k.slice(1).padStart(2, '0')}`, 'sucesso', `data-activity="${k}"`)).join('')}${add('Créditos', 'closing')}</div>
-      ${(O.cenas ? O.cenas.kinds : []).some(k => !hasCena(k)) ? `<div class="actions radd"><span class="small">Cenas do townhall:</span>${O.cenas.kinds.filter(k => !hasCena(k)).map(k => add(`${O.cenas.meta[k].icon} ${O.cenas.meta[k].name}`, 'cena', `data-cena="${k}"`)).join('')}</div>` : ''}
+      ${(O.cenas ? O.cenas.kinds : []).some(k => !hasCena(k) && !EXTRA_CENAS.includes(k)) ? `<div class="actions radd"><span class="small">Cenas do townhall:</span>${O.cenas.kinds.filter(k => !hasCena(k) && !EXTRA_CENAS.includes(k)).map(k => add(`${O.cenas.meta[k].icon} ${O.cenas.meta[k].name}`, 'cena', `data-cena="${k}"`)).join('')}</div>` : ''}
+      ${(O.cenas ? O.cenas.kinds : []).some(k => !hasCena(k) && EXTRA_CENAS.includes(k)) ? det('rsExtras', 'Cenas extras (telas de abertura que hoje fazem parte dos blocos Reflexão e Sucesso)', `<div class="actions radd" style="margin-top:8px">${O.cenas.kinds.filter(k => !hasCena(k) && EXTRA_CENAS.includes(k)).map(k => add(`${O.cenas.meta[k].icon} ${O.cenas.meta[k].name}`, 'cena', `data-cena="${k}"`)).join('')}</div>`) : ''}
       <div class="actions" style="margin-top:14px;align-items:center">${dirty ? '<button class="btn" data-act="rsSave">Salvar roteiro</button><button class="btn ghost" data-act="rsDiscard">Descartar alterações</button><span class="warn">alterações não salvas</span>' : '<span class="ok">✔ Roteiro salvo</span>'}<button class="btn ghost sm" data-act="rsDefault" style="margin-left:auto">Restaurar o roteiro padrão</button></div>
     </div>`;
   }
@@ -753,7 +910,7 @@
   /* ====================== PREPARAR → AGENDA E CENAS ======================
    * O conteúdo das cenas do deck (em português): textos, horários, itens do almanaque, prêmios e créditos.
    * Listas são digitadas uma por linha, com as colunas separadas por " | ". *Asteriscos* marcam palavras em destaque. */
-  const T = (k, l) => ({ k, l, t: 'text' }), AREA = (k, l) => ({ k, l, t: 'area' }), NUM = (k, l) => ({ k, l, t: 'num' }), LIST = (k, l) => ({ k, l, t: 'list' }), LINES = (k, l, cols, map) => ({ k, l, t: 'lines', cols, map }), CHECK = (k, l) => ({ k, l, t: 'check' });
+  const SEL = (k, l, opts) => ({ k, l, t: 'sel', opts }), T = (k, l) => ({ k, l, t: 'text' }), AREA = (k, l) => ({ k, l, t: 'area' }), NUM = (k, l) => ({ k, l, t: 'num' }), LIST = (k, l) => ({ k, l, t: 'list' }), LINES = (k, l, cols, map) => ({ k, l, t: 'lines', cols, map }), CHECK = (k, l) => ({ k, l, t: 'check' });
   const MONTH_MAP = { out: v => A.O.cenas.months[v] || 'JAN', in: v => { const i = A.O.cenas.months.indexOf(String(v).trim().toUpperCase().slice(0, 3)); return i < 0 ? Math.max(0, Math.min(11, (parseInt(v, 10) || 1) - 1)) : i; } };
   const BU_MAP = { out: v => v || '-', in: v => { const u = String(v).trim().toUpperCase(); return u === 'HC' || u === 'BPC' ? u : u.startsWith('X') || u.startsWith('CROSS') ? 'X' : ''; } };
   const TIPO_MAP = { out: v => v, in: v => { const u = String(v).trim().toUpperCase()[0]; return 'EMRC'.includes(u) ? u : 'M'; } };
@@ -761,11 +918,13 @@
   const CENA_FORM = {
     evento: ['Evento · check-in e créditos', 'O nome do evento aparece no telão do check-in e nos créditos; os três circuitos de tempo aparecem no check-in.',
       [T('titulo', 'Título'), T('sub', 'Subtítulo'), T('data', 'Data'), T('local', 'Local'), T('destino', 'Circuito de tempo · destino'), T('presente', 'Circuito de tempo · presente'), T('partida', 'Circuito de tempo · última partida')]],
+    anfitrioes: ['🎙️ Quem conduz cada bloco', 'Aparecem no telão com a foto de perfil e o nome (como nas boas-vindas), e nos celulares. Um nome por linha, escrito como na lista de pessoas (é assim que a foto é encontrada). Deixe em branco para não mostrar ninguém.',
+      [LIST('connections', '⚡ Conexões'), LIST('almanaque', '📅 Jornada 2026 · almanaque'), LIST('reflexao', '💭 Reflexão'), LIST('reconhecimento', '🏆 Reconhecimento 2026'), LIST('visao', '🔭 Visão 2027'), LIST('sucesso', '🚀 Sucesso')]],
     agenda: ['🗺️ Plano de voo (agenda)', 'Os horários são calculados a partir do início e dos minutos de cada item.',
       [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('inicio', 'Início (HH:MM)'), LINES('itens', 'Itens, um por linha: ato (1 a 4) | título | detalhe | minutos', ['ato', 't', 'd', 'min'])]],
     boasvindas: ['👋 Boas-vindas e jornada', '', [T('kicker', 'Linha de cima'), AREA('frase', 'Frase de abertura'), LINES('pessoas', 'Quem fala, um por linha: nome | papel', ['nome', 'papel']), NUM('min', 'Minutos'), T('faixa', 'Faixa de baixo')]],
     almanaque: ['📅 Jornada 2026 · almanaque', 'Os números "entregues" e "benefícios" são calculados a partir dos itens: contam os do tipo E (entregue) e somam o valor em euros.',
-      [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('sub', 'Subtítulo'), T('quem', 'Quem apresenta'), NUM('min', 'Minutos'),
+      [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('sub', 'Subtítulo'), NUM('min', 'Minutos'),
         LINES('kpis', 'Indicadores fixos, um por linha: valor | rótulo', ['v', 'l']), T('kpiEntregas', 'Rótulo do total de entregas'), T('kpiBeneficios', 'Rótulo do total de benefícios'),
         LINES('itens', 'Itens do ano, um por linha: mês | tipo (E entregue · M marco · R resultado · C contexto) | BU (HC, BPC, X ou -) | benefício somado em € (0 se não soma) | texto', ['m', 'k', 'bu', 'v', 't'], { m: MONTH_MAP, k: TIPO_MAP, bu: BU_MAP }),
         AREA('fonte', 'Fonte (rodapé)'), T('pagina.kicker', 'Uma página · linha de cima'), T('pagina.titulo', 'Uma página · título'), AREA('pagina.nota', 'Uma página · nota dos benefícios'), AREA('pagina.lideranca', 'Uma página · aprendizados da liderança')]],
@@ -773,14 +932,17 @@
     reconhecimento: ['🏆 Reconhecimento 2026', 'Os vencedores já ficam definidos aqui: o "sorteio" no telão é o suspense da cerimônia. Só o Painel do Doc vê o vencedor antes da revelação.',
       [T('kicker', 'Linha de cima'), NUM('min', 'Minutos'), LIST('abertura', 'Frases da abertura, uma por linha'), T('aberturaSub', 'Abertura · frase menor'), T('tributo', 'Tributo · título'), T('fala', 'Tributo · quem fala'),
         T('video', 'Vídeo-tributo (endereço https://… ou caminho do site; vazio = arrastar o arquivo para o telão)'), T('premiosTitulo', 'Prêmios · título'), T('hallTitulo', 'Hall da Fama · título'), T('hallSub', 'Hall da Fama · frase'),
+        SEL('carga', 'Na cerimônia, o Flux Capacitor carrega com…', [['mic', '🎤 Os aplausos da sala (o microfone do Painel do Doc ouve)'], ['ambos', '🎤 + 📱 Os aplausos e os toques nos celulares'], ['toques', '📱 Só os toques no botão dos celulares']]),
         CHECK('exemplo', 'Os nomes ainda são de exemplo (mostra o aviso "NOMES DE EXEMPLO" no telão)')]],
     intervalo: ['☕ Intervalo', '', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), NUM('min', 'Duração (minutos)'), AREA('texto', 'Texto')]],
-    visao: ['🔭 Visão 2027 · Estratégia', 'A página da estratégia é o arquivo original (public/estrategia-2027.html): aqui só mudam o título e a linha de cima da moldura.', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('nota', 'Nota à direita'), T('quem', 'Quem apresenta'), NUM('min', 'Minutos')]],
+    visao: ['🔭 Visão 2027 · Estratégia', 'A página da estratégia é o arquivo original (public/estrategia-2027.html): aqui só mudam o título e a linha de cima da moldura.', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('nota', 'Nota à direita'), NUM('min', 'Minutos')]],
     manifesto: ['📜 Manifesto 2027', '', [T('kicker', 'Linha de cima'), T('mes', 'Calendário · mês'), T('dia', 'Calendário · dia'), T('ano', 'Calendário · ano'), T('titulo', 'Título'), T('pergunta', 'Pergunta (aparece sendo digitada)'), T('faixa', 'Faixa de baixo'), T('quem', 'Quem conduz'), NUM('min', 'Minutos')]],
     mph: ['🏎️ 88 MPH · Encerramento', '', [T('kicker', 'Linha de cima'), T('antes', 'Frase antes de acelerar'), T('chegada', 'Chegada (em letras do logo)'), T('depois', 'Frase da chegada'), T('quem', 'Quem conduz'), NUM('min', 'Minutos')]],
     creditos: ['🏁 Créditos', 'O elenco (todos os nomes do check-in) entra sozinho depois destes blocos.',
       [LINES('blocos', 'Blocos, um por linha: TÍTULO | nome | nome…', ['h', 'l'], { l: BLOCO_MAP }), LINES('final', 'Frases finais (passam antes dos créditos), uma por linha: palavra | frase', ['0', '1']), T('fim', 'Última palavra'), T('fimSub', 'Última frase')]],
   };
+  // "Como a IA nos ajudou" e "Manifesto 2027" viraram os blocos Reflexão e Sucesso: as cenas avulsas continuam existindo, mas só aparecem para quem as colocar no roteiro
+  const EXTRA_CENAS = ['ia', 'manifesto'];
   const cfGet = (o, k) => k.split('.').reduce((v, p) => (v == null ? v : v[p]), o);
   const cfSet = (o, k, v) => { const ps = k.split('.'); let t = o; ps.slice(0, -1).forEach(p => { t = t[p] = t[p] || {}; }); t[ps[ps.length - 1]] = v; };
   const linesOut = (list, f) => (list || []).map(x => f.cols.map(c => (f.map && f.map[c] ? f.map[c].out(x[c]) : x[c] ?? '')).join(' | ')).join('\n');
@@ -791,6 +953,7 @@
   });
   function cenaField(f, cfg) {
     const v = cfGet(cfg, f.k), id = `cf-${f.k.replace('.', '-')}`;
+    if (f.t === 'sel') return `<label class="f">${esc(f.l)}<select class="input" id="${id}" data-cf="${f.k}">${f.opts.map(([val, l]) => `<option value="${esc(val)}" ${val === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>`;
     if (f.t === 'check') return `<label class="sw"><input type="checkbox" id="${id}" data-cf="${f.k}" ${v ? 'checked' : ''}> ${esc(f.l)}</label>`;
     if (f.t === 'area') return `<label class="f">${esc(f.l)}<textarea class="input" id="${id}" data-cf="${f.k}">${esc(v ?? '')}</textarea></label>`;
     if (f.t === 'list') return `<label class="f">${esc(f.l)}<textarea class="input" id="${id}" data-cf="${f.k}">${esc((v || []).join('\n'))}</textarea></label>`;
@@ -824,9 +987,10 @@
         ${f('citacao', 'Citação lida na revelação', 'area')}</div></div>`; }).join('');
     return `<div class="card"><h2>Agenda e cenas</h2>
         <p class="small">O conteúdo do deck do townhall, em português. Cada seção é uma cena do roteiro; o que você salvar aqui vai para o telão e os celulares. <span class="mono">*Asteriscos*</span> marcam as palavras em destaque. Nas listas, uma linha por item, com as colunas separadas por <span class="mono"> | </span>.</p>
-        <div class="subtabs" style="margin-top:10px;flex-wrap:wrap">${Object.keys(CENA_FORM).map(k => `<button class="${k === sec ? 'on' : ''}" data-act="cenaSec" data-sec="${k}">${esc(CENA_FORM[k][0])}</button>`).join('')}</div></div>
+        <div class="subtabs" style="margin-top:10px;flex-wrap:wrap">${Object.keys(CENA_FORM).filter(k => !EXTRA_CENAS.includes(k) || k === sec || A.O.settings.steps.some(x => x.type === 'cena' && x.cena === k)).map(k => `<button class="${k === sec ? 'on' : ''}" data-act="cenaSec" data-sec="${k}">${esc(CENA_FORM[k][0])}</button>`).join('')}</div></div>
       <div class="card"><h2>${esc(title)}</h2>${hint ? `<p class="small" style="margin-bottom:10px">${esc(hint)}</p>` : ''}
         <div class="form">${extra && sec === 'agenda' ? extra : ''}${fields.map(f => cenaField(f, cfg)).join('')}
+          ${['almanaque', 'visao', 'reconhecimento'].includes(sec) ? '<p class="small">Quem apresenta este bloco (nomes e fotos no telão): em <a href="#" data-go="cenas" data-sec="anfitrioes">Quem conduz cada bloco</a>.</p>' : ''}
           <div class="actions"><button class="btn" data-act="cenaSave">Salvar</button><button class="btn ghost sm" data-act="cenaReset" style="margin-left:auto">Restaurar o conteúdo original desta seção</button></div></div></div>
       ${sec === 'reconhecimento' ? `${extra}<div class="card"><div class="actions"><button class="btn" data-act="cenaSave">Salvar os prêmios</button></div></div>` : ''}`;
   }
@@ -976,8 +1140,23 @@
           <label class="f">Texto dos blocos de fala (celular)<input class="input" id="cfgStageText" value="${esc(s.stageText || '')}"></label>
           <label class="sw"><input type="checkbox" id="cfgStageMutes" ${s.stageMutes ? 'checked' : ''}> Desligar o som ao exibir um bloco de fala</label>
           <label class="sw"><input type="checkbox" id="cfgTransitions" ${s.transitions !== false ? 'checked' : ''}> Transições do filme ao trocar de bloco (alguns segundos, no telão e nos celulares)</label>
+          <p class="small">Com isto ligado, cada passo decide se entra com a transição ou direto: escolha em <a href="#" data-go="roteiro">Roteiro</a> (botão ⚡ transição / ⏭ direto).</p>
           <label class="f">Duração da transição entre blocos (segundos)<input class="input" id="cfgTransSecs" type="number" min="3" max="30" value="${s.transitionSeconds || 15}"><span class="small">15 = sequência completa (programar o destino, Flux Capacitor, 88 MPH, raios). Menos de 7 = versão curta. Avisos e "olhos no telão" entram sempre em 3 s. No telão, a tecla Esc pula a transição.</span></label>
           <div class="actions"><button class="btn" data-act="saveSettings">Salvar</button></div>
+        </div></div>
+        <div class="card"><h2>🎧 Spotify</h2><div class="form">
+          <p class="small">Para a música do evento ser a que você escolher no <b>seu Spotify</b>: o painel mostra o que está tocando, dá play e pausa, abre as suas playlists e busca músicas. O Spotify exige <b>conta Premium</b> e uma preparação de uns 5 minutos, uma vez só:</p>
+          <ol class="small steps">
+            <li>Abra <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>, entre com a sua conta do Spotify e clique em <b>Create app</b>.</li>
+            <li>Dê um nome qualquer (ex.: Townhall). Em <b>Redirect URIs</b>, cole exatamente este endereço e clique em Add: <span class="mono copy" data-act="copy" data-text="${esc(location.origin)}/admin.html" title="Clique para copiar">${esc(location.origin)}/admin.html 📋</span></li>
+            <li>Em "Which API/SDKs are you planning to use?", marque <b>Web API</b> e <b>Web Playback SDK</b>. Salve.</li>
+            <li>Na página do app, copie o <b>Client ID</b> e cole no campo abaixo. Clique em Salvar e depois em <b>Conectar ao Spotify</b>.</li>
+          </ol>
+          <p class="small">Quem vai conectar é a mesma pessoa que criou o app? Então está pronto. Se for outra pessoa, o dono do app precisa incluí-la em <b>User Management</b> na mesma página (até 5 pessoas).${/^https:|^http:\/\/127\.0\.0\.1/.test(location.origin) ? '' : ' <b style="color:var(--amber)">Atenção: o Spotify só aceita endereços https (ou http://127.0.0.1). Abra o painel pelo endereço https para conectar.</b>'}</p>
+          <label class="f">Client ID do app do Spotify<input class="input mono" id="cfgSpotifyId" value="${esc(s.spotifyClientId || '')}" placeholder="32 letras e números" autocomplete="off" spellcheck="false"></label>
+          <label class="sw"><input type="checkbox" id="cfgSpotifyBreak" ${s.spotifyBreak ? 'checked' : ''}> No intervalo, tocar o meu Spotify em vez da música do app</label>
+          <div class="actions" style="align-items:center"><button class="btn" data-act="saveSettings">Salvar</button><span id="spCfgState" style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap">${spCfgState()}</span></div>
+          <p class="small">A conexão fica guardada só neste navegador (o servidor do townhall não vê a sua conta). No dia, use o mesmo computador e navegador em que conectou. A música sai do aparelho em que o seu Spotify estiver tocando (celular ligado na caixa de som, computador…) ou deste computador, com "Tocar neste computador".</p>
         </div></div>
         <div class="card"><h2>Acesso</h2><p class="small">A senha do painel é definida pela variável de ambiente <span class="mono">ADMIN_PASSWORD</span> no servidor. Link do app para os viajantes: <span class="mono">${esc(location.origin)}/</span> · Telão: <span class="mono">${esc(location.origin)}/telao.html</span></p>
           <div class="actions" style="margin-top:10px"><button class="btn ghost sm" data-act="logout">Sair do painel</button></div></div>
@@ -1117,14 +1296,42 @@
         const num = (id, min, max) => { const v = +$(id).value; return Number.isFinite(v) && v >= min && v <= max ? v : null; };
         const secs = num('#cfgSeconds', 10, 3600), find = num('#cfgFind', 0, 600), brk = num('#cfgBreak', 0, 120), rk = num('#cfgRanking', 0, 1800);
         if ([secs, find, brk, rk].some(v => v === null)) return toast('Confira os tempos: conversa 10–3600 s, encontro 0–600 s, intervalo 0–120 s, avaliação 0–1800 s.', true);
-        return run(async () => { await act('settings', { settings: { autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, stageText: $('#cfgStageText').value, stageMutes: $('#cfgStageMutes').checked, transitions: $('#cfgTransitions').checked, transitionSeconds: +$('#cfgTransSecs').value || 15, musicUrl: $('#cfgMusicUrl').value, ambientUrl: $('#cfgAmbientUrl').value } }); await act('setAudio', { out: $('#cfgAudioOut').value }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
+        const spId = $('#cfgSpotifyId').value.trim();
+        if (spId && !/^[0-9a-zA-Z]{20,64}$/.test(spId)) return toast('O Client ID do Spotify tem 32 letras e números, sem espaços. Copie de novo da página do app.', true);
+        if (!spId) { A.spRestored = true; try { localStorage.removeItem('bttf.spotify.cid'); } catch { /* segue */ } } // apagou de propósito: o navegador não devolve
+        return run(async () => { await act('settings', { settings: { spotifyClientId: spId, spotifyBreak: $('#cfgSpotifyBreak').checked, autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, stageText: $('#cfgStageText').value, stageMutes: $('#cfgStageMutes').checked, transitions: $('#cfgTransitions').checked, transitionSeconds: +$('#cfgTransSecs').value || 15, musicUrl: $('#cfgMusicUrl').value, ambientUrl: $('#cfgAmbientUrl').value } }); await act('setAudio', { out: $('#cfgAudioOut').value }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
       }
       case 'saveMessage': case 'showMessage': return run(() => act('setMessage', { message: { emoji: $('#msgEmoji').value, title: $('#msgTitle').value, body: $('#msgBody').value }, show: act_ === 'showMessage' }), act_ === 'showMessage' ? 'Mensagem exibida nos celulares' : 'Mensagem salva');
       case 'logout': localStorage.removeItem('bttf.admin'); api('POST', '/api/admin/logout').finally(() => location.reload()); return;
-      case 'audio': return run(() => act('setAudio', { mode: el.dataset.mode }), el.dataset.mode === 'off' ? 'Som desligado' : `${el.dataset.mode === 'music' ? '🎵 Música animada' : '🎼 Trilha de fundo'} ligada · o som sai ${(O.state.audio || {}).out === 'painel' ? 'deste computador' : 'do telão'}`);
+      case 'audio':
+        if (el.dataset.mode === 'spotify') { // a música vem do Spotify de quem está neste painel
+          if (!spState().connected) return spDialog();
+          return run(() => act('setAudio', { mode: 'spotify' }), '🎧 Spotify ligado · a música do app fica calada');
+        }
+        return run(() => act('setAudio', { mode: el.dataset.mode }), el.dataset.mode === 'off' ? 'Som desligado' : `${el.dataset.mode === 'music' ? '🎵 Música animada' : '🎼 Trilha de fundo'} ligada · o som sai ${(O.state.audio || {}).out === 'painel' ? 'deste computador' : 'do telão'}`);
+      // --- Spotify ---
+      case 'spOpen': return spDialog();
+      case 'spCfg': closeDialog(); A.tab = 'prep'; A.prep = 'config'; render(true); { const c = $('#cfgSpotifyId'); if (c) { c.scrollIntoView({ block: 'center' }); c.focus(); } } return;
+      case 'spLogin': return run(() => SP.login());
+      case 'spLogout': return confirmRun('Desconectar o Spotify deste painel?', async () => { SP.logout(); if ($('#dlg').open) closeDialog(); if ((O.state.audio || {}).mode === 'spotify') await act('setAudio', { mode: 'off' }); render(true); }, 'Spotify desconectado');
+      case 'spToggle': return run(async () => { const playing = SP.state.player && SP.state.player.playing; A.spQuiet = Date.now(); await SP.toggle(); if (!playing && (O.state.audio || {}).mode !== 'spotify') await act('setAudio', { mode: 'spotify' }); });
+      case 'spNext': return run(() => SP.next());
+      case 'spPrev': return run(() => SP.prev());
+      case 'spVol': return run(() => SP.volume(+el.value));
+      case 'spDevs': return run(async () => { await SP.devices(); await SP.refresh(); }, 'Aparelhos atualizados');
+      case 'spDevice': if (!el.value) return; return run(() => SP.transfer(el.value, true), 'Tocando no aparelho escolhido');
+      case 'spLocal': return run(async () => { await SP.startLocal(); await SP.devices().catch(() => {}); }, '🔊 Este computador agora é um aparelho do Spotify');
+      case 'spPlay': return run(async () => { A.spQuiet = Date.now(); await SP.play({ uri: el.dataset.uri }); if ((O.state.audio || {}).mode !== 'spotify') await act('setAudio', { mode: 'spotify' }); }, '▶ Tocando no Spotify');
+      case 'copy': return run(async () => { await navigator.clipboard.writeText(el.dataset.text); }, 'Endereço copiado');
+      // --- microfone dos aplausos (Reconhecimento) ---
+      case 'micOn': Mic.autoTried = true; return micStart(false);
+      case 'micOff': return micStop(false);
+      case 'micCal': return micCal();
+      case 'micSens': Mic.span = 44 - (Math.max(1, Math.min(10, +el.value)) - 1) * 4; localStorage.setItem('bttf.micSpan', String(Mic.span)); return;
       case 'audioBeeps': return run(() => act('setAudio', { beeps: !!el.dataset.on }), el.dataset.on ? '⏱ Bipes do cronômetro ligados' : 'Bipes do cronômetro desligados');
       case 'audioOut': return run(() => act('setAudio', { out: el.dataset.out }), el.dataset.out === 'painel' ? 'O som agora sai deste computador' : 'O som agora sai do telão');
-      case 'audioVol': return run(() => act('setAudio', { volume: +el.value }));
+      case 'audioVol': if ((O.state.audio || {}).mode === 'spotify' && spState().connected) SP.volume(+el.value).catch(() => {}); // no modo Spotify, o volume também vai para o Spotify (quando o aparelho deixa)
+        return run(() => act('setAudio', { volume: +el.value }));
       // --- roteiro: ao vivo ---
       case 'goStep': { // coloca o passo no ar: é aqui (e só aqui) que o telão e os celulares mudam
         if (el.dataset.guard && !confirm(el.dataset.guard)) return;
@@ -1154,6 +1361,7 @@
       }
       case 'rsDel': draftSteps().splice(+el.dataset.i, 1); return render(true);
       case 'rsMove': { const list = draftSteps(), a = +el.dataset.i, b = a + +el.dataset.d; if (b < 0 || b >= list.length) return; [list[a], list[b]] = [list[b], list[a]]; return render(true); }
+      case 'rsTr': { const x = draftSteps()[+el.dataset.i]; if (!x) return; if (x.transition === false) delete x.transition; else x.transition = false; return render(true); } // com ou sem a transição do filme
       case 'rsDiscard': A.stepsDraft = null; return render(true);
       case 'rsDefault': if (!confirm('Trocar o roteiro pelo padrão? Você ainda precisa salvar para valer.')) return; A.stepsDraft = DEFAULT_STEPS(); return render(true);
       case 'rsSave': return run(async () => { await act('settings', { settings: { steps: A.stepsDraft } }); A.stepsDraft = null; }, 'Roteiro salvo');

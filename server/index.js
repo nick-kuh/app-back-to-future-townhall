@@ -71,6 +71,10 @@ function publicState() {
   const kind = cenaOnAir();
   s.cena = kind ? withPhotos(cenas.publicState(kind, { steps: engine.settings.steps, index: s.step.index })) : null;
   s.evento = cenas.evento();                                         // nome do evento e circuitos de tempo (check-in, créditos)
+  // quem conduz o bloco que está no ar, com a foto de perfil (Conexões, Reflexão, Sucesso e as cenas que têm anfitrião)
+  const hk = s.presentation || s.block === 'doc' ? 'sucesso' : kind || s.block, names = cenas.hosts(hk);
+  if (names.length) { const people = engine.listPeople(); s.hosts = names.map(nome => ({ nome, foto: engine.photoByName(nome, people) })); } else s.hosts = [];
+  if (s.cena) s.cena.hosts = s.hosts;                                // a cena leva os seus anfitriões (muda o nome → o telão redesenha)
   s.creditos = engine.state.block === 'closing' ? cenas.creditos() : null;
   return s;
 }
@@ -499,6 +503,10 @@ io.on('connection', socket => {
       if (!pid || cenaOnAir() !== 'reconhecimento') return safeAck(ack, { ok: false });
       safeAck(ack, { ok: cenas.tap(pid, engine.publicState().counts.checkedIn) });
     } catch (e) { safeAck(ack, { ok: false }); }
+  });
+  // Reconhecimento: o Painel do Doc ouve os aplausos pelo microfone e manda a carga andar (só sockets logados como admin)
+  socket.on('cena:mic', payload => {
+    try { if (socket.rooms.has('admin') && cenaOnAir() === 'reconhecimento') cenas.mic(payload && payload.delta, payload && payload.nivel); } catch (e) { /* segue */ }
   });
   socket.on('admin:hello', (payload, ack) => {
     try {

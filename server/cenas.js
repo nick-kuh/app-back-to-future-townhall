@@ -19,6 +19,7 @@ const META = {
   manifesto: { name: 'Manifesto 2027', icon: '📜', act: 3, hint: 'abertura da Frente 3 (antes das dinâmicas do Sucesso)', tr: 'O futuro de vocês é o que vocês fizerem dele' },
   mph: { name: '88 MPH · Encerramento', icon: '🏎️', act: 3, hint: 'o velocímetro chega a 88 e todo mundo chega a 2027', tr: 'Segurem firme…' },
 };
+const HOST_KEYS = ['connections', 'almanaque', 'reflexao', 'reconhecimento', 'visao', 'sucesso']; // blocos com anfitriões
 const MONTHS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 const BUS = { HC: 'HC', BPC: 'BPC', X: 'CROSS BU' };
 const TIPOS = { E: 'Entregue', M: 'Marco', R: 'Resultado', C: 'Contexto' };
@@ -89,13 +90,13 @@ const DEFAULT_CONFIG = () => ({
     itens: [
       { ato: 1, t: 'Chegada e vídeo de abertura', d: 'Música · De Volta para o Futuro / gancho da DeLorean', min: 10, ref: 'checkin' },
       { ato: 1, t: 'Boas-vindas e jornada', d: 'Monserrat, William e Luciano', min: 10, ref: 'boasvindas' },
-      { ato: 1, t: 'Conexão', d: 'Speed-connection em duplas · Vinicius e Nicolas', min: 20, ref: 'connections' },
+      { ato: 1, t: 'Conexão', d: 'Speed-connection em duplas · Nicolas e Douglas', min: 20, ref: 'connections' },
       { ato: 2, t: 'Jornada 2026', d: 'Resultados, impacto e aprendizados da liderança · Claudia e Fermín', min: 35, ref: 'almanaque' },
-      { ato: 2, t: 'Como a IA nos ajudou em 2026', d: 'Da experimentação à geração de valor', min: 15, ref: 'ia' },
+      { ato: 2, t: 'Reflexão', d: 'Como a IA nos ajudou em 2026 · da experimentação à geração de valor', min: 15, ref: 'reflexao' },
       { ato: 3, t: 'Reconhecimento 2026', d: 'Homenagens aos stakeholders · 2 BPC + 2 HC', min: 25, ref: 'reconhecimento' },
       { ato: 3, t: 'Intervalo', d: 'Fechar 2026 · reabastecer antes da viagem para 2027', min: 15, ref: 'intervalo' },
-      { ato: 4, t: 'Transição e visão 2027', d: 'De Volta para o Futuro · Claudia e Fermín', min: 30, ref: 'visao' },
-      { ato: 4, t: 'Manifesto 2027', d: 'QR interativo / app · compromisso coletivo', min: 15, ref: 'manifesto' },
+      { ato: 4, t: 'Transição e visão 2027', d: 'De Volta para o Futuro · Claudia Meira', min: 30, ref: 'visao' },
+      { ato: 4, t: 'Sucesso', d: 'Manifesto 2027 · compromisso coletivo no app', min: 15, ref: 'sucesso' },
       { ato: 4, t: '88 MPH · Encerramento', d: 'Vozes jovens · acelerar juntos', min: 5, ref: 'mph' },
     ],
   },
@@ -128,6 +129,9 @@ const DEFAULT_CONFIG = () => ({
     tributo: 'Nossas pessoas são o *Flux Capacitor*', fala: 'Claudia Meira / Luciano Barbosa (a confirmar) · 3–5 min', video: '',
     premiosTitulo: 'Os *Prêmios Torre do Relógio* 2026', hallTitulo: 'Hall da Fama 2026', hallSub: 'As pessoas que tornaram possível a linha do tempo de 2026.',
     exemplo: true, // os nomes do deck são de exemplo: o aviso sai quando os indicados forem editados
+    // como o Flux Capacitor carrega na cerimônia: 'mic' = o microfone ouve os aplausos da sala (quanto mais barulho, mais rápido);
+    // 'toques' = cada toque no botão dos celulares soma energia; 'ambos' = as duas coisas
+    carga: 'mic',
     // ic: ícone (i raio · c dupla · b ferramenta · f relógio) · n: prêmio · k: categoria · indicados: nome e projeto · vencedor: posição na lista (1 a 4)
     premios: [
       { ic: 'i', n: 'Flux Capacitor', k: 'IMPACTO', porque: 'A fonte de energia do ano. Reconhece a entrega de valor de negócio mensurável em 2026.',
@@ -149,9 +153,19 @@ const DEFAULT_CONFIG = () => ({
     ],
   },
   intervalo: { kicker: 'Intervalo', titulo: 'Reabastecendo a *DeLorean*', min: 15, texto: 'O Mr. Fusion está recarregando. Pegue um café, conheça alguém novo e volte antes de o relógio zerar.' },
-  visao: { kicker: 'Claudia Meira e Fermín Grandas · Visão 2027', titulo: 'Para onde vamos…', nota: 'Estratégia CDIO LATAM 2027 · interativa', quem: 'Claudia Meira e Fermín Grandas', min: 30 },
+  visao: { kicker: 'Visão 2027', titulo: 'Para onde vamos…', nota: 'Estratégia CDIO LATAM 2027 · interativa', quem: 'Claudia Meira', min: 30 },
   manifesto: { kicker: 'Frente 3 · Compromisso 2027', mes: 'DEZ', dia: '11', ano: '2027', titulo: 'Nós conhecemos o destino de 2027.', pergunta: 'O que fez dele um sucesso?', faixa: 'QR INTERATIVO / APP · MANIFESTO COLETIVO 2027', quem: 'Lucas e Giovana', min: 15 },
   mph: { kicker: 'Encerramento', antes: '2026 nos deu o impulso.', chegada: 'Bem-vindos a 2027', depois: 'Para onde vamos, construímos a estrada juntos.', quem: 'Vozes jovens · acelerar juntos', min: 5 },
+  // Quem conduz cada bloco: aparece no telão com o nome e a foto de perfil (como nas boas-vindas).
+  // connections, reflexao e sucesso são os blocos interativos; os outros são cenas.
+  anfitrioes: {
+    connections: ['Nicolas Kuhnast', 'Douglas Hamasaki'],
+    almanaque: ['Claudia Meira', 'Fermín Grandas'],
+    reflexao: ['Felipe Zompero', 'Mayara Gomes', 'Pedro Teixeira', 'Geovanna Moreira'],
+    reconhecimento: ['Felipe Resck'],
+    visao: ['Claudia Meira'],
+    sucesso: ['Lucas Barbosa', 'Giovana Romão', 'Maria Eduarda'],
+  },
   creditos: {
     // "TÍTULO: nome, nome" por linha; o elenco (todos os nomes do check-in) entra sozinho no fim
     blocos: [
@@ -215,6 +229,7 @@ function cleanSection(key, cur, p) {
       txt('kicker', 80); txt('aberturaSub', 200); txt('tributo', 120); txt('fala', 160); txt('premiosTitulo', 100); txt('hallTitulo', 80); txt('hallSub', 160); min();
       if (p.video !== undefined) out.video = url(p.video);
       if (p.exemplo !== undefined) out.exemplo = !!p.exemplo;
+      if (p.carga !== undefined) out.carga = ['mic', 'toques', 'ambos'].includes(p.carga) ? p.carga : cur.carga;
       if (Array.isArray(p.abertura)) out.abertura = p.abertura.slice(0, 3).map(x => clip(x, 120)).filter(Boolean);
       if (Array.isArray(p.premios)) {
         const premios = p.premios.slice(0, 8).map((x, i) => {
@@ -231,6 +246,9 @@ function cleanSection(key, cur, p) {
     case 'visao': txt('kicker', 100); txt('titulo', 80); txt('nota', 100); txt('quem', 80); min(); break;
     case 'manifesto': txt('kicker', 80); txt('mes', 6); txt('dia', 4); txt('ano', 6); txt('titulo', 120); txt('pergunta', 120); txt('faixa', 120); txt('quem', 80); min(); break;
     case 'mph': txt('kicker', 80); txt('antes', 160); txt('chegada', 60); txt('depois', 160); txt('quem', 80); min(); break;
+    case 'anfitrioes':
+      for (const k of HOST_KEYS) if (Array.isArray(p[k])) out[k] = p[k].slice(0, 6).map(x => clip(x, 60)).filter(Boolean);
+      break;
     case 'creditos':
       txt('fim', 40); txt('fimSub', 80);
       if (Array.isArray(p.blocos)) out.blocos = p.blocos.slice(0, 20).map(x => ({ h: clip(x && x.h, 60), l: (Array.isArray(x && x.l) ? x.l : []).slice(0, 12).map(y => clip(y, 100)).filter(Boolean) })).filter(x => x.h && x.l.length);
@@ -260,8 +278,10 @@ const defaultState = () => ({
   mph: { at: null },
 });
 
+const CONFIG_VERSION = 2; // v2: Reflexão e Sucesso na agenda, anfitriões por bloco, Visão 2027 com a Claudia Meira
 function createCenas() {
   const saved = kvGet('cenas', {}) || {};
+  if (saved.config && (saved.v || 1) < CONFIG_VERSION) for (const k of ['agenda', 'visao']) delete saved.config[k];
   let config = cleanConfig(saved.config);
   const state = defaultState();
   for (const k of Object.keys(state)) if (saved.state && saved.state[k] && typeof saved.state[k] === 'object') Object.assign(state[k], saved.state[k]);
@@ -270,7 +290,7 @@ function createCenas() {
   const listeners = [], pulses = [];
   let playT = null, drawT = null, breakT = null, pulseT = null, pageT = null;
 
-  const save = () => kvSet('cenas', { config, state });
+  const save = () => kvSet('cenas', { v: CONFIG_VERSION, config, state });
   const emit = notice => { save(); for (const fn of listeners) fn(notice || null); };
   const now = () => Date.now();
 
@@ -307,7 +327,7 @@ function createCenas() {
     switch (kind) {
       case 'agenda': return { ...base, ...agendaView(ctx) };
       case 'boasvindas': return { ...base, ...config.boasvindas };
-      case 'almanaque': { const c = config.almanaque, s = state.almanaque; return { ...base, kicker: c.kicker, titulo: c.titulo, sub: c.sub, quem: c.quem, kpis: c.kpis, kpiEntregas: c.kpiEntregas, kpiBeneficios: c.kpiBeneficios, itens: c.itens, fonte: c.fonte, pagina: c.pagina, stats: almanaqueStats(), meses: MONTHS, bus: BUS, tipos: TIPOS, live: { ...s } }; }
+      case 'almanaque': { const c = config.almanaque, s = state.almanaque; return { ...base, kicker: c.kicker, titulo: c.titulo, sub: c.sub, quem: names(hosts('almanaque')) || c.quem, kpis: c.kpis, kpiEntregas: c.kpiEntregas, kpiBeneficios: c.kpiBeneficios, itens: c.itens, fonte: c.fonte, pagina: c.pagina, stats: almanaqueStats(), meses: MONTHS, bus: BUS, tipos: TIPOS, live: { ...s } }; }
       case 'ia': { const { nota, ...c } = config.ia; return { ...base, ...c }; } // a nota é para quem apresenta: fica só no painel
       case 'reconhecimento': {
         const c = config.reconhecimento, s = state.reconhecimento, feitos = new Set(s.feitos);
@@ -315,15 +335,19 @@ function createCenas() {
         const aberto = i => feitos.has(i) || (s.fase === 'cerimonia' && s.premio === i && ['sorteio', 'vencedor'].includes(s.passo));
         return { ...base, kicker: c.kicker, abertura: c.abertura, aberturaSub: c.aberturaSub, tributo: c.tributo, fala: c.fala.replace(/\s*\(a confirmar\)/i, ''), video: c.video, premiosTitulo: c.premiosTitulo, hallTitulo: c.hallTitulo, hallSub: c.hallSub, exemplo: !!c.exemplo,
           premios: c.premios.map((p, i) => ({ ic: p.ic, n: p.n, k: p.k, porque: p.porque, criterios: p.criterios, indicados: p.indicados, feito: feitos.has(i), ...(aberto(i) ? { vencedor: p.vencedor - 1, citacao: p.citacao } : {}) })),
-          live: { fase: s.fase, premio: s.premio, passo: s.passo, at: s.at, carga: s.carga, feitos: s.feitos, video: !!s.video, sorteioMs: DRAW_MS } };
+          carga: c.carga || 'mic', quem: names(hosts('reconhecimento')),
+          live: { fase: s.fase, premio: s.premio, passo: s.passo, at: s.at, carga: s.carga, nivel: s.passo === 'carga' ? s.nivel || 0 : 0, feitos: s.feitos, video: !!s.video, sorteioMs: DRAW_MS } };
       }
       case 'intervalo': { const c = config.intervalo, s = state.intervalo; return { ...base, ...c, live: { phase: s.phase, endsAt: s.endsAt, remaining: s.remaining === null ? c.min * 60 : s.remaining, duration: s.duration || c.min * 60 } }; }
-      case 'visao': return { ...base, ...config.visao, src: '/estrategia-2027.html', live: { ...state.visao } };
+      case 'visao': return { ...base, ...config.visao, quem: names(hosts('visao')) || config.visao.quem, src: '/estrategia-2027.html', live: { ...state.visao } };
       case 'manifesto': return { ...base, ...config.manifesto };
       case 'mph': return { ...base, ...config.mph, live: { ...state.mph } };
       default: return base;
     }
   }
+  // quem conduz um bloco (nomes): o servidor junta a foto de perfil de cada um
+  const hosts = key => (HOST_KEYS.includes(key) ? (config.anfitrioes[key] || []).slice() : []);
+  const names = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} e ${list[list.length - 1]}` : list[0] || '');
   const evento = () => ({ ...config.evento });
   const creditos = () => ({ ...config.creditos, titulo: config.evento.titulo, sub: config.evento.sub });
   const adminState = () => ({ kinds: KINDS, meta: META, config, state, stats: almanaqueStats(), months: MONTHS, bus: BUS, tipos: TIPOS, drawMs: DRAW_MS });
@@ -393,7 +417,7 @@ function createCenas() {
         break;
       }
       case 'indicados': inCeremony(['categoria']); s.passo = 'indicados'; s.at = now(); break;
-      case 'carregar': inCeremony(['indicados']); s.passo = 'carga'; s.carga = 0; s.at = now(); break;
+      case 'carregar': inCeremony(['indicados']); s.passo = 'carga'; s.carga = 0; s.nivel = 0; s.at = now(); break;
       case 'carga': inCeremony(['carga']); s.carga = clamp(s.carga + clamp(Number(a.v) || .15, .01, 1), 0, 1); if (s.carga >= 1) return draw(); break;
       case 'raio': inCeremony(['indicados', 'carga']); return draw();
       case 'vencedor': inCeremony(['sorteio']); return winner(); // pular o suspense
@@ -402,11 +426,21 @@ function createCenas() {
     }
     emit();
   }
+  // Aplausos pelo microfone: o Painel do Doc ouve a sala e manda, algumas vezes por segundo, quanto a carga anda
+  // (delta pode ser negativo: sem barulho, a carga escorre devagar) e o nível do som (0 a 1), para o medidor do telão.
+  function mic(delta, nivel) {
+    const s = state.reconhecimento;
+    if (s.fase !== 'cerimonia' || s.passo !== 'carga' || config.reconhecimento.carga === 'toques') return false;
+    s.carga = clamp(s.carga + clamp(Number(delta) || 0, -.1, .2), 0, 1); s.nivel = clamp(Number(nivel) || 0, 0, 1);
+    if (s.carga >= 1) { s.nivel = 0; draw(); return true; }
+    for (const fn of pulses) fn({ kind: 'reconhecimento', carga: s.carga, nivel: s.nivel });
+    return true;
+  }
   // Toques de "aplauso" nos celulares durante a carga: somam energia; os avisos saem agrupados (no máximo 4 por segundo)
   const taps = new Map();
   function tap(personId, people) {
     const s = state.reconhecimento;
-    if (s.fase !== 'cerimonia' || s.passo !== 'carga') return false;
+    if (s.fase !== 'cerimonia' || s.passo !== 'carga' || config.reconhecimento.carga === 'mic') return false;
     const t = now(), mine = taps.get(personId) || { at: 0, n: 0 };
     if (t - mine.at > 1000) { mine.at = t; mine.n = 0; }
     if (++mine.n > 12) { taps.set(personId, mine); return false; }  // no máximo 12 toques por segundo por pessoa
@@ -502,8 +536,8 @@ function createCenas() {
   }
 
   armBreak();
-  return { publicState, adminState, evento, creditos, command, tap, enter, sync, setConfig, resetConfig, resetState, resetKind,
+  return { publicState, adminState, evento, creditos, hosts, command, tap, mic, enter, sync, setConfig, resetConfig, resetState, resetKind,
     onChange: fn => listeners.push(fn), onPulse: fn => pulses.push(fn), agendaView, config: () => config };
 }
 
-module.exports = { createCenas, KINDS, META, MONTHS, DEFAULT_CONFIG };
+module.exports = { createCenas, KINDS, META, MONTHS, HOST_KEYS, DEFAULT_CONFIG };

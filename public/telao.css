@@ -222,6 +222,33 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 body.calm .sky{filter:brightness(.34) saturate(.65);transition:filter 1.2s}
 body.calm .crt{animation:none}
 body.calm .osd{opacity:.45}
+/* cenas do deck: o céu e a estrada continuam rodando, um pouco mais escuros para o texto ficar fácil de ler */
+body.dim .sky{filter:brightness(.56) saturate(.85);transition:filter 1.2s}
+
+/* ===== quem conduz o bloco: placas (a da DeLorean: azul com letras amarelas) com a foto de perfil e o nome ===== */
+.hosts{display:flex;align-items:center;justify-content:center;gap:1vw;flex-wrap:wrap}
+.hosts>small{font:400 clamp(8px,.85vw,13px) var(--pixel);letter-spacing:3px;color:var(--cyan);text-shadow:0 0 10px rgba(46,230,214,.6)}
+.host{display:flex;align-items:center;gap:.8vw;background:linear-gradient(180deg,#2444b8,#16308c);border:3px solid #f0cf3c;border-radius:12px;padding:.8vh 1.4vw .9vh .8vw;box-shadow:0 6px 0 #0a1750,0 0 26px rgba(36,68,184,.45)}
+.host b{font:400 clamp(13px,1.45vw,25px) Michroma,var(--display);letter-spacing:.06em;color:#f7d94a;text-transform:uppercase;text-shadow:0 2px 0 #0a1750;white-space:nowrap}
+.host .av{position:relative;overflow:hidden;display:grid;place-items:center;flex:none;width:2.6em;height:2.6em;border-radius:50%;font:900 clamp(14px,1.5vw,25px) var(--display);color:#2a0d00;background:radial-gradient(circle at 35% 30%,#ffe65c,#ff8a00 60%,#a33a00);box-shadow:0 0 0 3px #f0cf3c,0 0 22px rgba(255,138,0,.55)}
+.host .av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.host .av.foto{color:transparent}
+/* versão compacta (linha de cima do Sucesso, menu da Reflexão, moldura da estratégia) */
+.hosts.sm{gap:.6vw}
+.hosts.sm .host{border-width:2px;border-radius:99px;padding:.35vh 1vw .35vh .35vw;gap:.55vw;box-shadow:0 3px 0 #0a1750,0 0 16px rgba(36,68,184,.4)}
+.hosts.sm .host b{font-size:clamp(10px,.95vw,16px);text-shadow:none}
+.hosts.sm .host .av{font-size:clamp(10px,1vw,17px);box-shadow:0 0 0 2px #f0cf3c}
+/* em coluna (painel do mês, no almanaque) */
+.hosts.col{flex-direction:column;align-items:stretch;gap:.8vh;margin-top:auto}
+.hosts.col>small{align-self:flex-start}
+.hosts.col .host{border-width:2px;padding:.5vh .8vw .5vh .5vw;box-shadow:0 3px 0 #0a1750}
+.hosts.col .host b{font-size:clamp(9px,.9vw,15px);white-space:normal}
+.hosts.col .host .av{font-size:clamp(11px,1.1vw,18px);box-shadow:0 0 0 2px #f0cf3c}
+/* empilhadas, alinhadas à esquerda (almanaque antes de começar) */
+.hosts.stack{flex-direction:column;align-items:flex-start;gap:1.2vh}
+.scene[data-key=prep] .hosts{margin-top:3vh}
+.lp-head{display:flex;align-items:center;justify-content:center;gap:1.6vw;flex-wrap:wrap}
+.rfx-menu .hosts{margin-top:.4vh}
 
 /* aviso para liberar o som (os navegadores exigem um clique) */
 .sound-chip{position:fixed;left:50%;bottom:3vh;transform:translateX(-50%);z-index:40;border:2px solid var(--yellow);background:rgba(5,4,9,.92);color:var(--yellow);font:700 clamp(13px,1.3vw,20px) Inter;padding:12px 22px;border-radius:99px;cursor:pointer;animation:chip 1.6s ease-in-out infinite}

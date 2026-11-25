@@ -14,7 +14,8 @@ por ranking e cálculo automático de quem cada pessoa deve procurar depois.
 
 O roteiro padrão segue a agenda do deck `CDIO_HC_BPC_Townhall_2026_BTTF_v18` (14:00 às 17:00, 180 minutos).
 Todo o conteúdo do deck está no app, **em português** e com o visual do app; **Conexões, Reflexão e Sucesso
-continuam como eram**.
+continuam como eram**. "Como a IA nos ajudou em 2026" é o próprio bloco **Reflexão** e o "Manifesto 2027" é o próprio
+bloco **Sucesso**: cada um é um passo só no roteiro e um item só na agenda.
 
 | Ato | Passo do roteiro | O que é |
 |---|---|---|
@@ -23,23 +24,32 @@ continuam como eram**.
 | | 👋 Boas-vindas e jornada | "Fechar 2026 com orgulho. Sair com um destino claro para 2027." e quem fala |
 | | ⚡ Conexões | bloco interativo (sem mudanças de tela, só os ajustes abaixo) |
 | II · Rebobinar 2026 | 📅 Jornada 2026 | o **almanaque**: 12 meses, 51 itens, 41 entregas, €51,3M; "tocar o ano" e o ano em uma página |
-| | 🦋 Como a IA nos ajudou em 2026 | abertura da Frente 2, com o QR do app |
-| | 💭 Reflexão | bloco interativo (sem mudanças) |
+| | 💭 Reflexão | bloco interativo: "Como a IA nos ajudou em 2026" |
 | III · Reconhecer | 🏆 Reconhecimento 2026 | abertura → tributo (vídeo) → **Prêmios Torre do Relógio** → cerimônia de cada prêmio → Hall da Fama |
 | | ☕ Intervalo | cronômetro de 15 min no telão e nos celulares; a música entra |
 | IV · Avançar para 2027 | 🔭 Visão 2027 · Estratégia | a **Estratégia CDIO LATAM 2027** no telão, interativa (arquivo original, sem alterações) |
-| | 📜 Manifesto 2027 | "Nós conhecemos o destino de 2027. O que fez dele um sucesso?" e o QR do app |
-| | 🚀 Sucesso 01 a 04 · 🧪 o Doc | bloco interativo (sem mudanças) |
+| | 🚀 Sucesso 01 a 04 · 🧪 o Doc | bloco interativo: o manifesto coletivo de 2027 |
 | | 🏎️ 88 MPH · Encerramento | o velocímetro vai a 88 (telão e celulares) e "Bem-vindos a 2027" |
 | | 🏁 Créditos | as frases finais do deck, os créditos e o elenco (todos os nomes do check-in) |
+
+As telas avulsas "🦋 Como a IA nos ajudou em 2026" e "📜 Manifesto 2027" continuam existindo como cenas extras
+(Preparar → Roteiro → Cenas extras), para quem quiser uma tela de abertura antes do bloco.
+
+**Quem conduz cada bloco.** O telão mostra o nome e a foto de perfil de quem conduz (placas como as das boas-vindas):
+Conexões (tela de preparação), Jornada 2026, Reflexão (menu das paradas), Reconhecimento (abertura), Visão 2027 e
+Sucesso (linha de cima). Nos celulares, as fotos aparecem nas telas de "olhe para o telão". Os nomes ficam em
+**Preparar → Agenda e cenas → 🎙️ Quem conduz cada bloco**, um por linha, escritos como na lista de pessoas (é pelo
+nome que a foto é encontrada).
 
 Como conduzir cada cena (no **Ao vivo**, um botão principal por vez):
 
 - **Jornada 2026:** `▶ Tocar o ano` avança um mês a cada 3 s e, em dezembro, abre o ano em uma página. Dá para clicar
-  direto em um mês, ir mês a mês e esconder/mostrar BUs e tipos (Mais opções).
+  direto em um mês, ir mês a mês e esconder/mostrar BUs e tipos (Mais opções). Antes de começar, o telão mostra a
+  DeLorean 3D na estrada ("Rebobinando 2026…"); na linha do tempo, quem anda de mês em mês é o **modelo 3D de verdade**
+  (rodas girando e rastro de fogo a cada mês). O céu e a estrada continuam rodando no fundo em todas as cenas.
 - **Reconhecimento 2026:** `▶ Tributo` → `Abrir os Prêmios` → para cada prêmio: `Conhecer os indicados` →
-  `⚡ Carregar o Flux Capacitor` → o raio cai e o vencedor aparece. Na carga, **cada toque no botão ⚡ CARREGAR dos
-  celulares soma energia no telão** (em média, 6 toques por pessoa enchem; o painel tem `+15%` e `Raio agora`).
+  `⚡ Carregar o Flux Capacitor` → o raio cai e o vencedor aparece. Na carga, **os aplausos da sala carregam o Flux
+  Capacitor**: quanto mais barulho, mais rápido (veja "🎤 Aplausos" abaixo). O painel tem `+15%` e `Raio agora` de reserva.
   Os vencedores são definidos antes (Preparar → Agenda e cenas); o "sorteio" é o suspense. Os aparelhos só recebem
   o nome do vencedor quando o sorteio daquele prêmio começa.
   - Os indicados do deck são **nomes de exemplo**: o telão mostra o aviso "NOMES DE EXEMPLO" até eles serem editados.
@@ -53,8 +63,24 @@ Como conduzir cada cena (no **Ao vivo**, um botão principal por vez):
 do almanaque (`mês | tipo | BU | benefício | texto`), prêmios (indicados, vencedor, citação), créditos.
 `*Asteriscos*` marcam palavras em destaque. Cada seção tem "Restaurar o conteúdo original".
 
+### 🎤 Aplausos carregam o Flux Capacitor
+
+Na cerimônia de cada prêmio, quem ouve a sala é o **microfone do aparelho em que o Painel do Doc está aberto**
+(computador ou celular). No passo Reconhecimento do Ao vivo há o quadro **🎤 Microfone dos aplausos**:
+
+1. Clique em **Ligar o microfone** (o navegador pede a permissão uma vez; precisa de https). Uma barra mostra o som
+   da sala. O som **não é gravado nem enviado**: só o volume é medido ali mesmo.
+2. O painel descobre sozinho o "silêncio da sala". Acima dele, quanto mais alto, mais rápido a carga anda: aplauso
+   forte enche o capacitor em uns 7 segundos; fala normal carrega devagar; silêncio faz a carga escorrer.
+3. Ajuste fino: **Sensibilidade** (1 a 10) ou **🎚 Calibrar com uma salva de palmas** (ouve 4 segundos de palmas de
+   teste e ajusta para elas valerem como aplauso forte). Vale testar no ensaio, com o aparelho no lugar do dia.
+
+No telão, a faixa "FAÇAM BARULHO!" ganha um medidor de aplausos; nos celulares aparece "aplaudam!". Em Preparar →
+Agenda e cenas → Reconhecimento dá para escolher como o capacitor carrega: **aplausos** (padrão), **toques no botão
+⚡ CARREGAR dos celulares** (em média, 6 toques por pessoa enchem) ou **os dois**.
+
 Onde o deck dizia uma coisa no slide e outra na agenda, vale a **agenda** (ela é a versão atualizada): intervalo de
-15 min (o slide dizia 10), Manifesto de 15 min (o slide dizia 10) e o Intervalo dentro do Ato III. As notas para quem
+15 min (o slide dizia 10), Sucesso/Manifesto de 15 min (o slide dizia 10) e o Intervalo dentro do Ato III. As notas para quem
 apresenta ("use apenas destaques selecionados…", "a confirmar") aparecem só no painel, não no telão.
 
 O código está em `server/cenas.js` (conteúdo, estado e comandos), `public/cenas.js` e `public/cenas.css` (telão).
@@ -290,8 +316,11 @@ viagens (depois do sorteio, é preciso sortear de novo).
   telão (ou do painel, se o som estiver nele) e segue o volume do painel. O botão **⏱ Bipes** no topo
   do painel liga e desliga; eles tocam mesmo com "Sem áudio". É preciso um clique na tela do telão
   para o navegador liberar o som (o painel avisa quando falta).
-- **Transições.** Ao trocar de bloco, o telão faz uma "viagem no tempo" de **15 segundos**, em quatro
-  atos, para todo mundo olhar para ele:
+- **Transições.** Ao trocar de bloco, o telão pode fazer uma "viagem no tempo" de **15 segundos**. Cada passo do
+  roteiro escolhe se entra **com a transição** ou **direto** (Preparar → Roteiro, botão `⚡ transição` / `⏭ direto`).
+  No roteiro padrão a transição fica em: Plano de voo, Conexões, Jornada 2026 e Reflexão. Entram **direto**:
+  Boas-vindas, Reconhecimento, Intervalo, Visão 2027, Sucesso (as quatro dinâmicas e o Doc), 88 MPH e Créditos.
+  A transição tem quatro atos, para todo mundo olhar para o telão:
   1. **Programando o destino**: os circuitos de tempo digitam o nome do próximo bloco, letra a letra
      (LAST TIME DEPARTED mostra de onde saímos), com uma fala do filme;
   2. **Carregando o Flux Capacitor**: o mostrador sobe até 1,21 gigawatts;
@@ -319,9 +348,10 @@ organiza o evento.
 
 - **Blocos de fala** (passos do roteiro): cada um tem **nome, tema e quem fala**, editáveis a qualquer
   momento. Quando o bloco entra no ar, os celulares mostram o nome e o tema dele e o telão entra no
-  **modo calmo**: fundo parado e escurecido, sem raios, sem carro passando, só o tema.
-- **Som** (três botões no topo do Painel do Doc, sempre à mão): **🎵 Música** (animada),
-  **🎼 Trilha sonora** (fundo calmo) e **🔇 Sem áudio**, mais o volume. A música é original, gerada
+  **modo calmo**: fundo parado e escurecido, sem raios, sem carro passando, só o tema. (Nas cenas do deck o fundo
+  continua rodando, só um pouco mais escuro; a estratégia 2027 é a única cena com o fundo parado.)
+- **Som** (botões no topo do Painel do Doc, sempre à mão): **🎵 Música** (animada),
+  **🎼 Trilha sonora** (fundo calmo), **🎧 Spotify** (a música da sua conta, veja abaixo) e **🔇 Sem áudio**, mais o volume. A música é original, gerada
   no navegador (`public/trilha.js`, Web Audio), sem arquivos. Exibir um bloco de fala desliga o som
   (dá para mudar em Config).
   - O som sai do **computador do telão**; na primeira vez é preciso **clicar uma vez na tela do
@@ -381,7 +411,7 @@ entre dispositivos). O servidor usa WebSocket (Socket.IO) para avisar os celular
 
 | Página | Para quem | O que mostra |
 |---|---|---|
-| `/` | viajantes (celular) | check-in pelo nome, blocos, viagens, avaliação, resultado |
+| `/` | viajantes (celular) | check-in pelo nome (a busca acha pelo começo do nome ou de um sobrenome: "ni" traz Nicolas, não Vinicius), blocos, viagens, avaliação, resultado |
 | `/telao.html` | projetor | QR do check-in, circuitos de tempo, cronômetros gigantes, 88 MPH, avaliação, conexões, créditos; modo "só o logo" para servir de fundo |
 | `/admin.html` | apresentador (notebook) | Painel do Doc: roteiro do evento (Ao vivo) e preparação |
 | `/dados.html` | apresentador | Extração de dados: Conexões, Reflexão e Sucesso em tabelas, com download em .csv |
@@ -391,14 +421,47 @@ entre dispositivos). O servidor usa WebSocket (Socket.IO) para avisar os celular
 
 Os viajantes nunca veem área, WL ou time uns dos outros: esses dados ficam só no painel, para o sorteio.
 
+### 🎧 Spotify
+
+Para a música do evento ser a que você escolher **no seu Spotify**. O painel mostra o que está tocando, dá
+play/pausa/próxima, troca o aparelho, abre as suas playlists e busca músicas.
+
+Preparação (uma vez, uns 5 minutos; o passo a passo também está em Preparar → Ajustes → Spotify):
+
+1. Em [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard), entre com a sua conta e clique em
+   **Create app**. O Spotify exige que o dono do app tenha **conta Premium**.
+2. Em **Redirect URIs**, cadastre o endereço do painel: `https://SEU-ENDERECO/admin.html` (o Ajustes mostra o endereço
+   exato, com botão de copiar). Tem de ser **https** (ou `http://127.0.0.1:PORTA` em testes; `localhost` não é aceito).
+3. Marque **Web API** e **Web Playback SDK**.
+4. Copie o **Client ID**, cole em Preparar → Ajustes → Spotify, salve e clique em **Conectar ao Spotify**.
+5. Se quem vai conectar não for o dono do app, o dono inclui a pessoa em **User Management** (até 5 pessoas).
+
+No evento:
+
+- Escolha a música no aplicativo do Spotify (celular ou computador) ou na janela do Spotify do painel (o botão com o
+  nome da música, na barra de som): playlists, busca e "▶" para tocar.
+- **🎧 Spotify** na barra de som: a trilha do app se cala e o Spotify toca. **🔇 Sem áudio** (ou entrar num bloco de
+  fala/cena, que desliga o som) pausa o Spotify. Com "No intervalo, tocar o meu Spotify" marcado, o passo Intervalo
+  liga o Spotify sozinho.
+- **Onde o som sai:** do aparelho em que o Spotify está tocando (celular ligado na caixa, computador…) ou do próprio
+  computador do painel, com **🔊 Tocar neste computador** (o navegador vira um aparelho do Spotify).
+
+Como funciona por dentro (`public/spotify.js`): login oficial do Spotify com PKCE, direto no navegador; as chaves ficam
+só no navegador de quem conectou (o servidor do townhall guarda apenas o Client ID, que não é segredo) e se renovam
+sozinhas; os comandos usam a Web API do Spotify. Por isso, no dia, use o mesmo computador e navegador em que conectou.
+O servidor gratuito do Render esquece os ajustes quando reinicia; por isso o navegador de quem configurou guarda uma
+cópia do Client ID e devolve ao servidor sozinho (também dá para fixar com a variável de ambiente `SPOTIFY_CLIENT_ID`).
+Limites que são do Spotify, não do app: só contas Premium controlam a reprodução, e alguns aparelhos (celulares) não
+aceitam o controle de volume remoto.
+
 ## Painel do Doc: como conduzir o evento
 
 O painel tem duas áreas.
 
 **▶ Ao vivo** (é onde você fica durante o evento)
 
-- À esquerda, o **roteiro** em 4 atos: Chegada → Plano de voo → Boas-vindas → Conexões → Jornada 2026 → IA em 2026 →
-  Reflexão → Reconhecimento → Intervalo → Visão 2027 → Manifesto → Sucesso 01 a 04 → o Doc → 88 MPH → Créditos.
+- À esquerda, o **roteiro** em 4 atos: Chegada → Plano de voo → Boas-vindas → Conexões → Jornada 2026 →
+  Reflexão → Reconhecimento → Intervalo → Visão 2027 → Sucesso 01 a 04 → o Doc → 88 MPH → Créditos.
   O passo que está no ar fica marcado como **NO AR**.
 - À direita, **só o passo atual**: o que os celulares e o telão estão mostrando, os números do momento
   e **um botão principal por vez** (iniciar viagens, iniciar/encerrar recebimento, sortear viajante…).
@@ -481,6 +544,7 @@ public/delorean3d.js motor 3D (céu, estrada, raios, portal) extraído do painel
 public/delorean-model.js  DeLorean realista (Three.js) · public/nuvem.js  nuvem de palavras
 public/flux.js       Flux Capacitor 3D do bloco Reflexão (motor do protótipo, sem bibliotecas)
 public/trilha.js     música e trilha de fundo geradas no navegador (Web Audio)
+public/spotify.js    Spotify de quem está no Painel do Doc (login PKCE, o que está tocando, playlists, busca, aparelhos)
 sucesso/             projeto do Lucas: server/api.js, drizzle/, public/ (painel, participar), tests/
 scripts/             testes
 ```
