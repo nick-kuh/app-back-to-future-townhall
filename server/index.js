@@ -55,13 +55,21 @@ sucesso.mount(app, { isAdmin });
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { etag: true, maxAge: 0 }));
 
+// Fotos nas cenas: quem fala nas boas-vindas e os indicados dos prêmios ganham a foto de perfil quando o nome escrito
+// na cena aponta para uma pessoa só da lista. "Giovana & Lucas" são duas pessoas (até duas fotos).
+function withPhotos(c) {
+  if (!c || (c.kind !== 'boasvindas' && c.kind !== 'reconhecimento')) return c;
+  const people = engine.listPeople(), of = nome => String(nome || '').split(/\s*(?:&|\/| e )\s*/i).map(n => engine.photoByName(n, people)).filter(Boolean).slice(0, 2);
+  if (c.kind === 'boasvindas') return { ...c, pessoas: (c.pessoas || []).map(p => ({ ...p, fotos: of(p.nome) })) };
+  return { ...c, premios: c.premios.map(p => ({ ...p, indicados: p.indicados.map(x => ({ ...x, fotos: of(x.nome) })) })) };
+}
 // Estado público + situação da dinâmica do Sucesso em exibição (fase, cronômetro, quantidade de respostas)
 function publicState() {
   const s = engine.publicState();
   if (s.presentation) s.presentation.live = sucesso.ready() ? sucesso.live(engine.state.presentation) : null;
   s.reflexao = reflexaoOnAir() ? reflexao.publicState() : null;
   const kind = cenaOnAir();
-  s.cena = kind ? cenas.publicState(kind, { steps: engine.settings.steps, index: s.step.index }) : null;
+  s.cena = kind ? withPhotos(cenas.publicState(kind, { steps: engine.settings.steps, index: s.step.index })) : null;
   s.evento = cenas.evento();                                         // nome do evento e circuitos de tempo (check-in, créditos)
   s.creditos = engine.state.block === 'closing' ? cenas.creditos() : null;
   return s;
@@ -88,7 +96,13 @@ const wrapAsync = fn => (req, res) => {
 const adminOnly = (req, res, next) => (isAdmin(req) ? next() : res.status(401).json({ error: 'Senha de admin inválida.' }));
 
 /* ---------- participante ---------- */
-app.get('/api/people', wrap(() => engine.listPeople().filter(p => p.active).map(p => ({ id: p.id, name: p.name, checkedIn: !!p.checkedInAt }))));
+app.get('/api/people', wrap(() => engine.listPeople().filter(p => p.active).map(p => ({ id: p.id, name: p.name, checkedIn: !!p.checkedInAt, ...(p.photo ? { photo: p.photo } : {}) }))));
+// Foto de perfil. O endereço leva a versão da foto (?v=…): o navegador pode guardar para sempre e busca de novo quando ela muda.
+app.get('/api/photo/:id', (req, res) => {
+  const f = /^\d{1,9}$/.test(req.params.id) ? engine.fotos.get(req.params.id) : null;
+  if (!f) return res.status(404).json({ error: 'Sem foto.' });
+  res.set({ 'Content-Type': f.mime, 'Cache-Control': req.query.v === f.version ? 'public, max-age=31536000, immutable' : 'no-cache', 'X-Content-Type-Options': 'nosniff' }).send(f.data);
+});
 app.post('/api/checkin', wrap(req => engine.checkin(req.body.personId, req.body.token)));
 app.post('/api/checkout', wrap(req => engine.checkout(req.body.token)));
 app.get('/api/me', wrap(req => {
@@ -342,6 +356,10 @@ app.post('/api/admin/people', wrap(req => engine.addPerson(req.body || {})));
 app.put('/api/admin/people/:id', wrap(req => engine.updatePerson(req.params.id, req.body || {})));
 app.delete('/api/admin/people/:id', wrap(req => { engine.deletePerson(req.params.id); return { ok: true }; }));
 app.post('/api/admin/people/import', wrap(req => engine.importPeople(req.body.rows || [], req.body.mode || 'merge')));
+// Fotos de perfil: várias de uma vez (o nome de cada arquivo diz de quem é), ou a de uma pessoa
+app.post('/api/admin/photos', wrap(req => engine.importPhotos((req.body || {}).files || [])));
+app.put('/api/admin/people/:id/photo', wrap(req => { engine.setPhoto(req.params.id, (req.body || {}).data); return { ok: true }; }));
+app.delete('/api/admin/people/:id/photo', wrap(req => { engine.removePhoto(req.params.id); return { ok: true }; }));
 app.post('/api/admin/form/import', wrap(req => engine.importForm(req.body.rows || [], req.body.keyColumn)));
 
 app.post('/api/admin/questions', wrap(req => { engine.addQuestion(req.body || {}); return { ok: true }; }));

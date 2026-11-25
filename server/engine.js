@@ -6,6 +6,7 @@ const { generateRounds, checkGroups, pairKey } = require('./matching');
 const { buildQueues, ERAS, eraOfRound, CATEGORIES, catKey, catOfRound, QUESTION_MODES } = require('./queues');
 const { computeResults, POINTS } = require('./results');
 const { KINDS: CENA_KINDS, META: CENA_META } = require('./cenas');
+const { createFotos } = require('./fotos');
 
 const TOTAL_ROUNDS = 3;
 const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing', 'stage', 'reflexao', 'doc', 'cena'];
@@ -126,6 +127,9 @@ const normText = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 class Engine {
   constructor() {
     seedIfEmpty();
+    // fotos de perfil: guardadas no banco; a pasta de fotos da instalação (se houver) entra quando o banco começa vazio
+    this.fotos = createFotos();
+    this.fotos.seedFromDir(db.prepare('SELECT id, name FROM people').all());
     const saved = kvGet('state', {});
     this.state = {
       block: BLOCKS.includes(saved.block) ? saved.block : 'welcome',
@@ -201,7 +205,7 @@ class Engine {
     return {
       id: r.id, name: r.name, email: r.email || '', wl: r.wl || '', team: r.team || '', manager: r.manager || '',
       area: r.area || '', active: !!r.active, checkedInAt: r.checked_in_at || null, token: r.token || null,
-      form: parse(r.form_json, null), sortOrder: r.sort_order || 0,
+      form: parse(r.form_json, null), sortOrder: r.sort_order || 0, photo: this.fotos.url(r.id),
     };
   }
   listPeople() {
@@ -223,6 +227,7 @@ class Engine {
   publicPerson(p, withHints = false, full = false) {
     if (!p) return null;
     const out = full ? { id: p.id, name: p.name, area: p.area, wl: p.wl, team: p.team } : { id: p.id, name: p.name };
+    if (p.photo) out.photo = p.photo; // foto de perfil (quem não tem aparece com as iniciais)
     if (withHints && this.settings.showFormHints && p.form) {
       out.hints = Object.entries(p.form).filter(([, v]) => String(v || '').trim()).map(([q, a]) => ({ q, a: String(a) }));
     }
@@ -281,8 +286,16 @@ class Engine {
     db.prepare('DELETE FROM rankings WHERE person_id = ?').run(Number(id));
     db.prepare('DELETE FROM results WHERE person_id = ?').run(Number(id));
     db.prepare('DELETE FROM seen WHERE person_id = ?').run(Number(id));
+    this.fotos.remove(id);
     this.commit();
   }
+  /* ---------------- fotos de perfil ---------------- */
+  // Várias de uma vez (o nome do arquivo diz de quem é), uma só para uma pessoa, ou remover.
+  importPhotos(files) { const r = this.fotos.importMany(files, this.listPeople()); this.commit(); return r; }
+  setPhoto(id, data) { if (!this.personById(id)) throw new Error('Pessoa não encontrada.'); this.fotos.setOne(id, data); this.commit(); }
+  removePhoto(id) { this.fotos.remove(id); this.commit(); }
+  // A foto de alguém pelo nome escrito em uma cena ("Caio Souza", "Monserrat Diaz"): só quando o nome aponta para uma pessoa só
+  photoByName(name, people) { const p = this.fotos.match(name, people || this.listPeople()); return p ? this.fotos.url(p.id) : null; }
   importPeople(rows, mode = 'merge') {
     const clean = rows.map(r => ({
       name: String(r.name || '').trim(), email: String(r.email || '').trim().toLowerCase(), wl: normalizeWl(r.wl),
@@ -307,6 +320,7 @@ class Engine {
         else { ins.run(r.name, r.email, r.wl, r.team, r.manager, r.area, ++order); inserted++; }
       }
       db.exec('COMMIT');
+      this.fotos.prune(); // lista substituída: as fotos de quem saiu vão junto
       this.commit();
       return { inserted, updated, total: clean.length };
     } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -1038,7 +1052,7 @@ class Engine {
     })).filter(r => r.person);
     return {
       state: this.state, settings: this.settings, now: now(),
-      people: people.map(p => ({ id: p.id, name: p.name, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.active && p.checkedInAt && !inRounds.has(p.id) && !this.skips('connections', p.id)) })),
+      people: people.map(p => ({ id: p.id, name: p.name, photo: p.photo, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.active && p.checkedInAt && !inRounds.has(p.id) && !this.skips('connections', p.id)) })),
       rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, cats: CATEGORIES, points: POINTS,
       counts: this.publicState().counts,
     };

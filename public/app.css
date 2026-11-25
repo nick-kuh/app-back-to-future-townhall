@@ -377,3 +377,12 @@ textarea.input{resize:none;line-height:1.4;font-size:16px;font-weight:500;min-he
 .btn.charge{margin-top:14px;padding:26px 14px;font-size:22px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
 .btn.charge.hit{animation:chargehit .18s}
 @keyframes chargehit{40%{transform:scale(.96);filter:brightness(1.35)}}
+
+/* ===== foto de perfil ===== */
+.av{position:relative;overflow:hidden}
+.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
+.av.ph{color:transparent}
+/* na polaroid, a foto ocupa o quadro inteiro */
+.polaroid .photo .av.ph{width:100%;height:100%;border-radius:0;box-shadow:none}
+.polaroid .photo .av.ph img{border-radius:0}
+.polaroid .photo:has(.av.ph)::after{display:none}

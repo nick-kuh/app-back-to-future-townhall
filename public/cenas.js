@@ -24,6 +24,9 @@ window.Cenas = (() => {
     <rect x="44" y="58" width="260" height="3" fill="#59606c"/><path d="M300 54 h28 v8 h-28z" fill="#ff3b5c" opacity=".8"/><path d="M12 58 h20 v6 h-20z" fill="#fff3c4"/>
     <circle cx="80" cy="80" r="18" fill="#15181e"/><circle cx="80" cy="80" r="9" fill="#9aa2ad"/><circle cx="262" cy="80" r="19" fill="#15181e"/><circle cx="262" cy="80" r="9" fill="#9aa2ad"/></g>`;
   const FLUX = '<div class="flux"><i></i><i></i><i></i><b></b></div>';
+  // rosto de quem aparece na cena: a foto de perfil (até duas, para duplas como "Giovana & Lucas") ou as iniciais
+  const faces = x => { const f = (x && x.fotos) || []; return f.length ? `<div class="avs">${f.map(u => `<div class="av foto">${f.length === 1 ? esc(ini(x.nome)) : ''}<img src="${esc(u)}" alt=""></div>`).join('')}</div>` : `<div class="av">${esc(ini(x && x.nome))}</div>`; };
+  document.addEventListener('error', e => { const t = e.target; if (t && t.tagName === 'IMG' && t.parentNode && t.parentNode.classList.contains('av')) { t.parentNode.classList.remove('foto'); t.remove(); } }, true);
 
   let root = null, st = null, kind = null, hooks = {}, timers = [], L = {}, sig = '', offset = 0;
   const now = () => Date.now() + offset;
@@ -84,7 +87,7 @@ window.Cenas = (() => {
       const html = `<span class="w ${on ? 'fire' : ''}" style="--i:${i++}">${esc(w.replace(/\*/g, ''))}</span>`; if (close) on = false; return html;
     }).join(' ');
     return `${head(c)}<div class="bv-quote">${words}</div>
-      <div class="bv-people">${(c.pessoas || []).map(p => `<div class="cn-person"><div class="av">${esc(ini(p.nome))}</div><div><b>${esc(p.nome)}</b><small>${esc(p.papel)}</small></div></div>`).join('')}${c.min ? chip(`<b>${esc(c.min)} min</b>`) : ''}</div>
+      <div class="bv-people">${(c.pessoas || []).map(p => `<div class="cn-person">${faces(p)}<div><b>${esc(p.nome)}</b><small>${esc(p.papel)}</small></div></div>`).join('')}${c.min ? chip(`<b>${esc(c.min)} min</b>`) : ''}</div>
       ${strip(c.faixa)}`;
   }
 
@@ -165,20 +168,20 @@ window.Cenas = (() => {
         <div class="rc-vid" id="rcVid"><div class="hint" id="rcHint">${FLUX}<b>ARRASTE O VÍDEO-TRIBUTO PARA CÁ</b><small>ou use este espaço para a fala da liderança</small></div><video id="rcVideo" hidden playsinline controls></video></div>
         ${c.fala ? `<p class="rc-foot">Fala: ${esc(c.fala)}</p>` : ''}</div>`;
     if (l.fase === 'premios') return `<div class="rc-board"><div class="cn-top"><div>${head(c, 'Cerimônia ao vivo')}<h1 class="cn-h1">${fire(c.premiosTitulo)}</h1></div><div class="tcbox" style="--c:var(--yellow)"><b>${done} / ${n}</b><span>PRÊMIOS REVELADOS</span></div></div>
-        <div class="rc-env n${n}">${c.premios.map((p, i) => { const w = p.feito && winnerOf(p); return w ? `<div class="env done" style="--i:${i}"><div class="k">${esc(p.n.toUpperCase())}</div><div class="av">${esc(ini(w.nome))}</div><b>${esc(w.nome)}</b><small>${esc(w.projeto)}</small><span class="tag">REVELADO</span></div>`
+        <div class="rc-env n${n}">${c.premios.map((p, i) => { const w = p.feito && winnerOf(p); return w ? `<div class="env done" style="--i:${i}"><div class="k">${esc(p.n.toUpperCase())}</div>${faces(w)}<b>${esc(w.nome)}</b><small>${esc(w.projeto)}</small><span class="tag">REVELADO</span></div>`
           : `<div class="env" style="--i:${i}"><div class="seal"><svg viewBox="0 0 24 24">${ICO[p.ic] || ICO.i}</svg></div><div class="k">${esc(p.k)}</div><b>${esc(p.n)}</b><small>LACRADO</small></div>`; }).join('')}</div>
         ${c.exemplo ? '<div class="rc-dummy">NOMES DE EXEMPLO · NÃO SÃO AS INDICAÇÕES FINAIS</div>' : ''}</div>`;
     if (l.fase === 'hall') return `<div class="rc-hall">${head(c, `${c.kicker} · Grande final`)}<div class="hof-t"><span class="bttf">${esc(c.hallTitulo)}</span></div><p class="cn-sub">${esc(c.hallSub)}</p>
-        <div class="rc-hof n${n}">${c.premios.map((p, i) => { const w = p.feito && winnerOf(p); return `<div class="hc ${w ? '' : 'pending'}" style="--i:${i}"><div class="k">${esc(p.k)}</div><h4>${esc(p.n)}</h4><div class="av">${w ? esc(ini(w.nome)) : '?'}</div><b>${w ? esc(w.nome) : 'A revelar'}</b><small>${w ? esc(w.projeto) : '&nbsp;'}</small></div>`; }).join('')}</div></div>`;
+        <div class="rc-hof n${n}">${c.premios.map((p, i) => { const w = p.feito && winnerOf(p); return `<div class="hc ${w ? '' : 'pending'}" style="--i:${i}"><div class="k">${esc(p.k)}</div><h4>${esc(p.n)}</h4>${w ? faces(w) : '<div class="av">?</div>'}<b>${w ? esc(w.nome) : 'A revelar'}</b><small>${w ? esc(w.projeto) : '&nbsp;'}</small></div>`; }).join('')}</div></div>`;
     const p = c.premios[l.premio] || c.premios[0]; // cerimônia de um prêmio
     return `<div class="rc-cer" id="rcCer" data-passo="${l.passo}">
         <div class="rc-cerh"><div class="tcbox led" style="--c:var(--red)"><b id="rcLed">— — —</b><span>DESTINO · VENCEDOR</span></div><div class="rc-steps">${[0, 1, 2, 3, 4].map(() => '<i></i>').join('')}</div></div>
         <div class="rc-cat"><div class="ck">O PRÊMIO 2026 DE ${esc(p.k)}</div><div class="cn2"><span class="bttf">${esc(p.n)}</span></div><p class="cw">${esc(p.porque)}</p><div class="cc">${p.criterios.map((x, i) => `<span style="--i:${i}">${esc(x)}</span>`).join('')}</div></div>
-        <div class="rc-noms n${p.indicados.length}" id="rcNoms">${p.indicados.map((x, j) => `<div class="nom" data-j="${j}" style="--rt:${[-4, 3, -2, 4, -3, 2][j % 6]}deg"><div class="ph"><div class="av">${esc(ini(x.nome))}</div></div><b></b><small></small></div>`).join('')}</div>
+        <div class="rc-noms n${p.indicados.length}" id="rcNoms">${p.indicados.map((x, j) => `<div class="nom" data-j="${j}" style="--rt:${[-4, 3, -2, 4, -3, 2][j % 6]}deg"><div class="ph">${faces(x)}</div><b></b><small></small></div>`).join('')}</div>
         <div class="rc-gw"><div class="gwl">${FLUX}<div><div class="gwt">FAÇAM BARULHO!</div><div class="gws">Os aplausos carregam o Flux Capacitor. Toquem em <b>⚡ CARREGAR</b> no celular!</div></div></div>
           <div class="gbar"><i id="rcFill"></i><span>1,21 GW</span></div><div class="gnum"><b id="rcNum">0,00</b> GIGAWATTS</div></div>
         <svg class="rc-bolt" id="rcBolt"></svg>
-        <div class="rc-win" id="rcWin"><div class="wk" id="rcWk"></div><div class="av" id="rcWav"></div><div class="wn"><span class="bttf" id="rcWn"></span></div><div class="wp" id="rcWp"></div><div class="wc" id="rcWc"></div></div>
+        <div class="rc-win" id="rcWin"><div class="wk" id="rcWk"></div><div class="wav" id="rcWav"></div><div class="wn"><span class="bttf" id="rcWn"></span></div><div class="wp" id="rcWp"></div><div class="wc" id="rcWc"></div></div>
       </div>`;
   }
   const PASSOS = ['categoria', 'indicados', 'carga', 'sorteio', 'vencedor'];
@@ -200,7 +203,7 @@ window.Cenas = (() => {
   }
   function rcWinner(c, p, fresh) {
     const w = winnerOf(p), o = $('#rcWin'); if (!w || !o) return;
-    $('#rcWk').textContent = `E O PRÊMIO ${p.n.toUpperCase()} VAI PARA…`; $('#rcWav').textContent = ini(w.nome); $('#rcWn').textContent = w.nome; $('#rcWp').textContent = w.projeto.toUpperCase();
+    $('#rcWk').textContent = `E O PRÊMIO ${p.n.toUpperCase()} VAI PARA…`; $('#rcWav').innerHTML = faces(w); $('#rcWn').textContent = w.nome; $('#rcWp').textContent = w.projeto.toUpperCase();
     $$('#rcNoms .nom').forEach((el, j) => { el.classList.remove('hot'); el.classList.add(j === p.vencedor ? 'win' : 'out'); });
     o.classList.add('on'); $('#rcCer').classList.remove('dim');
     if (!fresh) { $('#rcLed').textContent = w.nome.toUpperCase(); $('#rcWc').textContent = `“${p.citacao}”`; return; }

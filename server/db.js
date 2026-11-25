@@ -64,6 +64,13 @@ CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+CREATE TABLE IF NOT EXISTS photos (
+  person_id INTEGER PRIMARY KEY,
+  mime TEXT NOT NULL,
+  data BLOB NOT NULL,
+  version TEXT NOT NULL,
+  updated_at TEXT
+);
 `);
 
 function kvGet(key, fallback = null) {

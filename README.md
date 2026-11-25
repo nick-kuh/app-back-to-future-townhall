@@ -72,6 +72,30 @@ A estratégia é `public/estrategia-2027.html`, cópia byte a byte do arquivo en
   - **As três categorias misturadas**: em toda viagem, uma pergunta de cada categoria, em ordem sorteada.
 - No celular aparece **só a pergunta** (com o nome da categoria): não há "pergunta 2 de 10" nem quantas faltam.
 
+## 📷 Fotos de perfil
+
+Cada pessoa pode ter uma foto, que aparece no lugar das iniciais: na lista e na confirmação do check-in, na polaroid
+de boas-vindas, **na polaroid da dupla das Conexões** (ajuda a achar a pessoa na sala), na avaliação e no resultado;
+no telão, em quem fala nas boas-vindas, nos indicados, no vencedor e no Hall da Fama dos prêmios; e no Painel do Doc.
+Quem não tem foto continua com as iniciais.
+
+- **Preparar → Pessoas → 📷 Importar fotos**: escolha todas as fotos de uma vez. O **nome de cada arquivo** diz de quem
+  é a foto, e não precisa ser o nome exato: valem nome completo, só uma parte, apelido e pequenos erros de digitação
+  (`claudia guid.jpg`, `will.jpg`, `monse.jpg`, `caio souza.jpg` para Caio Sousa). O painel mostra o que casou, o que
+  ficou sem dono e quem segue sem foto. Um arquivo que serve para duas pessoas (só `felipe.jpg` com dois Felipes) fica
+  sem dono, para não errar.
+- Na linha de cada pessoa: **📷 foto / trocar foto** e **sem foto**.
+- JPG, PNG ou WebP, até 400 KB (o painel reduz as grandes para 320 px). As fotos ficam no banco, junto com os check-ins.
+- Nas cenas, a foto vem do nome escrito no conteúdo (ex.: o indicado "Caio Souza"). Em duplas ("Giovana & Lucas")
+  aparecem as duas. Nomes que servem para mais de uma pessoa (só "Vinicius") ficam com as iniciais: escreva o sobrenome.
+- **Pasta de fotos da instalação (opcional):** se existir `server/seed/fotos/` (ou a pasta da variável `FOTOS_DIR`), as
+  fotos dela entram sozinhas sempre que o banco começa sem nenhuma foto. É o que mantém as fotos no plano gratuito do
+  Render, onde o banco zera a cada reinício. Atenção: este repositório é **público**; fotos colocadas nessa pasta e
+  enviadas para o GitHub ficam visíveis para qualquer pessoa.
+- Quem abre o app pelo link vê os nomes e as fotos na tela de check-in (como já acontecia com os nomes).
+
+O código está em `server/fotos.js`; as fotos são servidas em `/api/photo/<id>`.
+
 ## 🚀 De Volta para o Sucesso (parte 2 do townhall)
 
 As quatro dinâmicas ao vivo do projeto do Lucas
@@ -373,7 +397,7 @@ parou. A sala das dinâmicas do Sucesso é criada sozinha.
 1. **Roteiro** · a ordem dos passos: reordenar, remover, adicionar cenas, blocos de fala e avisos. Pode mudar
    durante o evento. **Agenda e cenas** · o conteúdo de cada cena do deck.
 2. **Pessoas** · a lista do townhall já vem carregada (47 pessoas). Dá para editar WL/área, adicionar,
-   marcar ausente, fazer check-in manual, importar outra lista (colar do Excel) e **importar as respostas
+   marcar ausente, fazer check-in manual, importar outra lista (colar do Excel), **importar as fotos de perfil** e **importar as respostas
    do forms** (CSV/planilha): as respostas aparecem na tela da dupla como "para puxar assunto".
 3. **Perguntas** · banco com 30 perguntas em três categorias (Quebra-gelo, Conexão, Além do óbvio) e o modo de
    sorteio. Edite, desative ou substitua em massa (uma por linha, com prefixo `[quebra-gelo]`, `[conexão]` ou
@@ -408,6 +432,7 @@ server/engine.js     estado do evento: blocos, fases, timer, duplas, filas, rank
 server/matching.js   algoritmo de pareamento (área ≠, WL ≠, sem repetição, trio se ímpar)
 server/queues.js     filas de perguntas por dupla (três categorias, sorteio por dupla, sem repetir)
 server/cenas.js      cenas do deck do townhall: conteúdo em português, estado ao vivo e comandos do Doc
+server/fotos.js      fotos de perfil: de quem é cada arquivo (pelo nome), validação e armazenamento
 server/results.js    ranking → conexões
 server/db.js         SQLite (node:sqlite) e esquema
 server/seed/         lista de pessoas e banco de perguntas iniciais

@@ -10,7 +10,8 @@
   const MONTHS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
   const PALETTE = ['#ff6a00', '#ff2d95', '#2ee6d6', '#39ff6a', '#ffd21f', '#b980ff', '#ff5c5c', '#5cffd6', '#ffa94d', '#7fb2ff', '#f58cff', '#a8ff5c'];
   const color = name => PALETTE[[...String(name || '')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
-  const av = (p, cls = '') => `<div class="av ${cls}" style="--c:${color(p.name)}">${esc(ini(p.name))}</div>`;
+  // avatar: a foto de perfil por cima das iniciais (se a foto não carregar, ficam as iniciais)
+  const av = (p, cls = '') => `<div class="av ${cls} ${p.photo ? 'ph' : ''}" style="--c:${color(p.name)}">${esc(ini(p.name))}${p.photo ? `<img src="${esc(p.photo)}" alt="" decoding="async">` : ''}</div>`;
   const ERA_KEYS = ['presente', 'passado', 'futuro'];
   // escapa o texto e depois transforma URLs em links (o href nasce do texto já escapado)
   const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
@@ -474,7 +475,7 @@
             <button class="btn charge" data-action="tapCharge">⚡ CARREGAR</button>
             <div class="ebar" style="margin-top:14px"><i id="cgBar" style="width:${((l.carga || 0) * 100).toFixed(1)}%"></i></div><p class="small" id="cgNum" style="margin-top:6px"></p></div>`;
         if (l.passo === 'vencedor' && w) return `${vHeader()}${head}
-          <div class="panel glow center"><div class="kicker">E O PRÊMIO VAI PARA…</div><div class="polaroids"><div class="polaroid"><div class="photo">${av(w.nome ? { name: w.nome } : {})}</div><div class="cap">${esc(first(w.nome))} · 2026</div></div></div>
+          <div class="panel glow center"><div class="kicker">E O PRÊMIO VAI PARA…</div><div class="polaroids"><div class="polaroid"><div class="photo">${av({ name: w.nome, photo: (w.fotos || [])[0] })}</div><div class="cap">${esc(first(w.nome))} · 2026</div></div></div>
             <div class="pname">${esc(w.nome)}</div><p class="small" style="margin-top:6px;color:var(--cyan)">${esc(w.projeto)}</p><p class="myans">“${esc(p.citacao)}”</p></div>`;
         const list = l.passo === 'categoria' ? '' : `<div class="panel"><div class="kicker">Indicados</div>${p.indicados.map(x => `<div class="rf-drawn"><b>${esc(x.nome)}</b><span>${esc(x.projeto)}</span></div>`).join('')}</div>`;
         return `${vHeader()}${head}${list}<div class="panel center"><p class="muted">${l.passo === 'sorteio' ? '🥁 O raio vai cair… olhos no telão!' : '👀 Olhe para o telão.'}</p></div>`;
@@ -919,6 +920,8 @@
     if (e.target.id === 'rfQ') { S.rfQ = e.target.value; const l = $('#rfList'); if (l) l.innerHTML = vProjects(); }
   });
   document.addEventListener('change', e => { if (e.target.id === 'anon') S.anon = e.target.checked; });
+  // foto de perfil que não carregou: sai, e as iniciais que estavam por baixo aparecem
+  document.addEventListener('error', e => { const t = e.target; if (t && t.tagName === 'IMG' && t.parentNode && t.parentNode.classList.contains('av')) { t.parentNode.classList.remove('ph'); t.remove(); } }, true);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (S.socket && S.socket.connected) hello(); wakeLock(); unlockAudio(); } });
   document.addEventListener('pointerdown', unlockAudio, { passive: true });
   document.addEventListener('touchstart', unlockAudio, { passive: true });

@@ -8,7 +8,7 @@
   const PALETTE = ['#ff6a00', '#ff2d95', '#2ee6d6', '#39ff6a', '#ffd21f', '#b980ff', '#ff5c5c', '#5cffd6', '#ffa94d', '#7fb2ff', '#f58cff', '#a8ff5c'];
   const FIXED = { Consumer: '#ffd21f', 'Customer Development': '#39ff6a', 'Focus Market': '#ff2d95', Strategy: '#2ee6d6', 'Make (Business Ops)': '#ff6a00', 'Tax Reform': '#b980ff', Cybersecurity: '#5cffd6', Architecture: '#ffa94d', Diretora: '#ff5c5c' };
   const color = area => FIXED[area] || PALETTE[[...String(area || '')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
-  const av = p => `<span class="av" style="--c:${color(p.area)}">${esc(ini(p.name))}</span>`;
+  const av = p => `<span class="av ${p.photo ? 'foto' : ''}" style="--c:${color(p.area)}">${esc(ini(p.name))}${p.photo ? `<img src="${esc(p.photo)}" alt="" loading="lazy">` : ''}</span>`;
   const WLS = ['Estag', 'WL1', 'WL2', 'WL3'];
   const PHASE_LABEL = { idle: 'sem duplas', ready: 'duplas prontas', matching: 'duplas se encontrando', talk: 'conversa em andamento', roundEnd: '88 MPH (intervalo)', ranking: 'avaliação aberta', results: 'resultados publicados' };
   const TIMER_LABEL = { matching: 'encontro', talk: 'conversa', break: 'intervalo', ranking: 'avaliação' };
@@ -782,16 +782,57 @@
       ${sec === 'reconhecimento' ? `${extra}<div class="card"><div class="actions"><button class="btn" data-act="cenaSave">Salvar os prêmios</button></div></div>` : ''}`;
   }
 
+  /* ---------- fotos de perfil ---------- */
+  // abre o seletor de arquivos do computador (várias imagens de uma vez ou uma só)
+  function pickFiles(multiple, cb) { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.multiple = !!multiple; i.onchange = () => cb([...i.files]); i.click(); }
+  // prepara a foto para envio: imagens pequenas vão como estão; as grandes são reduzidas para um quadrado de 320 px (corte central)
+  function photoData(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader(); r.onerror = () => reject(new Error(`Não consegui ler "${file.name}".`));
+      r.onload = () => { const img = new Image(); img.onerror = () => reject(new Error(`"${file.name}" não é uma imagem que o navegador abre.`));
+        img.onload = () => {
+          if (file.size <= 150 * 1024 && Math.max(img.width, img.height) <= 400 && /image\/(jpeg|png|webp)/.test(file.type)) return resolve(r.result);
+          const side = Math.min(img.width, img.height), out = Math.min(320, side), c = document.createElement('canvas'); c.width = c.height = out;
+          c.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, out, out); resolve(c.toDataURL('image/jpeg', .88));
+        }; img.src = r.result; };
+      r.readAsDataURL(file);
+    });
+  }
+  function importPhotosDialog() {
+    dialog(`<h3>📷 Importar fotos de perfil</h3>
+      <p class="small">Escolha todas as fotos de uma vez. O <b>nome de cada arquivo</b> diz de quem é a foto: pode ser o nome completo, só uma parte ou o apelido (<span class="mono">claudia guid.jpg</span>, <span class="mono">will.jpg</span>, <span class="mono">Alex Gonçalves.jpg</span>). Quem já tem foto e aparece de novo fica com a nova.</p>
+      <div class="actions" style="margin-top:12px"><button class="btn" id="phPick">Escolher as fotos…</button><button class="btn ghost" data-close>Fechar</button></div>
+      <div id="phReport" style="margin-top:12px"></div>`, () => {
+      $('#phPick').onclick = () => pickFiles(true, async files => {
+        const rep = $('#phReport'); if (!files.length) return;
+        const tot = { matched: [], unmatched: [], missing: [] };
+        try {
+          for (let i = 0; i < files.length; i += 12) { // em lotes, para o envio não ficar pesado
+            rep.innerHTML = `<p class="small">Enviando ${Math.min(i + 12, files.length)} de ${files.length}…</p>`;
+            const batch = []; for (const f of files.slice(i, i + 12)) { try { batch.push({ name: f.name, data: await photoData(f) }); } catch (e) { tot.unmatched.push({ file: f.name, reason: e.message }); } }
+            const r = await api('POST', '/api/admin/photos', { files: batch }); tot.matched.push(...r.matched); tot.unmatched.push(...r.unmatched); tot.missing = r.missing;
+          }
+        } catch (e) { rep.innerHTML = `<p class="bad">${esc(e.message)}</p>`; return; }
+        rep.innerHTML = `<p class="ok">✔ ${tot.matched.length} ${tot.matched.length === 1 ? 'foto associada' : 'fotos associadas'}.</p>
+          ${tot.unmatched.length ? `<p class="warn" style="margin-top:8px">${tot.unmatched.length} ${tot.unmatched.length === 1 ? 'arquivo ficou' : 'arquivos ficaram'} sem dono:</p><ul class="small" style="margin:4px 0 0 18px">${tot.unmatched.map(u => `<li><b>${esc(u.file)}</b> · ${esc(u.reason)}</li>`).join('')}</ul><p class="small" style="margin-top:6px">Para esses, adicione a pessoa na lista e importe de novo, ou use o botão "📷 foto" na linha da pessoa.</p>` : ''}
+          ${tot.missing.length ? `<p class="small" style="margin-top:8px">Ainda sem foto: <b>${esc(tot.missing.join(', '))}</b>.</p>` : '<p class="small" style="margin-top:8px">Todo mundo da lista tem foto.</p>'}
+          ${det('phList', `Ver quem recebeu qual arquivo (${tot.matched.length})`, `<ul class="small" style="margin:6px 0 0 18px">${tot.matched.map(m => `<li>${esc(m.file)} → <b>${esc(m.person)}</b></li>`).join('')}</ul>`)}`;
+      });
+    });
+  }
+
   function vPeople() {
     const O = A.O, q = A.peopleQ.trim().toLowerCase();
     const list = O.people.filter(p => !q || [p.name, p.email, p.area, p.wl, p.team, p.manager].join(' ').toLowerCase().includes(q));
-    const n = { total: O.people.length, active: O.people.filter(p => p.active).length, in: O.people.filter(p => p.active && p.checkedInAt).length, form: O.people.filter(p => p.hasForm).length };
+    const n = { total: O.people.length, active: O.people.filter(p => p.active).length, in: O.people.filter(p => p.active && p.checkedInAt).length, form: O.people.filter(p => p.hasForm).length, photo: O.people.filter(p => p.photo).length };
+    const noPhoto = O.people.filter(p => p.active && !p.photo);
     return `
       <div class="card"><div class="stats">
         <div class="stat"><b>${n.total}</b><span class="small">na lista</span></div>
         <div class="stat"><b>${n.active}</b><span class="small">participando</span></div>
         <div class="stat"><b>${n.in}</b><span class="small">a bordo (check-in)</span></div>
         <div class="stat"><b>${n.form}</b><span class="small">com respostas do forms</span></div>
+        <div class="stat"><b>${n.photo}</b><span class="small">com foto de perfil</span></div>
       </div></div>
       <div class="card">
         <div class="row" style="justify-content:space-between">
@@ -800,10 +841,12 @@
             <button class="btn sm" data-act="addPerson">+ Adicionar</button>
             <button class="btn sm cyan" data-act="importPeople">📋 Importar lista</button>
             <button class="btn sm cyan" data-act="importForm">📝 Importar forms</button>
+            <button class="btn sm cyan" data-act="importPhotos">📷 Importar fotos</button>
             <button class="btn sm ghost" data-act="exportCsv">⬇ Exportar CSV</button>
           </div>
         </div>
         <p class="small" style="margin-top:6px">Área e WL ficam só aqui no painel (para o sorteio): os viajantes não veem esses dados uns dos outros.</p>
+        <p class="small" style="margin-top:4px">📷 A foto de perfil aparece no lugar das iniciais (no celular, no telão e aqui). ${n.photo ? (noPhoto.length ? `Sem foto: <b>${esc(noPhoto.map(p => p.name).join(', '))}</b>.` : 'Todo mundo tem foto.') : 'Ninguém tem foto ainda: use "Importar fotos".'}</p>
         <input class="input search" id="peopleQ" placeholder="Buscar nome, área, WL…" value="${esc(A.peopleQ)}" style="margin:10px 0">
         <div class="tblwrap"><table class="tbl">
           <tr><th>Nome</th><th>WL</th><th>Área</th><th>Time</th><th>Gestor</th><th>Status</th><th>Forms</th><th class="r">Ações</th></tr>
@@ -816,6 +859,7 @@
             <td>${p.hasForm ? `<button class="btn xs ghost" data-act="viewForm" data-id="${p.id}">ver</button>` : '<span class="x">—</span>'}</td>
             <td class="r"><div class="actions" style="justify-content:flex-end">
               <button class="btn xs ghost" data-act="editPerson" data-id="${p.id}">editar</button>
+              <button class="btn xs ghost" data-act="personPhoto" data-id="${p.id}" title="Escolher a foto de perfil desta pessoa">📷 ${p.photo ? 'trocar foto' : 'foto'}</button>${p.photo ? `<button class="btn xs ghost" data-act="personPhotoDel" data-id="${p.id}" title="Tirar a foto (voltam as iniciais)">sem foto</button>` : ''}
               <button class="btn xs ghost" data-act="toggleCheckin" data-id="${p.id}" data-v="${p.checkedInAt ? 0 : 1}">${p.checkedInAt ? 'desfazer check-in' : 'check-in manual'}</button>
               <button class="btn xs ghost" data-act="toggleActive" data-id="${p.id}" data-v="${p.active ? 0 : 1}">${p.active ? 'marcar ausente' : 'reativar'}</button>
               <button class="btn xs red" data-act="deletePerson" data-id="${p.id}">excluir</button>
@@ -1126,6 +1170,9 @@
       case 'deletePerson': { const p = O.people.find(x => x.id === +id); return confirmRun(`Excluir ${p.name} da lista?${p.inRounds ? ' Essa pessoa está em duplas já geradas: marque como ausente em vez de excluir.' : ''}`, () => api('DELETE', `/api/admin/people/${id}`), 'Excluída'); }
       case 'viewForm': { const p = O.people.find(x => x.id === +id); return dialog(`<h3>${esc(p.name)} · respostas do forms</h3>${Object.entries(p.form || {}).map(([q, a]) => `<p style="margin:8px 0"><b class="small" style="display:block;color:var(--cyan)">${esc(q)}</b>${esc(a)}</p>`).join('') || '<p class="muted">Sem respostas.</p>'}<div class="actions" style="margin-top:12px"><button class="btn ghost" data-close>Fechar</button></div>`); }
       case 'importPeople': return importPeopleDialog();
+      case 'importPhotos': return importPhotosDialog();
+      case 'personPhoto': return pickFiles(false, async files => { if (!files.length) return; await run(async () => { await api('PUT', `/api/admin/people/${id}/photo`, { data: await photoData(files[0]) }); }, 'Foto salva'); });
+      case 'personPhotoDel': return confirmRun('Tirar a foto desta pessoa? Voltam as iniciais.', () => api('DELETE', `/api/admin/people/${id}/photo`), 'Foto removida');
       case 'importForm': return importFormDialog();
       case 'exportCsv': return exportCsv();
       case 'addQuestion': case 'editQuestion': {
@@ -1166,6 +1213,8 @@
     const el = e.target.closest('[data-act]'); if (el && el.tagName !== 'INPUT' && el.tagName !== 'SELECT') { if (el.tagName === 'A') e.preventDefault(); onAction(el); }
   });
   document.addEventListener('change', e => { const el = e.target.closest('input[data-act],select[data-act]'); if (el) onAction(el); });
+  // foto de perfil que não carregou: sai, e as iniciais aparecem
+  document.addEventListener('error', e => { const t = e.target; if (t && t.tagName === 'IMG' && t.parentNode && t.parentNode.classList.contains('av')) { t.parentNode.classList.remove('foto'); t.remove(); } }, true);
   document.addEventListener('pointerup', () => setTimeout(renderAudio, 300), true);
   document.addEventListener('input', e => {
     if (e.target.id === 'peopleQ') { A.peopleQ = e.target.value; render(true); }
