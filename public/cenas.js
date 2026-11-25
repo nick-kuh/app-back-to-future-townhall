@@ -1,7 +1,8 @@
 /* ===== Cenas do deck do townhall no telão =====
  * O conteúdo do deck "CDIO HC + BPC · Townhall 2026" (agenda v18), em português e com a cara do app:
- * plano de voo, boas-vindas, almanaque 2026, IA em 2026, reconhecimento (prêmios), intervalo,
- * Visão 2027 (a estratégia, no arquivo original), manifesto e 88 MPH.
+ * plano de voo, boas-vindas, almanaque 2026, reconhecimento (prêmios), intervalo,
+ * Visão 2027 (a estratégia, no arquivo original) e 88 MPH. ("IA em 2026" e "Manifesto 2027" continuam
+ * disponíveis como cenas avulsas, mas no roteiro padrão são os próprios blocos Reflexão e Sucesso.)
  * O telão segue o estado do servidor: quem comanda é o Painel do Doc (server/cenas.js guarda conteúdo e estado).
  *   Cenas.html(state) → HTML da cena · Cenas.mount(el, state, hooks) · Cenas.update(state) · Cenas.unmount()
  *   Cenas.tick() (a cada 0,5 s) · Cenas.pulse(p) (carga do Flux Capacitor) · Cenas.calm(state) · Cenas.info(state)
@@ -19,7 +20,7 @@ window.Cenas = (() => {
   const TIPO_C = { E: 'var(--green)', M: 'var(--cyan)', R: 'var(--yellow)', C: '#b08cff' };
   const ICO = { i: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>', c: '<circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2 20c1-3.5 3.5-5 6-5s5 1.5 6 5M10 20c1-3.5 3.5-5 6-5s5 1.5 6 5"/>',
     b: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.5-.5-2.5z"/>', f: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>' };
-  // a DeLorean do deck (desenho simples, de perfil), para a linha do tempo do almanaque
+  // a DeLorean do deck (desenho simples, de perfil): só entra na linha do tempo do almanaque se o carro 3D não puder ser desenhado
   const CAR = `<g transform="translate(340 0) scale(-1 1)"><path d="M10 72 L28 52 L120 44 L168 18 L236 16 L292 40 L328 48 L332 74 L10 78Z" fill="#a9b1bd" stroke="#3a3f4a" stroke-width="1.5"/><path d="M176 24 L232 22 L270 42 L160 44Z" fill="#1b2433" stroke="#3a3f4a"/>
     <rect x="44" y="58" width="260" height="3" fill="#59606c"/><path d="M300 54 h28 v8 h-28z" fill="#ff3b5c" opacity=".8"/><path d="M12 58 h20 v6 h-20z" fill="#fff3c4"/>
     <circle cx="80" cy="80" r="18" fill="#15181e"/><circle cx="80" cy="80" r="9" fill="#9aa2ad"/><circle cx="262" cy="80" r="19" fill="#15181e"/><circle cx="262" cy="80" r="9" fill="#9aa2ad"/></g>`;
@@ -40,6 +41,8 @@ window.Cenas = (() => {
   const head = (c, kick) => `<div class="cn-head">${c.ato ? `<span class="cn-act" style="--c:${ACT_C[c.ato.k]}">${esc(c.ato.n)}</span>` : ''}<span class="cn-kick">${esc(String(kick || c.kicker || '').toUpperCase())}</span></div>`;
   const chip = (html, c) => `<span class="cn-chip" ${c ? `style="--c:${c}"` : ''}><i></i>${html}</span>`;
   const strip = t => (t ? `<div class="cn-strip">${esc(t)}</div>` : '');
+  // quem conduz o bloco: placas com a foto de perfil e o nome (vêm do servidor, em c.hosts)
+  const hostsRow = (c, cls = '', label = 'COM') => { const h = (c && c.hosts) || []; return h.length ? `<div class="hosts ${cls}">${label ? `<small>${label}</small>` : ''}${h.map(x => `<div class="host"><div class="av ${x.foto ? 'foto' : ''}">${esc(ini(x.nome))}${x.foto ? `<img src="${esc(x.foto)}" alt="">` : ''}</div><b>${esc(x.nome)}</b></div>`).join('')}</div>` : ''; };
   const who = c => `<div class="cn-chips">${c.quem ? chip(`Com <b>${esc(c.quem)}</b>`, c.ato ? ACT_C[c.ato.k] : '') : ''}${c.min ? chip(`<b>${esc(c.min)} min</b>`) : ''}</div>`;
   function qrBox() {
     const url = location.origin + '/'; let svg = '';
@@ -99,9 +102,11 @@ window.Cenas = (() => {
       <div class="al-rib"><div class="line"></div><div class="fill" id="alFill"></div>
         ${['Q1', 'Q2', 'Q3', 'Q4'].map((q, i) => `<span class="q" style="left:${(i * 3 + 1) / 11 * 100}%">${q}</span>`).join('')}
         ${c.meses.map((m, i) => `<div class="mo ${c.itens.some(x => x.m === i && x.k === 'E') ? 'dl' : ''}" data-i="${i}" style="left:${i / 11 * 100}%"><i></i><span>${m}</span></div>`).join('')}
-        <svg class="car" id="alCar" viewBox="0 0 340 110">${CAR}</svg></div>
-      <div class="al-focus"><div class="al-month"><div class="q" id="alQ"></div><div class="mn"><span class="bttf" id="alMn"></span></div><div class="stt" id="alSt"></div></div>
-        <div class="al-cards" id="alCards"></div></div>
+        <div class="car" id="alCar"><i class="trail"></i><canvas aria-hidden="true"></canvas></div></div>
+      <div class="al-focus"><div class="al-month"><div class="q" id="alQ"></div><div class="mn"><span class="bttf" id="alMn"></span></div><div class="stt" id="alSt"></div>${hostsRow(c, 'col')}</div>
+        <div class="al-cards" id="alCards"></div>
+        <div class="al-hero"><div class="al-side"><div class="al-wait"><b>REBOBINANDO 2026…</b><small>12 meses de entregas, mês a mês</small></div>${hostsRow(c, 'stack')}</div>
+          <div class="carbox"><canvas class="car3d" data-car></canvas></div></div></div>
       <div class="al-foot"><div class="al-leg" id="alLeg"></div><span class="src">${esc(c.fonte)}</span></div>
       <div class="al-page" id="alPage"></div>`;
   }
@@ -117,7 +122,8 @@ window.Cenas = (() => {
   }
   function alMonth(c, i, animate) {
     const blank = i < 0, m = Math.max(0, i), it = blank ? [] : c.itens.filter(x => x.m === m), off = new Set(c.live.off || []);
-    const car = $('#alCar'); car.style.left = m / 11 * 100 + '%'; if (animate) { car.classList.add('mv'); later(900, () => car.classList.remove('mv')); }
+    const car = $('#alCar'); car.style.left = m / 11 * 100 + '%'; if (animate) { car.classList.add('mv'); later(1000, () => car.classList.remove('mv')); }
+    root.classList.toggle('blank', blank); // antes de o ano começar: a DeLorean na estrada, pronta para partir
     $('#alFill').style.width = m / 11 * 100 + '%';
     $$('.al-rib .mo').forEach((d, k) => { d.classList.toggle('cur', !blank && k === m); d.classList.toggle('seen', !blank && k < m); });
     const mn = $('#alMn'); mn.textContent = c.meses[m]; if (animate) { mn.classList.remove('flip'); void mn.offsetWidth; mn.classList.add('flip'); }
@@ -125,8 +131,7 @@ window.Cenas = (() => {
     const dl = it.filter(x => x.k === 'E').length, ms = it.filter(x => x.k === 'M').length;
     $('#alSt').innerHTML = `<span><b>${dl}</b>${dl === 1 ? 'entregue' : 'entregues'}</span><span><b>${ms}</b>${ms === 1 ? 'marco em andamento' : 'marcos em andamento'}</span>`;
     const box = $('#alCards'); box.className = `al-cards ${it.length > 4 ? 'cmp' : ''} ${it.length > 6 ? 'cmp3' : ''} ${animate ? 'anim' : ''}`;
-    box.innerHTML = blank ? '<div class="al-wait">REBOBINANDO 2026…<small>12 meses de entregas, mês a mês</small></div>'
-      : it.map((e, k) => `<div class="al-card k${e.k} ${off.has(e.k) || (e.bu && off.has(e.bu)) ? 'hid' : ''}" style="--i:${k};--c:${TIPO_C[e.k]}"><small>${esc(c.tipos[e.k].toUpperCase())}${e.bu ? `<em style="--b:${BU_C[e.bu]}">${esc(c.bus[e.bu])}</em>` : ''}</small><p>${esc(e.t)}</p>${e.k === 'E' ? '<div class="stamp">ENTREGUE<i>2026 ✓</i></div>' : ''}</div>`).join('');
+    box.innerHTML = blank ? '' : it.map((e, k) => `<div class="al-card k${e.k} ${off.has(e.k) || (e.bu && off.has(e.bu)) ? 'hid' : ''}" style="--i:${k};--c:${TIPO_C[e.k]}"><small>${esc(c.tipos[e.k].toUpperCase())}${e.bu ? `<em style="--b:${BU_C[e.bu]}">${esc(c.bus[e.bu])}</em>` : ''}</small><p>${esc(e.t)}</p>${e.k === 'E' ? '<div class="stamp">ENTREGUE<i>2026 ✓</i></div>' : ''}</div>`).join('');
     if (animate && !blank) { sfx('key', m); if (dl) { later(650, () => sfx('reveal')); later(900, () => { const r = $('.al-card.kE:not(.hid)'); if (r) { const b = r.getBoundingClientRect(); confetti(70, (b.right - 60) / innerWidth, (b.top + b.height / 2) / innerHeight); } }); } }
   }
   function alLegend(c) {
@@ -140,9 +145,36 @@ window.Cenas = (() => {
       (function f(t) { const p = Math.min(1, (t - t0) / d), v = target * (1 - Math.pow(1 - p, 3)); el.textContent = m[1] + v.toFixed(dec).replace('.', sep) + m[3]; if (p < 1 && el.isConnected) requestAnimationFrame(f); else el.textContent = txt; })(t0);
     });
   }
+  // A DeLorean de verdade (o modelo 3D do app, delorean-model.js) na linha do tempo: de perfil, com as rodas girando;
+  // quando o mês muda ela acelera (rodas mais rápidas, luzes acesas e os rastros de fogo). Sem WebGL, entra o desenho simples.
+  let carModule = null;
+  function alCar3d() {
+    const box = $('#alCar'), cv = box && box.querySelector('canvas'); if (!cv) return;
+    const me = L.car = { raf: 0, view: null };
+    const flat = () => { if (box.isConnected) box.innerHTML = `<svg viewBox="0 0 340 110">${CAR}</svg>`; };
+    (carModule || (carModule = import('/delorean-model.js'))).then(m => {
+      if (L.car !== me || !cv.isConnected) return;
+      const view = me.view = m.createCarView(cv); let last = performance.now(), spin = 0, boost = 0;
+      (function frame(t) {
+        if (L.car !== me || !cv.isConnected) return;
+        me.raf = requestAnimationFrame(frame);
+        if (t - last < 33 || document.hidden) return;
+        const dt = Math.min(.1, (t - last) / 1000), w = cv.clientWidth, h = cv.clientHeight; last = t; if (!w || !h || view.lost) return;
+        boost += ((box.classList.contains('mv') ? 1 : 0) - boost) * Math.min(1, dt * 6); spin += dt * (2.2 + boost * 24);
+        view.resize(w, h, Math.min(devicePixelRatio || 1, 2)); view.setCamera({ x: 0, y: 1.45, z: 7.2 }, { x: 0, y: .66, z: 0 }, 21);
+        view.update({ pos: { x: 0, y: .012 + Math.sin(t * .009) * .006, z: 0 }, ry: -.32, e: .3 + boost * .7, flash: 0, pulse: boost * .6, spin, visible: true });
+        view.render();
+      })(last);
+    }).catch(err => { console.warn('Carro 3D indisponível no almanaque; usando o desenho simples.', err); if (L.car === me) flat(); });
+  }
   function mAlmanaque(c, first) {
     const l = c.live, p = L.al || {};
-    if (first) { kpiCount(); alLegend(c); alMonth(c, l.mes, false); }
+    if (first) {
+      kpiCount(); alLegend(c); alMonth(c, l.mes, false); alCar3d();
+      const hero = () => (hooks.car ? hooks.car() : null); // a DeLorean grande, na estrada, enquanto o ano não começa
+      later(300, () => { const h = hero(); if (h && h.setEnergy) h.setEnergy(.5); });
+      every(1300, () => { const h = hero(); if (h && h.spark && root && root.classList.contains('blank') && !document.hidden) h.spark(); });
+    }
     else {
       if (p.mes !== l.mes) alMonth(c, l.mes, true);
       else if (p.off !== (l.off || []).join()) { alMonth(c, l.mes, false); alLegend(c); }
@@ -163,7 +195,7 @@ window.Cenas = (() => {
   const winnerOf = p => (p.vencedor === undefined ? null : p.indicados[p.vencedor] || null);
   function vReconhecimento(c) {
     const l = c.live, n = c.premios.length, done = c.premios.filter(p => p.feito).length;
-    if (l.fase === 'intro') return `<div class="rc-intro">${FLUX}${head(c)}<div class="rc-lines">${(c.abertura || []).map((t, i) => `<span style="--i:${i}">${fire(t)}</span>`).join('')}</div><p class="rc-sub" style="--i:${(c.abertura || []).length}">${esc(c.aberturaSub)}</p></div>`;
+    if (l.fase === 'intro') return `<div class="rc-intro">${FLUX}${head(c)}<div class="rc-lines">${(c.abertura || []).map((t, i) => `<span style="--i:${i}">${fire(t)}</span>`).join('')}</div><p class="rc-sub" style="--i:${(c.abertura || []).length}">${esc(c.aberturaSub)}</p>${hostsRow(c, 'center')}</div>`;
     if (l.fase === 'tributo') return `<div class="rc-trib">${head(c, `${c.kicker} · Tributo`)}<h2 class="cn-h2">${fire(c.tributo)}</h2>
         <div class="rc-vid" id="rcVid"><div class="hint" id="rcHint">${FLUX}<b>ARRASTE O VÍDEO-TRIBUTO PARA CÁ</b><small>ou use este espaço para a fala da liderança</small></div><video id="rcVideo" hidden playsinline controls></video></div>
         ${c.fala ? `<p class="rc-foot">Fala: ${esc(c.fala)}</p>` : ''}</div>`;
@@ -174,11 +206,15 @@ window.Cenas = (() => {
     if (l.fase === 'hall') return `<div class="rc-hall">${head(c, `${c.kicker} · Grande final`)}<div class="hof-t"><span class="bttf">${esc(c.hallTitulo)}</span></div><p class="cn-sub">${esc(c.hallSub)}</p>
         <div class="rc-hof n${n}">${c.premios.map((p, i) => { const w = p.feito && winnerOf(p); return `<div class="hc ${w ? '' : 'pending'}" style="--i:${i}"><div class="k">${esc(p.k)}</div><h4>${esc(p.n)}</h4>${w ? faces(w) : '<div class="av">?</div>'}<b>${w ? esc(w.nome) : 'A revelar'}</b><small>${w ? esc(w.projeto) : '&nbsp;'}</small></div>`; }).join('')}</div></div>`;
     const p = c.premios[l.premio] || c.premios[0]; // cerimônia de um prêmio
+    // como o Flux Capacitor carrega: pelos aplausos (o microfone do Painel do Doc ouve a sala), pelos toques nos celulares, ou pelos dois
+    const mic = c.carga !== 'toques', tap = c.carga !== 'mic';
+    const how = mic && tap ? 'Aplausos e toques em <b>⚡ CARREGAR</b> no celular: tudo carrega o Flux Capacitor!' : mic ? 'Quanto mais <b>aplausos</b>, mais rápido o Flux Capacitor carrega. <b>Todo mundo junto!</b>' : 'Os aplausos carregam o Flux Capacitor. Toquem em <b>⚡ CARREGAR</b> no celular!';
     return `<div class="rc-cer" id="rcCer" data-passo="${l.passo}">
         <div class="rc-cerh"><div class="tcbox led" style="--c:var(--red)"><b id="rcLed">— — —</b><span>DESTINO · VENCEDOR</span></div><div class="rc-steps">${[0, 1, 2, 3, 4].map(() => '<i></i>').join('')}</div></div>
         <div class="rc-cat"><div class="ck">O PRÊMIO 2026 DE ${esc(p.k)}</div><div class="cn2"><span class="bttf">${esc(p.n)}</span></div><p class="cw">${esc(p.porque)}</p><div class="cc">${p.criterios.map((x, i) => `<span style="--i:${i}">${esc(x)}</span>`).join('')}</div></div>
         <div class="rc-noms n${p.indicados.length}" id="rcNoms">${p.indicados.map((x, j) => `<div class="nom" data-j="${j}" style="--rt:${[-4, 3, -2, 4, -3, 2][j % 6]}deg"><div class="ph">${faces(x)}</div><b></b><small></small></div>`).join('')}</div>
-        <div class="rc-gw"><div class="gwl">${FLUX}<div><div class="gwt">FAÇAM BARULHO!</div><div class="gws">Os aplausos carregam o Flux Capacitor. Toquem em <b>⚡ CARREGAR</b> no celular!</div></div></div>
+        <div class="rc-gw ${mic ? 'mic' : ''}"><div class="gwl">${FLUX}<div class="gwx"><div class="gwt">FAÇAM BARULHO!</div><div class="gws">${how}</div></div>
+            ${mic ? `<div class="vu" id="rcVu" title="Som da sala"><span>👏 APLAUSOS</span><div class="bars">${Array.from({ length: 18 }, () => '<i></i>').join('')}</div></div>` : ''}</div>
           <div class="gbar"><i id="rcFill"></i><span>1,21 GW</span></div><div class="gnum"><b id="rcNum">0,00</b> GIGAWATTS</div></div>
         <svg class="rc-bolt" id="rcBolt"></svg>
         <div class="rc-win" id="rcWin"><div class="wk" id="rcWk"></div><div class="wav" id="rcWav"></div><div class="wn"><span class="bttf" id="rcWn"></span></div><div class="wp" id="rcWp"></div><div class="wc" id="rcWc"></div></div>
@@ -186,8 +222,15 @@ window.Cenas = (() => {
   }
   const PASSOS = ['categoria', 'indicados', 'carga', 'sorteio', 'vencedor'];
   function rcShowNom(el, x, type) { if (!el || el.classList.contains('in')) return; el.classList.add('in'); const b = el.querySelector('b'); if (type) { sfx('blip'); typeTo(b, x.nome); } else b.textContent = x.nome; el.querySelector('small').textContent = x.projeto; }
-  function rcCharge(v) {
+  function rcCharge(v, nivel) {
     const f = $('#rcFill'); if (!f) return; v = Math.max(0, Math.min(1, v));
+    const vu = $('#rcVu'); // medidor do som da sala: acende conforme o barulho; sem notícias do microfone por 1 s, apaga
+    if (vu) {
+      const n = Math.max(0, Math.min(1, Number(nivel) || 0)), bars = vu.querySelectorAll('.bars i'), on = Math.round(n * bars.length);
+      bars.forEach((b, i) => b.classList.toggle('on', i < on)); vu.classList.toggle('loud', n > .6);
+      const gw = vu.closest('.rc-gw'); if (gw) gw.style.setProperty('--n', n.toFixed(2));
+      clearTimeout(L.vuT); if (n > 0) L.vuT = later(1000, () => rcCharge(v, 0));
+    }
     f.style.width = v * 100 + '%'; $('#rcNum').textContent = (v * 1.21).toFixed(2).replace('.', ',');
     const cer = $('#rcCer'); if (cer && cer.dataset.passo === 'carga') { $('#rcLed').textContent = `CARREGANDO… ${Math.round(v * 100)}%`; cer.style.setProperty('--e', v); }
   }
@@ -223,7 +266,7 @@ window.Cenas = (() => {
       return;
     }
     p.indicados.forEach((x, j) => rcShowNom(el[j], x, false));
-    if (l.passo === 'carga') { if (since < 800) sfx('hum', 6); return rcCharge(l.carga); }
+    if (l.passo === 'carga') { if (since < 800) sfx('hum', 6); return rcCharge(l.carga, l.nivel); }
     rcCharge(1);
     if (l.passo === 'sorteio') { // holofote girando cada vez mais devagar até parar no vencedor; pausa; raio
       const n = el.length, win = p.vencedor, total = l.sorteioMs || 8600, strikeAt = total - 900, limit = strikeAt - 1300, seq = [];
@@ -254,7 +297,7 @@ window.Cenas = (() => {
     if (l.fase === 'hall' && first) { sfx('reveal'); c.premios.forEach((x, i) => later(500 + i * 350, () => confetti(90, .12 + i * (.76 / Math.max(1, c.premios.length - 1)), .62))); }
     if (l.fase === 'intro' && first) later(700, () => sfx('hum', 3));
     if (l.fase === 'cerimonia' && (first || p.passo !== l.passo || p.at !== l.at)) rcPasso(c);
-    else if (l.fase === 'cerimonia' && l.passo === 'carga') rcCharge(l.carga);
+    else if (l.fase === 'cerimonia' && l.passo === 'carga') rcCharge(l.carga, l.nivel);
     L.rc = { passo: l.passo, at: l.at };
   }
 
@@ -274,7 +317,7 @@ window.Cenas = (() => {
   }
 
   /* ================= VISÃO 2027 · ESTRATÉGIA (arquivo original, sem alterações) ================= */
-  const vVisao = c => `<div class="vs-top"><div>${head(c)}<h1 class="vs-title"><span class="bttf">${esc(c.titulo)}</span></h1></div><span class="vs-note">${esc(c.nota)}</span></div>
+  const vVisao = c => `<div class="vs-top"><div>${head(c)}<h1 class="vs-title"><span class="bttf">${esc(c.titulo)}</span></h1></div><div class="vs-side">${hostsRow(c, 'sm')}<span class="vs-note">${esc(c.nota)}</span></div></div>
     <div class="vs-frame"><iframe id="vsFrame" title="Estratégia CDIO LATAM 2027" src="${esc(c.src)}"></iframe></div>`;
   function mVisao(c, first) {
     const fr = $('#vsFrame'), intro = !!c.live.intro; if (!fr) return;
@@ -331,7 +374,11 @@ window.Cenas = (() => {
     return JSON.stringify(content) + (c.kind === 'reconhecimento' ? `|${live.fase}|${live.premio}|${(live.feitos || []).join()}` : '');
   }
   function html(state) { const c = state && state.cena; return c && VIEW[c.kind] ? `<section class="cn cn-${c.kind}" id="cn">${VIEW[c.kind](c)}</section>` : ''; }
-  function clear() { timers.forEach(t => { clearTimeout(t); clearInterval(t); }); timers = []; cancelAnimationFrame(L.mpRaf); if (L.vurl) URL.revokeObjectURL(L.vurl); L = {}; }
+  function clear() {
+    timers.forEach(t => { clearTimeout(t); clearInterval(t); }); timers = []; cancelAnimationFrame(L.mpRaf); if (L.vurl) URL.revokeObjectURL(L.vurl);
+    if (L.car) { cancelAnimationFrame(L.car.raf); if (L.car.view) L.car.view.dispose(); } // o carro 3D da linha do tempo
+    L = {};
+  }
   function start(first) {
     const c = cena(); if (!c) return;
     document.body.classList.toggle('cn-clean', c.kind === 'visao'); // a estratégia aparece limpa, sem as linhas de TV por cima
@@ -349,18 +396,23 @@ window.Cenas = (() => {
     const s = signature(c);
     if (s !== sig) { // o conteúdo ou a fase mudou: redesenha por dentro (sem a transição do telão)
       const keepCar = c.kind === 'mph'; if (keepCar) return (sig = s, LIVE.mph(c, false));
-      clear(); sig = s; root.className = `cn cn-${c.kind}`; root.innerHTML = VIEW[c.kind](c); start(true); return;
+      clear(); sig = s; root.className = `cn cn-${c.kind}`; root.innerHTML = VIEW[c.kind](c);
+      if (hooks.remount && root.querySelector('[data-car]')) hooks.remount(); // a cena foi redesenhada: o carro 3D ganha a tela nova
+      start(true); return;
     }
     if (LIVE[c.kind]) LIVE[c.kind](c, false);
   }
   function unmount() { clear(); confetti.run++; const cv = $('#cnConfetti'); if (cv) cv.remove(); document.body.classList.remove('cn-clean'); root = null; kind = null; sig = ''; }
   function tick() { const c = cena(); if (c && root && c.kind === 'intervalo') tIntervalo(c); }
-  function pulse(p) { if (p && p.kind === 'reconhecimento' && kind === 'reconhecimento') { const c = cena(); if (c && c.live.passo === 'carga') { c.live.carga = p.carga; rcCharge(p.carga); } } }
-  // telas de fala: fundo parado e escurecido (como os blocos de fala); intervalo e 88 MPH ficam com o céu vivo
-  const calm = state => { const c = state && state.cena; return !!c && !['intervalo', 'mph'].includes(c.kind); };
+  function pulse(p) { if (p && p.kind === 'reconhecimento' && kind === 'reconhecimento') { const c = cena(); if (c && c.live.passo === 'carga') { c.live.carga = p.carga; c.live.nivel = p.nivel || 0; rcCharge(p.carga, p.nivel); } } }
+  // O céu e a estrada continuam rodando no fundo em todas as cenas (parado, parecia que o telão tinha travado).
+  // Na estratégia (uma moldura que ocupa a tela inteira) o fundo fica bem escuro e sem raios (calm); nas cenas com texto,
+  // um pouco mais escuro (dim); no intervalo e nos 88 MPH, com o céu vivo.
+  const calm = state => { const c = state && state.cena; return !!c && c.kind === 'visao'; };
+  const dim = state => { const c = state && state.cena; return !!c && !['intervalo', 'mph', 'visao'].includes(c.kind); };
   // nome para os circuitos de tempo da transição e a frase do deck
   const TR = { agenda: ['circuits', 'Programem os circuitos de tempo.'], boasvindas: ['clock', 'O Doc reúne a tripulação.'], almanaque: ['speed', 'Nosso ano, mês a mês.'], ia: ['fuel', 'O efeito borboleta.'], reconhecimento: ['clock', 'O raio está chegando.'],
     intervalo: ['fuel', 'Mr. Fusion recarregando.'], visao: ['speed', 'Para onde vamos…'], manifesto: ['speed', 'O futuro de vocês é o que vocês fizerem dele.'], mph: ['speed', 'Segurem firme…'] };
   const info = state => { const c = state && state.cena; if (!c) return null; const t = TR[c.kind] || TR.agenda; return { id: 'cena:' + c.kind, type: 'cena', name: plain(c.name), tr: { kind: t[0], ms: 3600, quote: [t[1], `${c.ato ? c.ato.n + ' · ' + c.ato.nome : 'CDIO HC + BPC · Townhall 2026'}`] } }; };
-  return { html, mount, update, unmount, tick, pulse, calm, info, confetti };
+  return { html, mount, update, unmount, tick, pulse, calm, dim, info, confetti };
 })();

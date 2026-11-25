@@ -162,7 +162,7 @@
     if (cn) { // o que muda a tela do celular em cada cena (o resto é atualizado por cima)
       const l = cn.live || {}, sub = cn.kind === 'reconhecimento' ? [l.fase, l.premio, l.passo, (l.feitos || []).join('.')].join(':') : cn.kind === 'intervalo' ? ivPhase(cn) : cn.kind === 'mph' ? (l.at ? (serverNow() - l.at >= MPH_MS ? 'chegou' : 'indo:' + l.at) : 'antes')
         : cn.kind === 'almanaque' ? `${l.mes}:${l.pagina ? 1 : 0}` : cn.kind === 'agenda' ? cn.itens.map(x => x.estado[0] || '-').join('') : '';
-      let h = 0; const content = JSON.stringify([cn.titulo, cn.kicker, cn.itens && cn.kind === 'agenda' ? cn.itens : '', cn.texto, cn.frase, cn.pessoas, cn.quem, cn.pergunta, cn.chegada, cn.premios, S.me.person]); for (let i = 0; i < content.length; i++) h = (h * 31 + content.charCodeAt(i)) >>> 0;
+      let h = 0; const content = JSON.stringify([cn.titulo, cn.kicker, cn.itens && cn.kind === 'agenda' ? cn.itens : '', cn.texto, cn.frase, cn.pessoas, cn.quem, cn.pergunta, cn.chegada, cn.premios, cn.carga, cn.hosts, S.me.person]); for (let i = 0; i < content.length; i++) h = (h * 31 + content.charCodeAt(i)) >>> 0;
       return ['cena', cn.kind, sub, h].join('|');
     }
     if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}`;
@@ -195,7 +195,9 @@
     if (!force && k === S.lastKey) { patch(); return; }
     const prev = S.lastKey; S.lastKey = k;
     const p = prev.split('|'), n = k.split('|');
-    const blk = blockNow(), moved = !!(prev && blk && blk.msg && S.blk && S.blk !== blk.id && S.state.settings.transitions !== false);
+    const blk = blockNow(), moved = !!(prev && blk && blk.msg && S.blk && S.blk !== blk.id && S.state.settings.transitions !== false && (!S.state.step || S.state.step.transition !== false));
+    // chegou um bloco que entra direto (sem transição) enquanto a transição do bloco anterior ainda passava: ela sai da frente
+    if (prev && blk && S.blk && S.blk !== blk.id && !moved && warp._hold) { warp._hold = false; clearInterval(warp._t); const w = $('#warp'); w.classList.remove('on', 'go'); w.setAttribute('aria-hidden', 'true'); }
     S.blk = blk ? blk.id : null;
     // a transição de bloco não é interrompida por atualizações que chegam logo em seguida: a tela nova entra por baixo
     // dura o mesmo que a transição do telão (15 s por padrão), pedindo para a pessoa olhar para lá
@@ -265,10 +267,10 @@
       const b = S.state.block;
       app.innerHTML = b === 'standby' ? vStandby() : b === 'stage' ? vStage() : b === 'welcome' ? vWelcome() : b === 'message' ? vMessage() : b === 'closing' ? vClosing() : b === 'doc' ? vDoc() : vConnections();
     }
-    // "olhos no telão" e blocos de fala: tela calma, fundo parado
+    // "olhos no telão" e blocos de fala: tela calma, com o fundo mais apagado (mas sempre rodando: parado, parecia travado)
     const calm = !presentation && S.screen === 'app' && !!S.state && !!S.me && (['standby', 'stage'].includes(S.state.block) || (!!cena && CENA_CALM.includes(cena.kind)));
     document.body.classList.toggle('off', calm);
-    if (window.Delorean3D) Delorean3D.pause(calm);
+    if (window.Delorean3D) Delorean3D.pause(false);
     const ans = $('#ans'); if (ans) { ans.value = S.answerDraft; countAnswer(); if (typing && !ans.disabled) { ans.focus(); ans.setSelectionRange(ans.value.length, ans.value.length); } }
     const rq = $('#rfQ'); if (rq) { rq.value = S.rfQ; if (searching) { rq.focus(); rq.setSelectionRange(rq.value.length, rq.value.length); } }
     if (reflexao) loadProjects(reflexao.rev);
@@ -432,13 +434,15 @@
   const ivPhase = c => { const l = c.live; return l.phase === 'run' && l.endsAt && l.endsAt <= serverNow() ? 'done' : l.phase; };
   const ivLeft = c => { const l = c.live, ph = ivPhase(c); return ph === 'run' ? Math.max(0, Math.ceil((l.endsAt - serverNow()) / 1000)) : ph === 'done' ? 0 : l.remaining; };
   const actLine = c => (c.ato ? `${c.ato.n} · ${c.ato.nome}` : 'CDIO HC + BPC · TOWNHALL 2026');
+  // quem conduz o bloco (Preparar → Agenda e cenas → Quem conduz): as fotos de perfil, lado a lado
+  const hostFaces = c => (c.hosts && c.hosts.length ? `<div class="hostrow">${c.hosts.map(h => av({ name: h.nome, photo: h.foto })).join('')}</div>` : '');
   // tela calma, no estilo do logo: ato, título e quem fala
   const cenaLook = (c, title, who, note) => `<div class="spacer"></div>
       <div class="logo sm dim"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div></div>
       <div class="stage">
         <div class="kicker">${esc(actLine(c))}</div><i class="st-arrow"></i>
-        <div class="st-theme ${title.length > 22 ? 'long' : ''}"><span>${esc(title)}</span></div>
-        ${who ? `<p class="st-speaker">com ${esc(who)}</p>` : ''}
+        <div class="st-theme ${title.length > 22 || /\S{12,}/.test(title) ? 'long' : ''}"><span>${esc(title)}</span></div>
+        ${hostFaces(c)}${who ? `<p class="st-speaker">com ${esc(who)}</p>` : ''}
         <p class="muted">${note || '👀 Olhe para o telão.'}</p>
       </div>
       <div class="spacer"></div>`;
@@ -470,10 +474,14 @@
       const win = p => (p.vencedor === undefined ? null : p.indicados[p.vencedor]);
       if (l.fase === 'cerimonia' && c.premios[l.premio]) {
         const p = c.premios[l.premio], w = win(p), head = cenaCard(c, `O PRÊMIO 2026 DE ${p.k}`, p.n, l.passo === 'categoria' ? `<p class="small center">${esc(p.porque)}</p>` : '');
-        if (l.passo === 'carga') return `${vHeader()}${head}
-          <div class="panel glow center"><div class="kicker">FAÇAM BARULHO!</div><p class="muted">Cada toque carrega o Flux Capacitor do telão.</p>
-            <button class="btn charge" data-action="tapCharge">⚡ CARREGAR</button>
+        if (l.passo === 'carga') { // o Flux Capacitor carrega com os aplausos da sala (microfone), com os toques no celular, ou com os dois
+          const mic = c.carga !== 'toques', tap = c.carga !== 'mic';
+          return `${vHeader()}${head}
+          <div class="panel glow center"><div class="kicker">FAÇAM BARULHO!</div>
+            ${mic ? `<div class="clap">👏</div><p class="muted">${tap ? 'Aplaudam e toquem no botão: os dois carregam o Flux Capacitor do telão.' : 'Larguem o celular e aplaudam! Quanto mais barulho, mais rápido o Flux Capacitor carrega.'}</p>` : '<p class="muted">Cada toque carrega o Flux Capacitor do telão.</p>'}
+            ${tap ? '<button class="btn charge" data-action="tapCharge">⚡ CARREGAR</button>' : ''}
             <div class="ebar" style="margin-top:14px"><i id="cgBar" style="width:${((l.carga || 0) * 100).toFixed(1)}%"></i></div><p class="small" id="cgNum" style="margin-top:6px"></p></div>`;
+        }
         if (l.passo === 'vencedor' && w) return `${vHeader()}${head}
           <div class="panel glow center"><div class="kicker">E O PRÊMIO VAI PARA…</div><div class="polaroids"><div class="polaroid"><div class="photo">${av({ name: w.nome, photo: (w.fotos || [])[0] })}</div><div class="cap">${esc(first(w.nome))} · 2026</div></div></div>
             <div class="pname">${esc(w.nome)}</div><p class="small" style="margin-top:6px;color:var(--cyan)">${esc(w.projeto)}</p><p class="myans">“${esc(p.citacao)}”</p></div>`;
@@ -485,9 +493,9 @@
           <div class="panel"><div class="rf-list">${c.premios.map(p => { const w = p.feito && win(p); return `<div class="rf-item ${w ? 'ok' : ''}" style="--c:var(--yellow)"><b>${w ? '🏆' : '✉️'}</b><span>${esc(p.n)}<small>${w ? `${esc(w.nome)} · ${esc(w.projeto)}` : esc(p.k)}</small></span></div>`; }).join('')}</div></div>
           <div class="panel center"><p class="muted">👀 Olhe para o telão.</p></div>`;
       }
-      return cenaLook(c, c.name, l.fase === 'tributo' ? c.fala : '', l.fase === 'tributo' ? '🎬 Tributo · olhe para o telão.' : '');
+      return cenaLook(c, c.name, l.fase === 'tributo' ? c.fala : c.quem, l.fase === 'tributo' ? '🎬 Tributo · olhe para o telão.' : '');
     }
-    if (c.kind === 'boasvindas') return cenaLook(c, 'Boas-vindas', (c.pessoas || []).map(p => p.nome).join(', '));
+    if (c.kind === 'boasvindas') return cenaLook({ ...c, hosts: (c.pessoas || []).map(p => ({ nome: p.nome, foto: (p.fotos || [])[0] })) }, 'Boas-vindas', (c.pessoas || []).map(p => p.nome).join(', '));
     if (c.kind === 'almanaque') return cenaLook(c, 'Jornada 2026', c.quem, l.pagina ? `📄 ${c.stats.entregues} entregas · ${esc(c.stats.beneficiosTxt)} em benefícios<br>👀 Olhe para o telão.` : l.mes >= 0 ? `📅 ${esc(c.meses[l.mes])} de 2026<br>👀 Olhe para o telão.` : '');
     if (c.kind === 'visao') return cenaLook(c, plain(c.titulo), c.quem);
     if (c.kind === 'manifesto') return cenaLook(c, 'Manifesto 2027', c.quem, `${esc(c.titulo)} <b style="color:var(--yellow)">${esc(c.pergunta)}</b><br>👀 Olhe para o telão.`);
@@ -519,8 +527,16 @@
     const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const q = norm(S.q.trim());
     if (!q) return `<p class="muted center plist-hint">Comece a digitar o seu nome para ele aparecer aqui.</p>`;
-    // primeiro quem começa com o que foi digitado; quem já embarcou aparece marcado (para quem está voltando)
-    const rank = p => { const n = norm(p.name); return n.startsWith(q) ? 0 : n.split(/\s+/).some(w => w.startsWith(q)) ? 1 : n.includes(q) ? 2 : 9; };
+    // Só aparece quem tem o nome ou um sobrenome COMEÇANDO com o que foi digitado ("ni" acha Nicolas, não Vinicius).
+    // Dá para digitar mais de uma palavra ("nico ku"): cada uma tem de ser o começo de uma palavra do nome.
+    // Primeiro vêm os que batem pelo primeiro nome; quem já embarcou aparece marcado (para quem está voltando).
+    const PART = ['de', 'da', 'do', 'das', 'dos', 'e'], toks = q.split(/\s+/).filter(Boolean);
+    const rank = p => {
+      const n = norm(p.name), words = n.split(/[\s-]+/).filter(Boolean), real = words.filter(w => !PART.includes(w));
+      if (n.startsWith(q)) return 0;
+      if (toks.length > 1) { const used = new Set(); return toks.every(t => { const i = words.findIndex((w, k) => !used.has(k) && w.startsWith(t)); if (i < 0) return false; used.add(i); return true; }) ? (words[0].startsWith(toks[0]) ? 0 : 1) : 9; }
+      return real.some(w => w.startsWith(q)) ? 1 : 9;
+    };
     const list = S.people.map(p => ({ p, r: rank(p) })).filter(x => x.r < 9).sort((a, b) => a.r - b.r || a.p.name.localeCompare(b.p.name)).map(x => x.p);
     if (!list.length) return `<p class="muted center plist-hint">Nenhum nome encontrado. Confira a grafia ou procure o apresentador.</p>`;
     const shown = list.slice(0, 8);

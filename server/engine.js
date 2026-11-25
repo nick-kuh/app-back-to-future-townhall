@@ -10,7 +10,7 @@ const { createFotos } = require('./fotos');
 
 const TOTAL_ROUNDS = 3;
 const BLOCKS = ['standby', 'welcome', 'message', 'connections', 'closing', 'stage', 'reflexao', 'doc', 'cena'];
-const AUDIO_MODES = ['off', 'music', 'ambient'];
+const AUDIO_MODES = ['off', 'music', 'ambient', 'spotify']; // spotify: a música vem do Spotify de quem está no Painel do Doc (o telão fica sem a trilha do app)
 
 // Roteiro do evento: a ordem dos passos que o Doc percorre no painel ("Próximo ▶").
 //  checkin · stage (bloco de fala: título, tema, quem fala) · connections · sucesso (dinâmica d1..d4)
@@ -27,22 +27,27 @@ const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 //   ATO II · Rebobinar 2026: Jornada 2026 (almanaque) · IA em 2026 + Reflexão
 //   ATO III · Reconhecer: Reconhecimento 2026 · intervalo
 //   ATO IV · Avançar para 2027: Visão 2027 (estratégia) · Manifesto 2027 + Sucesso 01 a 04 + o Doc · 88 MPH · créditos
+// "Como a IA nos ajudou em 2026" é o próprio bloco Reflexão, e o "Manifesto 2027" é o bloco Sucesso: um passo só para cada.
 function defaultSteps() {
   const cena = k => ({ type: 'cena', cena: k });
   return [
     { type: 'checkin' },                // a porta de entrada: é por aqui que todo mundo faz o login
     cena('agenda'), cena('boasvindas'),
     { type: 'connections' },
-    cena('almanaque'), cena('ia'),
+    cena('almanaque'),
     { type: 'reflexao' },
     cena('reconhecimento'), cena('intervalo'),
-    cena('visao'), cena('manifesto'),
+    cena('visao'),
     { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' },
     { type: 'doc' },                    // Visão 2027 do Doc: fecha o Sucesso com o resumo do que todo mundo escreveu
     cena('mph'),
     { type: 'closing' },                // créditos
-  ].map((x, i) => ({ id: 'p' + (i + 1), ...x }));
+  ].map((x, i) => ({ id: 'p' + (i + 1), ...x, ...(noTransition(x) ? { transition: false } : {}) }));
 }
+// Passos que entram direto, sem a "viagem no tempo" de transição (pedido da organização): boas-vindas, reconhecimento,
+// intervalo, Visão 2027, as dinâmicas do Sucesso e o Doc, 88 MPH e os créditos. Em Preparar → Roteiro dá para ligar e desligar em cada passo.
+const NO_TRANSITION_CENAS = ['boasvindas', 'reconhecimento', 'intervalo', 'visao', 'mph'];
+function noTransition(x) { return ['sucesso', 'doc', 'closing'].includes(x.type) || (x.type === 'cena' && NO_TRANSITION_CENAS.includes(x.cena)); }
 // Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões, Reflexão,
 // Visão 2027 e cada dinâmica do Sucesso só entram uma vez (o estado delas é um só).
 function cleanSteps(list) {
@@ -61,6 +66,7 @@ function cleanSteps(list) {
     if (raw.type === 'message') { step.emoji = clip(raw.emoji, 8) || '📣'; step.title = clip(raw.title, 80) || 'Aviso'; step.body = clip(raw.body, 600); }
     if (raw.type === 'sucesso') step.activity = raw.activity;
     if (raw.type === 'cena') step.cena = raw.cena;
+    if (raw.transition === false) step.transition = false; // este passo entra direto, sem a transição do filme
     out.push(step);
   }
   return out;
@@ -95,6 +101,8 @@ const DEFAULT_SETTINGS = {
   docRate: 1,             // velocidade da fala (0,7 a 1,4)
   docVideoUrl: '',        // opcional: vídeo do Doc (ex.: feito com IA), tocado na chegada
   docVideoFull: false,    // o vídeo já traz a fala completa: depois dele o telão vai direto para o jornal e o 2027
+  spotifyClientId: '',    // Client ID do app do Spotify (Preparar → Ajustes → Spotify); a conexão em si fica no navegador do Doc
+  spotifyBreak: false,    // no intervalo, tocar o Spotify em vez da música do app
   agenda: [
     { time: '', title: 'Boas-vindas e check-in' },
     { time: '', title: 'Conexões · 3 viagens no tempo' },
@@ -200,7 +208,15 @@ class Engine {
       this.settings.steps = null; this.settings.agendaV18 = true;
       if (!kvGet('settings', {}).eventName || this.settings.eventName === 'Townhall · De Volta ao Futuro') this.settings.eventName = DEFAULT_SETTINGS.eventName;
     }
-    const steps = cleanSteps(this.settings.steps);
+    let steps = cleanSteps(this.settings.steps);
+    // Roteiros guardados antes destes ajustes (valem uma vez): "IA em 2026" e "Manifesto 2027" saem, porque são os
+    // próprios blocos Reflexão e Sucesso; e os passos que entram sem transição ficam marcados.
+    // Spotify: o Client ID também pode vir da instalação (variável SPOTIFY_CLIENT_ID), para não se perder quando o servidor reinicia
+    if (!this.settings.spotifyClientId && /^[0-9a-zA-Z]{20,64}$/.test(process.env.SPOTIFY_CLIENT_ID || '')) this.settings.spotifyClientId = process.env.SPOTIFY_CLIENT_ID;
+    if (!this.settings.roteiroV19) {
+      steps = steps.filter(x => !(x.type === 'cena' && ['ia', 'manifesto'].includes(x.cena))).map(x => (noTransition(x) ? { ...x, transition: false } : x));
+      this.settings.roteiroV19 = true;
+    }
     this.settings.steps = steps.length ? steps : defaultSteps();
     delete this.settings.stages;
     // roteiros salvos antes de existir o bloco Reflexão ganham o passo uma vez (depois do primeiro bloco de fala)
@@ -737,6 +753,9 @@ class Engine {
     if (partial.skip !== undefined) s.skip = this.cleanSkip({ ...s.skip, ...(partial.skip && typeof partial.skip === 'object' ? partial.skip : {}) });
     // áudio próprio: só endereços http(s) ou caminhos do próprio site
     for (const k of ['musicUrl', 'ambientUrl', 'docVideoUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
+    // Spotify: o "Client ID" do app criado no painel de desenvolvedor do Spotify (não é segredo) e se o intervalo toca o Spotify
+    if (partial.spotifyClientId !== undefined) { const id = String(partial.spotifyClientId).trim(); s.spotifyClientId = /^[0-9a-zA-Z]{20,64}$/.test(id) ? id : ''; }
+    if (partial.spotifyBreak !== undefined) s.spotifyBreak = !!partial.spotifyBreak;
     if (partial.docVoice !== undefined) s.docVoice = !!partial.docVoice;
     if (partial.docVideoFull !== undefined) s.docVideoFull = !!partial.docVideoFull;
     if (partial.docVoiceName !== undefined) s.docVoiceName = clip(partial.docVoiceName, 80);
@@ -946,7 +965,7 @@ class Engine {
       case 'doc': this.state.block = 'doc'; notice = { title: 'Visão 2027', body: 'Olhe para o telão: o Doc está chegando de 2027.' }; break;
       case 'cena': // cena do deck: atenção no telão; o som segue a regra dos blocos de fala (no intervalo, a música entra)
         this.state.block = 'cena';
-        if (this.settings.stageMutes) this.state.audio.mode = step.cena === 'intervalo' ? 'music' : 'off';
+        if (this.settings.stageMutes) this.state.audio.mode = step.cena === 'intervalo' ? (this.settings.spotifyBreak ? 'spotify' : 'music') : 'off';
         notice = { title: CENA_META[step.cena].name, body: 'Olhe para o telão.' }; break;
       default: break; // sucesso: a apresentação entra em seguida
     }
@@ -995,7 +1014,7 @@ class Engine {
       presentation: this.presentation(),
       doc: this.docPublic(),
       stage: this.stageInfo(),
-      step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length, type: this.currentStep().type, cena: this.currentStep().cena || null },
+      step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length, type: this.currentStep().type, cena: this.currentStep().cena || null, transition: this.currentStep().transition !== false },
       audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', beeps: this.state.audio.beeps !== false, musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
       settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, questionMode: this.settings.questionMode, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 15,
         docVoice: this.settings.docVoice !== false, docVoiceName: this.settings.docVoiceName || '', docRate: this.settings.docRate || 1, docVideoUrl: this.settings.docVideoUrl || '', docVideoFull: !!this.settings.docVideoFull },

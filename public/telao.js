@@ -93,6 +93,9 @@
   const eventLine = () => { const ev = (S.state && S.state.evento) || {}; return [ev.titulo, ev.sub].filter(Boolean).join(' · ').toUpperCase() || 'TOWNHALL · HILL VALLEY'; };
   const logo = () => `<div class="logo"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div><div class="l3">${esc(eventLine())}</div></div>`;
   const flux = () => `<div class="flux"><i></i><i></i><i></i><b></b></div>`;
+  // Quem conduz o bloco que está no ar (Preparar → Agenda e cenas → Quem conduz): placas com a foto de perfil e o nome
+  const hostIni = n => String(n || '?').trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const hosts = (cls = '', label = 'COM') => { const h = (S.state && S.state.hosts) || []; return h.length ? `<div class="hosts ${cls}">${label ? `<small>${label}</small>` : ''}${h.map(x => `<div class="host"><div class="av ${x.foto ? 'foto' : ''}">${esc(hostIni(x.nome))}${x.foto ? `<img src="${esc(x.foto)}" alt="">` : ''}</div><b>${esc(x.nome)}</b></div>`).join('')}</div>` : ''; };
   const quoteBlock = i => { const q = QUOTES[i % QUOTES.length]; return `<div class="quote" id="quote">“${esc(q[0])}”<small>${esc(q[1])}</small></div>`; };
   const eras = () => `<div class="eras" id="eras">${ERAS_FILM.map((e, i) => `<div class="era ${i === S.eraIdx ? 'on' : ''}"><div class="y">${esc(e.y)}</div><div class="f">${esc(e.f)}</div><div class="d">${esc(e.d)}</div></div>`).join('')}</div>`;
   const huge = (kind, cls = '') => `<div class="cdwrap" id="cdwrap" data-kind="${kind}"><div class="huge ${cls}" id="cd">--:--</div><div class="ptag">❚❚ PAUSADO</div></div>`;
@@ -157,7 +160,7 @@
     const d = DYN[p.activityId] || DYN.d1;
     const guide = p.live && p.live.guide;
     return `<section class="live-projection" style="--c:${d.c}">
-      <div class="kicker">DE VOLTA PARA O SUCESSO · DINÂMICA ${d.n} · ${esc(String(p.title).toUpperCase())}</div>
+      <div class="lp-head"><div class="kicker">DE VOLTA PARA O SUCESSO · DINÂMICA ${d.n} · ${esc(String(p.title).toUpperCase())}</div>${hosts('sm')}</div>
       <h1 class="pq">${esc(p.question)}</h1>
       <div class="carbox wide" id="pStage" data-mode="car">
         <div class="layer car-layer"><canvas class="car3d" data-car></canvas>
@@ -255,7 +258,7 @@
       return `<section class="rfx rfx-menu">
         <div class="rfx-tcs"><div class="tcbox" style="--c:var(--yellow)"><b>2026</b><span>LAST TIME DEPARTED</span></div><div class="tcbox" style="--c:var(--cyan)"><b id="rClock">${clockNow()}</b><span>PRESENT TIME</span></div><div class="tcbox" style="--c:var(--orange)"><b>2027</b><span>DESTINATION TIME</span></div></div>
         <h1 class="rfx-title">${esc(r.title.toUpperCase())}</h1>
-        <div class="rfx-sub">${esc(r.subtitle.toUpperCase())}</div>
+        <div class="rfx-sub">${esc(r.subtitle.toUpperCase())}</div>${hosts('sm')}
         <div class="rfx-cards n${r.themes.length}">${r.themes.map((t, i) => `<div class="rcard" data-i="${i}" style="--c:${t.c}"><div class="n">${t.n}</div><div class="tx"><h3>${esc(t.t)}</h3><p>${esc(t.q)}</p><div class="k"></div></div><span class="badge">✓ REVELADA</span></div>`).join('')}</div>
         <div class="rfx-gbar"><div class="lbl"><span>⚡ FLUX CAPACITOR · ENERGIA TOTAL</span><span id="rGTot"></span></div><div class="ebar"><i id="rGBar"></i></div></div>
       </section>`;
@@ -488,7 +491,7 @@
     if (b === 'closing') return ['closing', `<div class="fin" id="fin"><div class="a"><span class="bttf" id="finA">FIM DA VIAGEM</span></div><div class="b" id="finB"></div></div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
     // conexões
     const r = c.round, era = roundEra(r), t = c.timer;
-    if (c.phase === 'idle' || c.phase === 'ready') return ['prep', `<div class="kicker">BLOCO CONEXÕES</div><div class="title">ROTAS TEMPORAIS</div>${flux()}`];
+    if (c.phase === 'idle' || c.phase === 'ready') return ['prep', `<div class="kicker">BLOCO CONEXÕES</div><div class="title">ROTAS TEMPORAIS</div>${flux()}${hosts()}`];
     if (c.phase === 'matching') return ['matching', `<div class="kicker">VIAGEM ${r}/3 · ${esc(era.label)} · ${esc(era.year)}</div><div class="title">ENCONTRE SUA DUPLA</div>${t && t.kind === 'matching' ? huge('matching', 'amber') : ''}<div class="sub">Encontre quem tem a mesma placa no celular.</div>`];
     if (c.phase === 'talk') return ['talk', `<div class="kicker">VIAGEM ${r}/3 · ${esc(era.label)} · ${esc(era.year)}</div><div class="rowx">${gauge()}${huge('talk')}</div>`];
     if (c.phase === 'roundEnd') return ['roundEnd', `<div class="title">88 MPH!</div>${carBox('warp')}${t && t.kind === 'break' ? huge('break', 'amber') : ''}`];
@@ -520,13 +523,15 @@
     applyAudio();
     // mudou o bloco no ar: transição do filme (não na primeira tela, nem com o telão preso em "relógio"/"logo")
     const info = blockInfo(S.state), auto = ((S.state.screen && S.state.screen.scene) || 'auto') === 'auto';
-    if (S.blk && S.blk.id !== info.id && auto && S.state.settings && S.state.settings.transitions !== false) playTransition(S.blk, info);
+    const stepTr = !S.state.step || S.state.step.transition !== false || info.type === 'message' || info.type === 'standby'; // Preparar → Roteiro: cada passo diz se entra com a transição
+    if (S.blk && S.blk.id !== info.id && auto && stepTr && S.state.settings && S.state.settings.transitions !== false) playTransition(S.blk, info);
+    else if (S.blk && S.blk.id !== info.id) stopTransition(); // entrou direto: uma transição que ainda estivesse passando sai da frente
     S.blk = info;
     const [key, html] = sceneFor();
     const pr = S.state.presentation, rf = key === 'reflexao' ? S.state.reflexao : null;
     const dk = key === 'doc' && S.state.doc ? `${S.state.doc.rev}:${S.state.doc.message ? 1 : 0}` : ''; // nova mensagem (ou a cena começou): monta de novo
     const ck = key === 'cena' ? S.state.cena.kind : key === 'closing' ? JSON.stringify(S.state.creditos || '').length : key === 'welcome' || key === 'logo' ? JSON.stringify(S.state.evento || '') : ''; // cena do deck no ar / conteúdo do evento
-    const k = `${key}|${dk}|${ck}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
+    const k = `${key}|${dk}|${ck}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}|${key === 'cena' ? '' : (S.state.hosts || []).map(h => h.nome + (h.foto || '')).join()}`;
     if (k !== S.key) {
       if (window.DocCena) DocCena.unmount();
       if (window.Cenas) Cenas.unmount();
@@ -537,13 +542,16 @@
       mountCar(key);
       mountReflexao();
       if (key === 'doc') DocCena.mount($('#scene'), S.state);
-      if (key === 'cena') Cenas.mount($('#scene'), S.state, { car: () => S.car, flash, duck: on => { S.duck = !!on; applyAudio(); } });
+      if (key === 'cena') Cenas.mount($('#scene'), S.state, { car: () => S.car, remount: () => mountCar('cena'), flash, duck: on => { S.duck = !!on; applyAudio(); } });
       if (key === 'closing' && S.people) startFinale();
       if (key === 'roundEnd' || key === 'results') flash();
       if (key === 'projection') pollScreen(); else { clearTimeout(S.pollT); S.responses = null; }
-      // telas calmas (bloco de fala): fundo parado e escurecido, sem raios
+      // O céu e a estrada rodam em loop em TODOS os blocos (parado, parecia que o telão tinha travado).
+      // Telas calmas (bloco de fala, estratégia): fundo bem mais escuro e sem raios. Nas outras cenas do deck, só um pouco
+      // mais escuro, para o texto ficar fácil de ler.
       S.calm = key === 'stage' || (key === 'cena' && Cenas.calm(S.state)); document.body.classList.toggle('calm', S.calm);
-      if (key !== 'cena') S.duck = false; if (window.Delorean3D) Delorean3D.pause(S.calm);
+      document.body.classList.toggle('dim', key === 'cena' && !S.calm && Cenas.dim(S.state));
+      if (key !== 'cena') S.duck = false; if (window.Delorean3D) Delorean3D.pause(false);
     } else {
       const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), S.checked !== null && S.state.counts.checkedIn > S.checked); }
       if (key === 'projection') patchProjection();
@@ -593,7 +601,7 @@
   function applyAudio() {
     if (!window.Trilha || !S.state || !S.state.audio) return;
     const a = S.state.audio, duck = (window.DocCena && DocCena.speaking) || S.duck ? .22 : 1; // a música abaixa enquanto o Doc fala (e durante o vídeo-tributo)
-    Trilha.apply({ mode: a.out === 'painel' ? 'off' : a.mode, beeps: a.out !== 'painel' && a.beeps !== false, volume: a.volume * duck, musicUrl: a.musicUrl, ambientUrl: a.ambientUrl });
+    Trilha.apply({ mode: a.out === 'painel' || a.mode === 'spotify' ? 'off' : a.mode, beeps: a.out !== 'painel' && a.beeps !== false, volume: a.volume * duck, musicUrl: a.musicUrl, ambientUrl: a.ambientUrl });
   }
   // a cena do Doc avisa quando começa/para de falar e em que parte está: abaixa a música e conta para o Painel do Doc
   if (window.DocCena) { let rt = null; DocCena.onChange(() => { applyAudio(); clearTimeout(rt); rt = setTimeout(report, 150); }); }
