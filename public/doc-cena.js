@@ -28,15 +28,17 @@
   const ledDate = d => `${MONTHS[d.getMonth()]} ${pad(d.getDate())} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   function partsOf(m) { return m ? ['chegada', 'abertura', ...(m.blocos || []).map(b => b.id), 'jornal', 'final'] : []; }
   function html(st) {
-    const set = st.settings || {}, img = set.docImageUrl;
-    const doc = img ? `<img class="doc-img" src="${esc(img)}" alt="">` : portrait();
+    const set = st.settings || {}, img = set.docImageUrl, idle = set.docIdleVideoUrl || set.docTalkVideoUrl, talk = set.docTalkVideoUrl || set.docIdleVideoUrl;
+    // o Doc: vídeos feitos com IA (parado / falando, alternando no ritmo da voz), um retrato feito com IA ou o desenho
+    const doc = idle ? `<div class="doc-vid"><video class="v-idle" src="${esc(idle)}" muted loop playsinline autoplay preload="auto"></video><video class="v-talk" src="${esc(talk)}" muted loop playsinline autoplay preload="auto"></video></div>`
+      : img ? `<img class="doc-img" src="${esc(img)}" alt="">` : portrait();
     return `<section class="docx" id="docx" data-part="espera" data-shot="none">
       <div class="cx-world" id="cxWorld">
         <div class="cx-portal"></div>
         <div class="cx-fog f1"></div><div class="cx-fog f2"></div>
         <div class="dx-cloud"><canvas id="dxCloud"></canvas></div>
         <div class="dx-sil">${silhouette()}</div>
-        <div class="dx-doc ${img ? 'is-img' : ''}" id="dxDoc" data-pose="idle" data-mouth="0">${doc}</div>
+        <div class="dx-doc ${idle ? 'is-video' : img ? 'is-img' : ''}" id="dxDoc" data-pose="idle" data-mouth="0">${doc}</div>
       </div>
       <div class="dx-car"><canvas class="car3d" id="dxCar"></canvas><div class="cx-gw" id="dxGw">0.00 GW</div></div>
       <div class="cx-rays"></div>
@@ -95,7 +97,14 @@
     const v = C.el && $('#dxVideo', C.el); if (v && !v.hidden) { v.pause(); v.hidden = true; }
   }
   function notify() { for (const fn of C.listeners) { try { fn(); } catch { /* segue */ } } }
-  function setSpeaking(on) { if (C.speaking === on) return; C.speaking = on; if (C.el) C.el.classList.toggle('talking', on); notify(); }
+  function setSpeaking(on) {
+    if (C.speaking === on) return; C.speaking = on;
+    if (C.el) {
+      C.el.classList.toggle('talking', on);
+      const v = C.el.querySelector(on ? '.v-talk' : '.v-idle'); if (v && v.paused) v.play().catch(() => {}); // vídeos do Doc: o certo na frente
+    }
+    notify();
+  }
   const docEl = () => C.el && $('#dxDoc', C.el);
   function mouth(k) { const d = docEl(); if (d) d.dataset.mouth = String(k); }
   function pose(p) { const d = docEl(); if (d) d.dataset.pose = p; }
@@ -189,6 +198,7 @@
     C.part = Math.max(0, Math.min(list.length - 1, idx)); C.done = false;
     const id = list[C.part], m = C.m, el = C.el;
     el.dataset.part = ['chegada', 'abertura', 'jornal', 'final'].includes(id) ? id : 'bloco';
+    el.dataset.stage = ''; // pulou de parte no meio da chegada: os mostradores e o carro saem da tela
     $('#dxPaper', el).hidden = id !== 'jornal'; $('#dxFinal', el).hidden = id !== 'final';
     $('#cxTitle', el).classList.remove('on'); $('#cxChapter', el).classList.remove('on');
     if (C.cloud) C.cloud.dim = true;

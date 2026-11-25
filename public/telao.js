@@ -504,7 +504,7 @@
     S.blk = info;
     const [key, html] = sceneFor();
     const pr = S.state.presentation, rf = key === 'reflexao' ? S.state.reflexao : null;
-    const dk = key === 'doc' && S.state.doc ? `${S.state.doc.rev}:${S.state.doc.message ? 1 : 0}:${S.state.settings.docImageUrl || ''}` : ''; // nova mensagem (ou a cena começou): monta de novo
+    const dk = key === 'doc' && S.state.doc ? `${S.state.doc.rev}:${S.state.doc.message ? 1 : 0}:${S.state.settings.docImageUrl || ''}:${S.state.settings.docIdleVideoUrl || ''}:${S.state.settings.docTalkVideoUrl || ''}` : ''; // nova mensagem (ou a cena começou): monta de novo
     const k = `${key}|${dk}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
     if (k !== S.key) {
       if (window.DocCena) DocCena.unmount();

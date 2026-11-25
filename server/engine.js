@@ -81,6 +81,8 @@ const DEFAULT_SETTINGS = {
   docVideoUrl: '',        // opcional: vídeo do Doc (ex.: feito com IA), tocado na chegada
   docVideoFull: false,    // o vídeo já traz a fala completa: depois dele o telão vai direto para o jornal e o 2027
   docImageUrl: '',        // opcional: retrato do Doc feito com IA (fundo escuro), no lugar do desenho
+  docIdleVideoUrl: '',    // opcional: vídeo curto do Doc parado (feito com IA), repetido quando ele não está falando
+  docTalkVideoUrl: '',    // opcional: vídeo curto do Doc falando (feito com IA), repetido enquanto a voz fala
   agenda: [
     { time: '', title: 'Boas-vindas e check-in' },
     { time: '', title: 'Conexões · 3 viagens no tempo' },
@@ -655,7 +657,7 @@ class Engine {
     if (partial.transitionSeconds !== undefined) s.transitionSeconds = Math.max(3, Math.min(30, Math.round(Number(partial.transitionSeconds) || 15)));
     if (partial.skip !== undefined) s.skip = this.cleanSkip({ ...s.skip, ...(partial.skip && typeof partial.skip === 'object' ? partial.skip : {}) });
     // áudio próprio: só endereços http(s) ou caminhos do próprio site
-    for (const k of ['musicUrl', 'ambientUrl', 'docVideoUrl', 'docImageUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
+    for (const k of ['musicUrl', 'ambientUrl', 'docVideoUrl', 'docImageUrl', 'docIdleVideoUrl', 'docTalkVideoUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
     if (partial.docVoice !== undefined) s.docVoice = !!partial.docVoice;
     if (partial.docVideoFull !== undefined) s.docVideoFull = !!partial.docVideoFull;
     if (partial.docVoiceName !== undefined) s.docVoiceName = clip(partial.docVoiceName, 80);
@@ -902,7 +904,7 @@ class Engine {
       step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length },
       audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', beeps: this.state.audio.beeps !== false, musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
       settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 15,
-        docVoice: this.settings.docVoice !== false, docVoiceName: this.settings.docVoiceName || '', docRate: this.settings.docRate || 1, docVideoUrl: this.settings.docVideoUrl || '', docVideoFull: !!this.settings.docVideoFull, docImageUrl: this.settings.docImageUrl || '' },
+        docVoice: this.settings.docVoice !== false, docVoiceName: this.settings.docVoiceName || '', docRate: this.settings.docRate || 1, docVideoUrl: this.settings.docVideoUrl || '', docVideoFull: !!this.settings.docVideoFull, docImageUrl: this.settings.docImageUrl || '', docIdleVideoUrl: this.settings.docIdleVideoUrl || '', docTalkVideoUrl: this.settings.docTalkVideoUrl || '' },
       now: now(),
     };
   }

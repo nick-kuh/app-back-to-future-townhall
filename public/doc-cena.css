@@ -173,3 +173,14 @@ body.doc-cine .crt{display:none}
   .doc-svg,.doc-img,.dc-hair,.dc-lids,.docx.talking .dc-head,.docx.talking .dc-brows,.dx-doc[data-pose=wave] .dc-hand,.cx-world.push,.cx-grain,.cx-rays,.cx-fog{animation:none}
   .dx-paper.in{animation:none;opacity:1}
 }
+
+/* ---- o Doc em vídeo feito com IA: o próprio plano (os enquadramentos viram zooms do mesmo vídeo) ---- */
+.dx-doc.is-video{position:absolute;inset:12vh 0;width:auto;height:auto;aspect-ratio:auto;top:12vh!important;left:0!important;right:0!important;bottom:12vh;overflow:hidden;opacity:0}
+.docx[data-shot=mcu] .dx-doc.is-video,.docx[data-shot=mcu-r] .dx-doc.is-video,.docx[data-shot=cu] .dx-doc.is-video,.docx[data-shot=ecu] .dx-doc.is-video{opacity:1;height:auto}
+.doc-vid{position:absolute;inset:0}
+.doc-vid video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .35s ease,transform 16s cubic-bezier(.2,.6,.3,1)}
+.doc-vid .v-talk{opacity:0}
+.docx.talking .doc-vid .v-talk{opacity:1}
+.docx[data-shot=mcu-r] .doc-vid video{transform:scale(1.12);transform-origin:70% 40%}
+.docx[data-shot=cu] .doc-vid video{transform:scale(1.32);transform-origin:45% 32%}
+.docx[data-shot=ecu] .doc-vid video{transform:scale(1.6);transform-origin:50% 30%}

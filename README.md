@@ -80,6 +80,17 @@ para este app) chega de 2027, lê tudo o que foi escrito nas quatro dinâmicas e
 Em "Mais opções" do passo: ligar/desligar a voz, escolher a voz pelo nome, a velocidade da fala e
 **🔈 Testar a voz no telão**. O navegador só libera som e voz depois de um clique na tela do telão.
 
+### 🎞 O Doc em vídeo feito com IA: parado e falando (recomendado)
+
+Para o Doc ter cara de filme de verdade, gere com IA **dois vídeos curtos** do mesmo Doc, com o mesmo
+enquadramento e a câmera parada: um **parado** (respirando, piscando, olhando em volta) e um **falando**
+(gesticulando). Cole os endereços em Mais opções → "Vídeo do Doc parado" e "Vídeo do Doc falando". O telão
+alterna sozinho entre os dois no ritmo da voz ao vivo, com as legendas, e os planos viram enquadramentos
+(zoom) do mesmo vídeo. A fala continua vindo das respostas do dia. Os prompts estão no kit do vídeo.
+Ferramentas: no computador, o MiniMax H3 do tutorial (ComfyUI) ou o InfiniteTalk; online, Hedra, HeyGen,
+Kling ou OmniHuman (confira preços e termos). Alternativa em 3D: Meshy, Tripo, Rodin ou Hunyuan3D geram
+um modelo com esqueleto e animações a partir do retrato (a boca não sincroniza com a fala).
+
 ### 🎬 Vídeo do Doc feito com IA (opcional)
 
 Para quem quiser um curta "de cinema" do Doc, gerado no próprio computador com o método do tutorial
