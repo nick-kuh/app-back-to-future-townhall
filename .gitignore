@@ -4,3 +4,5 @@ data/*.db-*
 .env
 *.log
 .DS_Store
+# fotos de perfil soltas não vão para o repositório (ele é público): só o pacote criptografado server/seed/fotos.enc
+server/seed/fotos/

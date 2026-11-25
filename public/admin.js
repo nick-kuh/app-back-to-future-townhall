@@ -847,6 +847,7 @@
         </div>
         <p class="small" style="margin-top:6px">Área e WL ficam só aqui no painel (para o sorteio): os viajantes não veem esses dados uns dos outros.</p>
         <p class="small" style="margin-top:4px">📷 A foto de perfil aparece no lugar das iniciais (no celular, no telão e aqui). ${n.photo ? (noPhoto.length ? `Sem foto: <b>${esc(noPhoto.map(p => p.name).join(', '))}</b>.` : 'Todo mundo tem foto.') : 'Ninguém tem foto ainda: use "Importar fotos".'}</p>
+        ${O.fotosSeed === 'locked' ? '<div class="sb-warn" style="margin-top:8px">🔒 As fotos que acompanham o app não foram abertas: falta a variável de ambiente <span class="mono">FOTOS_KEY</span> no servidor (ou ela está diferente da usada para criar o pacote). Enquanto isso, dá para usar "Importar fotos".</div>' : ''}
         <input class="input search" id="peopleQ" placeholder="Buscar nome, área, WL…" value="${esc(A.peopleQ)}" style="margin:10px 0">
         <div class="tblwrap"><table class="tbl">
           <tr><th>Nome</th><th>WL</th><th>Área</th><th>Time</th><th>Gestor</th><th>Status</th><th>Forms</th><th class="r">Ações</th></tr>

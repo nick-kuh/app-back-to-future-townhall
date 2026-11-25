@@ -129,7 +129,14 @@ class Engine {
     seedIfEmpty();
     // fotos de perfil: guardadas no banco; a pasta de fotos da instalação (se houver) entra quando o banco começa vazio
     this.fotos = createFotos();
-    this.fotos.seedFromDir(db.prepare('SELECT id, name FROM people').all());
+    { // fotos que acompanham a instalação: a pasta (se houver) e o pacote criptografado (aberto com FOTOS_KEY)
+      const people = db.prepare('SELECT id, name FROM people').all();
+      this.fotos.seedFromDir(people);
+      const r = this.fotos.seedFromPack(people);
+      const quiet = process.env.DB_PATH === ':memory:'; // nos testes, sem avisos
+      if (r && r.locked) { if (!quiet) console.warn(`[fotos] o pacote de fotos da instalação não foi aberto: ${r.reason}. O app segue com as iniciais.`); }
+      else if (r && !quiet) console.log(`[fotos] ${r.matched} fotos de perfil carregadas do pacote da instalação.`);
+    }
     const saved = kvGet('state', {});
     this.state = {
       block: BLOCKS.includes(saved.block) ? saved.block : 'welcome',
@@ -260,6 +267,7 @@ class Engine {
     const max = db.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM people').get().m;
     const r = db.prepare('INSERT INTO people (name, email, wl, team, manager, area, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(name, String(f.email || '').trim().toLowerCase(), normalizeWl(f.wl), String(f.team || '').trim(), String(f.manager || '').trim(), String(f.area || '').trim(), max + 1);
+    this.fotos.seedFor(r.lastInsertRowid, this.listPeople()); // se as fotos da instalação têm a foto dessa pessoa, ela já entra com foto
     this.commit();
     return this.personById(r.lastInsertRowid);
   }
@@ -277,6 +285,7 @@ class Engine {
     if (f.checkedIn !== undefined) { fields.push('checked_in_at = ?'); vals.push(f.checkedIn ? (p.checkedInAt || iso()) : null); if (!f.checkedIn) { fields.push('token = ?'); vals.push(null); } }
     if (f.form !== undefined) { fields.push('form_json = ?'); vals.push(f.form ? JSON.stringify(f.form) : null); }
     if (fields.length) { vals.push(p.id); db.prepare(`UPDATE people SET ${fields.join(', ')} WHERE id = ?`).run(...vals); }
+    if (f.name !== undefined) this.fotos.seedFor(p.id, this.listPeople()); // nome corrigido: pode passar a casar com uma foto da instalação
     this.commit();
     return this.personById(p.id);
   }
@@ -1053,7 +1062,7 @@ class Engine {
     return {
       state: this.state, settings: this.settings, now: now(),
       people: people.map(p => ({ id: p.id, name: p.name, photo: p.photo, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.active && p.checkedInAt && !inRounds.has(p.id) && !this.skips('connections', p.id)) })),
-      rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, cats: CATEGORIES, points: POINTS,
+      rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, cats: CATEGORIES, points: POINTS, fotosSeed: this.fotos.seedStatus(),
       counts: this.publicState().counts,
     };
   }

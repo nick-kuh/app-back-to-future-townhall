@@ -18,6 +18,8 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY  # opcional: a IA (Claude) escreve a mensagem do Doc na Visão 2027
         sync: false
+      - key: FOTOS_KEY          # chave que abre o pacote de fotos de perfil (server/seed/fotos.enc); sem ela, o app usa as iniciais
+        sync: false
       - key: DATA_DIR
         value: /app/data
       - key: NODE_ENV

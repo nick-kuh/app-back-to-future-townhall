@@ -5,7 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const assert = require('assert/strict');
-const { matchPerson, norm, sniff } = require('../server/fotos');
+const { matchPerson, norm, sniff, pack, unpack } = require('../server/fotos');
 const { Engine } = require('../server/engine');
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='; // 1 × 1
@@ -70,7 +70,25 @@ const png = () => 'data:image/png;base64,' + PNG;
   assert.equal(e.fotos.seedFromDir(e.listPeople(), dir), null, 'com fotos no banco, a pasta não mexe em nada');
   e.fotos.clear(); assert.deepEqual(e.fotos.seedFromDir(e.listPeople(), dir), { files: 3, matched: 2 }); assert.ok(e.personById(id('Fermin Grandas')).photo); assert.equal(e.fotos.count(), 2);
   assert.equal(e.fotos.seedFromDir(e.listPeople(), path.join(dir, 'nao-existe')), null); fs.rmSync(dir, { recursive: true, force: true });
-  console.log('OK · fotos no motor: importar, validar, trocar, tirar, pasta da instalação e a foto na dupla');
+  // pacote criptografado da instalação: só abre com a chave; sem ela, o app segue com as iniciais
+  const KEY = 'uma-chave-de-teste-bem-comprida', img = Buffer.from(PNG, 'base64');
+  const bundle = pack([{ name: 'claudia meira.png', data: img }, { name: 'will.png', data: img }, { name: 'renato malvino.png', data: img }, { name: 'nota.txt', data: Buffer.from('texto') }], KEY);
+  assert.ok(bundle.subarray(0, 10).equals(Buffer.from('BTTFFOTOS1'))); assert.ok(!bundle.includes('claudia') && !bundle.includes(img.subarray(0, 8)), 'nem os nomes nem as imagens aparecem no pacote');
+  assert.deepEqual(unpack(bundle, KEY).map(f => f.name), ['claudia meira.png', 'will.png', 'renato malvino.png', 'nota.txt']); assert.ok(unpack(bundle, KEY)[0].data.equals(img));
+  assert.throws(() => unpack(bundle, 'outra-chave-qualquer-123'), /não abre/); assert.throws(() => unpack(Buffer.from('lixo'), KEY), /formato/); assert.throws(() => pack([], 'curta'), /16 caracteres/);
+  const tampered = Buffer.from(bundle); tampered[tampered.length - 1] ^= 1; assert.throws(() => unpack(tampered, KEY), /não abre/, 'pacote adulterado não abre');
+  const file = path.join(os.tmpdir(), `th-fotos-${process.pid}.enc`); fs.writeFileSync(file, bundle);
+  e.fotos.clear();
+  assert.equal(e.fotos.seedFromPack(e.listPeople(), { file: file + '.nao-existe', secret: KEY }), null, 'sem pacote, nada acontece');
+  assert.deepEqual(e.fotos.seedFromPack(e.listPeople(), { file, secret: '' }), { locked: true, reason: 'falta a variável de ambiente FOTOS_KEY' }); assert.equal(e.fotos.seedStatus(), 'locked'); assert.equal(e.adminOverview().fotosSeed, 'locked');
+  assert.equal(e.fotos.seedFromPack(e.listPeople(), { file, secret: 'chave-errada-123456789' }).locked, true); assert.equal(e.fotos.count(), 0);
+  assert.deepEqual(e.fotos.seedFromPack(e.listPeople(), { file, secret: KEY }), { files: 4, matched: 2 }); assert.equal(e.fotos.seedStatus(), 'ok'); assert.ok(e.personById(id('Claudia Meira')).photo);
+  assert.equal(e.fotos.seedFromPack(e.listPeople(), { file, secret: KEY }), null, 'com fotos no banco, o pacote não mexe em nada');
+  // quem entra na lista depois ganha a foto que já estava no pacote
+  const novo = e.addPerson({ name: 'Renato Malvino', wl: 'WL1', area: 'Strategy' }); assert.ok(novo.photo, 'pessoa nova com foto no pacote já entra com foto');
+  const outro = e.addPerson({ name: 'Renata M.' }); assert.equal(outro.photo, null); e.removePhoto(novo.id); e.updatePerson(novo.id, { name: 'Renato Malvino' }); assert.ok(e.personById(novo.id).photo);
+  fs.rmSync(file, { force: true });
+  console.log('OK · fotos no motor: importar, validar, trocar, tirar, pasta e pacote criptografado da instalação, foto na dupla');
 }
 
 /* ---------------- 3) pelo servidor ---------------- */

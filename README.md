@@ -88,10 +88,18 @@ Quem não tem foto continua com as iniciais.
 - JPG, PNG ou WebP, até 400 KB (o painel reduz as grandes para 320 px). As fotos ficam no banco, junto com os check-ins.
 - Nas cenas, a foto vem do nome escrito no conteúdo (ex.: o indicado "Caio Souza"). Em duplas ("Giovana & Lucas")
   aparecem as duas. Nomes que servem para mais de uma pessoa (só "Vinicius") ficam com as iniciais: escreva o sobrenome.
-- **Pasta de fotos da instalação (opcional):** se existir `server/seed/fotos/` (ou a pasta da variável `FOTOS_DIR`), as
-  fotos dela entram sozinhas sempre que o banco começa sem nenhuma foto. É o que mantém as fotos no plano gratuito do
-  Render, onde o banco zera a cada reinício. Atenção: este repositório é **público**; fotos colocadas nessa pasta e
-  enviadas para o GitHub ficam visíveis para qualquer pessoa.
+- **As fotos acompanham o app, criptografadas.** O arquivo `server/seed/fotos.enc` é um pacote com as fotos de perfil
+  (AES-256-GCM). Ele só abre no servidor que tiver a chave na variável de ambiente **`FOTOS_KEY`** (já configurada no
+  serviço do Render). Sempre que o banco começa sem fotos, o que no plano gratuito do Render acontece a cada reinício,
+  o app abre o pacote e associa cada foto à pessoa certa. O repositório é **público**: nele ficam só dados cifrados,
+  sem rostos nem nomes.
+  - Sem a chave (ou com a chave errada) o app funciona normalmente, com as iniciais, e o painel avisa em Preparar → Pessoas.
+  - Para rodar no seu computador com as fotos: copie o valor de `FOTOS_KEY` do Render (Environment) e rode
+    `FOTOS_KEY="…" npm start`.
+  - Para trocar as fotos do pacote: `FOTOS_KEY="…" node scripts/fotos-pack.js <pasta com as fotos>` e envie o novo
+    `server/seed/fotos.enc`. Quem for adicionado à lista depois ganha a foto se ela já estiver no pacote.
+  - A pasta `server/seed/fotos/` (fotos soltas, sem criptografia) também é lida, mas está no `.gitignore`: fotos soltas
+    enviadas para um repositório público ficam visíveis para qualquer pessoa.
 - Quem abre o app pelo link vê os nomes e as fotos na tela de check-in (como já acontecia com os nomes).
 
 O código está em `server/fotos.js`; as fotos são servidas em `/api/photo/<id>`.
@@ -313,6 +321,7 @@ Variáveis de ambiente:
 | `PORT`           | `3000`     | porta HTTP                                |
 | `ADMIN_PASSWORD` | `doc1985`  | senha do Painel do Doc                    |
 | `DATA_DIR`       | `./data`   | pasta do banco SQLite                     |
+| `FOTOS_KEY`      | (vazio)    | chave que abre o pacote de fotos de perfil (`server/seed/fotos.enc`) |
 
 Testes (algoritmo de duplas + fluxo completo do evento + sorteio das perguntas + integração com o Sucesso + cenas do deck + testes originais do Lucas):
 
