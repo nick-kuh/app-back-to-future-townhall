@@ -383,11 +383,15 @@
     const S2 = O.settings, rates = [[.85, 'mais devagar'], [.95, 'um pouco devagar'], [1, 'normal'], [1.1, 'um pouco rápido'], [1.2, 'rápido']];
     const more = `<div class="actions">${m ? `${btn('⬇ Baixar o .txt (mensagem + todas as respostas)', 'docTxt', { cls: 'ghost sm' })}${btn('✎ Editar o texto', 'docEdit', { cls: 'ghost sm' })}${btn('↻ Gerar de novo', 'docGen', { cls: 'ghost sm', disabled: d.status === 'generating' })}` : btn('⬇ Baixar o .txt (todas as respostas)', 'docTxt', { cls: 'ghost sm' })}
         ${info.ai ? btn('⚙ Gerar sem IA (palavras mais citadas)', 'docGen', { cls: 'ghost sm', data: { ai: '0' }, disabled: d.status === 'generating' }) : ''}${m ? btn('🗑 Apagar a mensagem', 'docClear', { cls: 'red sm' }) : ''}</div>
+      <div class="doc-kit"><b>🎬 Vídeo do Doc feito com IA (opcional)</b>
+        <p class="small">Para fazer um curta do Doc no seu computador, com o método do tutorial de vídeo com IA (placa de vídeo com 12 GB ou mais): o kit traz o passo a passo, os prompts das imagens de referência (ficha do Doc, carro, cenários), ~8 segmentos com as falas tiradas ${m ? 'desta mensagem' : 'das respostas'} e o briefing para colar no seu agente de IA. Gerar leva tempo: faça antes do evento ou, com as respostas do dia, só se houver pelo menos 1 hora até o encerramento.</p>
+        <div class="actions">${btn('🎬 Baixar o kit do vídeo do Doc (.txt)', 'docKit', { cls: 'ghost sm' })}</div></div>
       <div class="form doc-cfg">
         <label class="sw"><input type="checkbox" id="docVoice" ${S2.docVoice !== false ? 'checked' : ''}> O telão lê o texto em voz alta (voz em português do navegador do telão)</label>
         <label class="f">Voz preferida (parte do nome, opcional)<input class="input" id="docVoiceName" value="${esc(S2.docVoiceName || '')}" placeholder="ex.: Antonio · vazio = a melhor voz masculina em português"></label>
         <label class="f">Velocidade da fala<select class="input" id="docRate">${rates.map(([v, l]) => `<option value="${v}" ${Math.abs((S2.docRate || 1) - v) < .01 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-        <label class="f">Vídeo da chegada do Doc (opcional: .mp4 feito com IA, tocado antes da fala)<input class="input" id="docVideoUrl" value="${esc(S2.docVideoUrl || '')}" placeholder="https://… ou /videos/doc.mp4"></label>
+        <label class="f">Vídeo do Doc (opcional: .mp4 feito com IA, tocado na chegada)<input class="input" id="docVideoUrl" value="${esc(S2.docVideoUrl || '')}" placeholder="https://… ou /videos/doc.mp4"></label>
+        <label class="sw"><input type="checkbox" id="docVideoFull" ${S2.docVideoFull ? 'checked' : ''}> O vídeo já traz a fala completa do Doc (depois dele, o telão vai direto para o jornal de 2027 e o "2027" final, sem repetir a fala)</label>
         <div class="actions">${btn('Salvar', 'docSaveCfg', { cls: 'sm' })}${btn('🔈 Testar a voz no telão', 'docTestVoice', { cls: 'ghost sm' })}</div>
         <p class="small">${tp && tp.voice ? `Voz em uso no telão: <b>${esc(tp.voice)}</b>.` : 'O telão escolhe a voz quando abre. No Windows, o Microsoft Edge tem as vozes mais naturais (ex.: "Antonio").'}</p>
       </div>`;
@@ -410,10 +414,10 @@
       }, 'Texto salvo');
     });
   }
-  async function docTxt() {
-    const r = await fetch('/api/admin/doc.txt', { headers: { 'x-admin-key': A.key } });
+  async function docTxt(path = '/api/admin/doc.txt', name = 'Visao_2027_Doc.txt') {
+    const r = await fetch(path, { headers: { 'x-admin-key': A.key } });
     if (!r.ok) throw new Error('Não foi possível baixar o arquivo.');
-    const link = document.createElement('a'); link.href = URL.createObjectURL(await r.blob()); link.download = 'Visao_2027_Doc.txt'; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+    const link = document.createElement('a'); link.href = URL.createObjectURL(await r.blob()); link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 5000);
   }
   function pReflexao(step) {
     const O = A.O, R = O.reflexao, on = rfxOnAir();
@@ -889,8 +893,9 @@
       case 'docPhones': return run(() => api('POST', '/api/admin/doc', { action: 'phones', on: !!el.dataset.on }), el.dataset.on ? 'Mensagem enviada para os celulares 📱' : 'Mensagem tirada dos celulares');
       case 'docClear': return confirmRun('Apagar a mensagem do Doc? Dá para gerar de novo depois.', () => api('POST', '/api/admin/doc', { action: 'clear' }), 'Mensagem apagada');
       case 'docTxt': return run(() => docTxt(), 'Download iniciado');
+      case 'docKit': return run(() => docTxt('/api/admin/doc-video.txt', 'Kit_Video_do_Doc.txt'), 'Kit do vídeo baixado 🎬');
       case 'docTestVoice': return run(() => api('POST', '/api/admin/doc', { action: 'testVoice' }), 'O telão vai falar uma frase de teste');
-      case 'docSaveCfg': return run(() => act('settings', { settings: { docVoice: $('#docVoice').checked, docVoiceName: $('#docVoiceName').value, docRate: +$('#docRate').value, docVideoUrl: $('#docVideoUrl').value } }), 'Ajustes do Doc salvos');
+      case 'docSaveCfg': return run(() => act('settings', { settings: { docVoice: $('#docVoice').checked, docVoiceName: $('#docVoiceName').value, docRate: +$('#docRate').value, docVideoUrl: $('#docVideoUrl').value, docVideoFull: $('#docVideoFull').checked } }), 'Ajustes do Doc salvos');
       case 'sucAnswers': return run(() => sucAnswersDialog(el.dataset.k));
       case 'sucDownload': return sucDownload(el.dataset.type);
       case 'sucCmd': {

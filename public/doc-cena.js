@@ -257,7 +257,9 @@
     const video = $('#dxVideo', el);
     if (set.docVideoUrl && video) {
       video.hidden = false; video.src = set.docVideoUrl; video.currentTime = 0; video.volume = 1;
-      const go = () => { video.onended = video.onerror = null; video.pause(); video.hidden = true; el.classList.add('arrived'); flash(true); later(1200, next); };
+      // vídeo com a fala completa (ex.: o curta feito com IA): depois dele, direto para o jornal e o 2027
+      const full = !!set.docVideoFull, jornal = partsOf(C.m).indexOf('jornal');
+      const go = () => { video.onended = video.onerror = null; video.pause(); video.hidden = true; el.classList.add('arrived'); flash(true); later(1200, () => (full && jornal > 0 ? play(jornal) : next())); };
       video.onended = go; video.onerror = () => { video.hidden = true; video.onended = video.onerror = null; arrivalShow(); };
       video.play().catch(() => { video.muted = true; video.play().catch(() => { video.hidden = true; arrivalShow(); }); });
       return;
@@ -301,12 +303,15 @@
     const p = panel(`<div class="dx-say" id="dxSay">${karaoke(m.encerramento)}</div>`, 'end');
     fin.innerHTML = `<div class="fx-year"><span class="bttf">2027</span></div><div class="fx-sub">O FUTURO É O QUE VOCÊS FIZEREM DELE</div><div class="fx-end">CONTINUA…</div>`;
     fin.classList.remove('in');
-    later(600, () => speak(m.encerramento, $('#dxSay', p), () => {
+    const landing = () => { // o "2027" em letras do logo, com raio e rastros de fogo
       pose('point'); flash(true); fire(); sfx('thunder'); later(300, () => sfx('reveal'));
       el.dataset.part = 'fim'; void fin.offsetWidth; fin.classList.add('in');
       if (C.cloud) C.cloud.dim = false;
       C.done = true; notify();
-    }));
+    };
+    const set = (C.st && C.st.settings) || {}, inVideo = !!(set.docVideoFull && set.docVideoUrl); // o vídeo já disse o encerramento
+    if (inVideo) { p.classList.remove('in'); return later(1000, landing); }
+    later(600, () => speak(m.encerramento, $('#dxSay', p), landing));
   }
 
   /* ---------- ciclo de vida ---------- */

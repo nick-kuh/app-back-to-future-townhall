@@ -238,7 +238,85 @@ function toTxt(message, exported, eventName) {
   return L.join('\n');
 }
 
+/* ---------- kit do vídeo do Doc (método do tutorial de vídeo com IA no computador) ----------
+ * Transforma a mensagem do Doc num curta de ~56 s em 8 segmentos de 6 a 8 s (como no tutorial: 8 segmentos,
+ * 57 s), com os prompts das imagens de referência (ficha do personagem, carro, cenários na paleta do app),
+ * as falas em português de cada segmento e o briefing para colar no agente de IA com a skill do tutorial. */
+const words = s => clean(s).split(' ').filter(Boolean);
+const sentences = text => clean(text).split(/(?<=[.!?…])\s+/).filter(Boolean);
+// Frases inteiras até caber no tempo do segmento (~2,4 palavras por segundo); se a primeira já não cabe, corta numa vírgula.
+function fala(text, max, fromEnd = false) {
+  const list = fromEnd ? sentences(text).reverse() : sentences(text), out = [];
+  for (const s of list) { if (words([...out, s].join(' ')).length > max) break; out.push(s); }
+  if (out.length) return (fromEnd ? out.reverse() : out).join(' ');
+  const first = list[0] || '', w = words(first).slice(0, max), cut = w.join(' ').lastIndexOf(',');
+  return cut > 20 ? w.join(' ').slice(0, cut) + '.' : w.join(' ') + '…';
+}
+const sentenceCase = h => (h === upper(h) ? h.charAt(0) + h.slice(1).toLocaleLowerCase('pt-BR') : h).replace(/[.!?]*$/, '');
+const STYLE = 'cinematic shot, 35mm anamorphic lens, 16:9, night, synthwave color palette of magenta and orange with cyan accents, neon grid road leading to a striped sunset, light haze, volumetric light, high detail';
+const DOC_LOOK = 'Doc, an original eccentric elderly scientist: wild spiky white hair, bushy white eyebrows, brass goggles with cyan lenses pushed up on his forehead, white lab coat over a magenta-to-orange gradient shirt, teal bow tie, colored pens in the chest pocket, small yellow Y-shaped badge on the coat; warm, energetic, friendly expression; original design, not resembling any real actor';
+const DOC_SHORT = 'Doc (wild white hair, brass goggles on his forehead, white lab coat)';
+const CAR = 'a stainless-steel 1980s sports car with gull-wing doors, retrofitted with glowing cyan conduits and gadgets on the rear, time-machine look';
+const SCENE = {
+  d1: ['Medium close-up', `${DOC_SHORT} stands in front of the car holding a glowing tablet with floating words, looks up to the camera with a proud smile and speaks`, 'gentle orbit to the right'],
+  d2: ['Medium shot', `${DOC_SHORT} looks back over his shoulder at the road behind him, glowing with warm golden light from the past, then turns to the camera and speaks`, 'slow pan following his turn'],
+  d3: ['Close-up', `${DOC_SHORT} moves his hands through a cyan holographic interface of circuits and data floating around the car, amazed, and speaks to the camera`, 'slow push-in'],
+  d4: ['Wide to medium shot', `${DOC_SHORT} points to the horizon where a bright futuristic city skyline of 2027 glows at sunrise, then speaks to the camera with hope`, 'crane up revealing the skyline'],
+};
+function videoKit(message, { eventName } = {}) {
+  const m = message, segs = [];
+  const add = (titulo, dur, refs, shot, action, camera, line) => segs.push({ titulo, dur, refs, shot, action, camera, line });
+  add('Chegada', 6, ['carro', 'cenario_estrada'], 'Wide shot', `three lightning bolts strike an empty neon grid road; in a blinding white flash ${CAR} materializes, slides to a stop and leaves two parallel trails of fire on the asphalt, sparks and smoke`, 'slow push-in, slight shake on impact', '');
+  add('O Doc sai do carro', 7, ['ficha_doc', 'carro', 'cenario_estrada'], 'Medium shot', `the gull-wing door opens with white smoke; ${DOC_SHORT} steps out, raises both arms in excitement and speaks to the camera`, 'slow dolly-in from medium to medium close-up', fala(m.abertura, 17));
+  for (const b of m.blocos) { const [shot, action, camera] = SCENE[b.id] || SCENE.d1; add(`${b.id.slice(1).padStart(2, '0')} · ${b.titulo}`, 7, ['ficha_doc', 'carro', 'cenario_estrada'], shot, action, camera, fala(b.fala, 17)); }
+  const head = m.manchetes[0] || '2027: o futuro chegou';
+  add('Jornal de 2027', 7, ['ficha_doc', 'jornal_2027'], 'Insert shot, then medium close-up', `${DOC_SHORT} unfolds a vintage newspaper titled "GAZETA DO FUTURO", dated 2027, with the headline "${upper(head)}"; he taps the headline and reads it aloud`, 'rack focus from the headline to his face', `Vejam só a manchete de 2027: ${sentenceCase(head)}!`);
+  add('Encerramento', 8, ['ficha_doc', 'carro', 'cenario_estrada'], 'Medium close-up, then wide shot', `${DOC_SHORT} looks straight into the camera with a warm smile and says the closing line, then jumps back into the car; the car speeds down the neon road and vanishes in a flash, leaving two trails of fire`, 'static, then wide follow shot', fala(m.encerramento, 20, true));
+  let t = 0; const at = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  for (const s of segs) { s.from = at(t); t += s.dur; s.to = at(t); }
+  const total = t, date = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }), L = [];
+  L.push(`KIT DO VÍDEO DO DOC · VISÃO 2027 · ${upper(eventName || 'Townhall')}`, `Gerado em ${date} · ${segs.length} segmentos · ${total} segundos`, '',
+    'COMO USAR (o método do tutorial "Não gaste dinheiro com IA: fiz um filme 100% grátis no PC"):',
+    '1. Rascunho (opcional): peça ao seu agente de IA um rascunho em 3D no Blender, com bonecos simples, para decidir os planos antes de gerar.',
+    '2. Imagens de referência: gere no seu gerador de imagens local (no tutorial, o Qwen Image Edit) com os prompts da seção IMAGENS DE REFERÊNCIA. Gere várias e escolha a melhor.',
+    '3. Prompts: cole o BRIEFING no seu agente de IA com a skill do tutorial e peça a opção de vídeo longo. Ou use direto os segmentos prontos abaixo.',
+    '4. Voz igual em todos os segmentos: gere primeiro o segmento 2, extraia a voz dele e carregue como áudio de referência na trilha de áudio do Multitrack Editor (marque "referência", deixe o cadeado desmarcado). Ele usa os primeiros 15 segundos.',
+    '5. Configurações: 1.1 megapixel, 16:9, 8 passos. Referência em "Max" quando o cenário tem muitos detalhes (mais qualidade, mais lento); senão a opção mais leve.',
+    '6. Segmento ruim? Regere só ele: segment start number = número do segmento, segment count = 1, e em Project Save troque para "new" (volte para "override" no próximo projeto). Para outra variação sem mudar o prompt, troque a seed.',
+    '7. Baixe o vídeo final (Save Video → baixar), coloque num link público (ou na pasta public/videos do app) e cole o endereço no Painel do Doc → Visão 2027 → Mais opções → "Vídeo do Doc".',
+    '',
+    'COMPUTADOR: placa de vídeo com pelo menos 12 GB de VRAM (no tutorial, uma RTX 5060 Ti de 16 GB). Cada segmento leva minutos para gerar:',
+    'produza o vídeo antes do evento, ou só tente o vídeo com as respostas do dia se houver pelo menos 1 hora entre a dinâmica 04 e o encerramento.',
+    'Se não der tempo, o telão faz a cena ao vivo com o Doc animado e a voz do navegador.',
+    '',
+    'IMPORTANTE: o Doc é um personagem original. Não use o rosto, a voz ou cenas do filme nem do ator.',
+    '', '=== BRIEFING PARA O AGENTE DE IA (cole junto com a skill do tutorial) ===', '',
+    `Quero um vídeo longo de cerca de ${total} segundos, em ${segs.length} segmentos, no estilo cinematográfico, para fechar um encontro da empresa com o tema "De Volta ao Futuro".`,
+    'Personagem: Doc, um cientista idoso e excêntrico, original (não pode lembrar nenhum ator): cabelo branco arrepiado, sobrancelhas brancas grossas, óculos de proteção de latão com lentes azul-turquesa na testa, jaleco branco sobre camisa em degradê magenta e laranja, gravata-borboleta turquesa, canetas no bolso e um crachá amarelo em forma de Y. Simpático e empolgado.',
+    'Carro: esportivo dos anos 80 de aço inox com portas asa de gaivota, adaptado como máquina do tempo, com tubos que brilham em azul.',
+    'Estilo e cores: noite, estrada com grade neon até um pôr do sol listrado, paleta magenta e laranja com detalhes em azul-turquesa, névoa leve.',
+    'Voz: masculina, idosa, empolgada e calorosa, em português do Brasil. Vou carregar a voz do segmento 2 como áudio de referência para manter a mesma voz.',
+    'Imagens de referência que vou carregar: ficha_doc.png, carro.png, cenario_estrada.png, jornal_2027.png.',
+    'História: o Doc chega de 2027 na máquina do tempo e conta o que viu lá, com base no que a equipe escreveu no evento. Uma fala por segmento, nesta ordem:',
+    ...segs.map((s, i) => `  ${i + 1}. ${s.titulo} (${s.dur} s): ${s.line ? `"${s.line}"` : '(sem fala: raios, estrondo e o carro chegando)'}`),
+    'Gere os prompts e a configuração de cada segmento para o workflow de vídeo longo.',
+    '', '=== IMAGENS DE REFERÊNCIA (prompts em inglês, que os geradores entendem melhor) ===', '',
+    `[ficha_doc.png] Character sheet on a plain light gray background, three views side by side: full body front view, the same character holding a small glowing remote control, and a close-up of the face. ${DOC_LOOK}. Clean studio lighting, consistent proportions.`,
+    `[carro.png] ${CAR}, three-quarter front view, parked on a wet neon grid road at night, ${STYLE}.`,
+    `[cenario_estrada.png] Empty road at night with a neon grid to the horizon, a big striped sunset sun, low wireframe mountains in magenta, no people, no cars, ${STYLE}.`,
+    `[jornal_2027.png] A vintage broadsheet newspaper on a table, masthead "GAZETA DO FUTURO", date "1º DE JANEIRO DE 2027", big front-page headline "${upper(head)}", a halftone photo of a sports car with gull-wing doors, warm lamp light.`,
+    '', `=== OS ${segs.length} SEGMENTOS PRONTOS ===`, '');
+  segs.forEach((s, i) => L.push(`SEGMENTO ${i + 1} · ${s.from}–${s.to} · ${s.titulo}`, `Referências: ${s.refs.join(', ')}`,
+    `Prompt: ${STYLE}. ${s.shot}. ${s.action.charAt(0).toUpperCase() + s.action.slice(1)}. Camera: ${s.camera}.${s.line ? ` He says in Brazilian Portuguese, with an excited elderly male voice: "${s.line}"` : ' Sound: thunder, sonic boom, engine hiss. No dialogue.'}`,
+    `Fala: ${s.line || '(sem fala)'}`, ''));
+  L.push('=== TEXTO COMPLETO DO DOC (o que o telão lê na cena ao vivo) ===', '', m.titulo, '', m.abertura, '', ...m.blocos.flatMap(b => [`[${b.titulo}] ${b.fala}`, '']),
+    'Jornal de 2027:', ...m.manchetes.map(h => `  • ${h}`), '', m.encerramento, '');
+  return { text: L.join('\n'), segments: segs, total };
+}
+// Mensagem automática a partir das respostas (para o kit do vídeo antes de gerar a mensagem no painel)
+const autoFrom = exported => { const acts = collect(exported); return normalize(autoMessage(acts), acts); };
+
 module.exports = {
-  generate, edit, normalize, autoMessage, collect, countWords, parts, toTxt, hasAI, MODEL, SCHEMA, SYSTEM, prompt,
+  generate, edit, normalize, autoMessage, collect, countWords, parts, toTxt, videoKit, autoFrom, hasAI, MODEL, SCHEMA, SYSTEM, prompt,
   _setClient: c => { clientOverride = c; },
 };

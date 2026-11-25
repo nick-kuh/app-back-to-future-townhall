@@ -71,10 +71,23 @@ para este app) chega de 2027, lê tudo o que foi escrito nas quatro dinâmicas e
    Enquanto a cena roda, os celulares mostram "olhe para o telão".
 4. **⬇ Baixar o .txt**: a mensagem do Doc, as palavras mais citadas e todas as respostas das quatro dinâmicas (com os nomes).
 
-Em "Mais opções" do passo: ligar/desligar a voz, escolher a voz pelo nome, a velocidade da fala,
-**🔈 Testar a voz no telão** e o **vídeo da chegada do Doc** (opcional): um .mp4 (por exemplo, feito com
-ferramentas de vídeo com IA) que o telão toca antes da fala. O navegador só libera som e voz depois de um
-clique na tela do telão.
+Em "Mais opções" do passo: ligar/desligar a voz, escolher a voz pelo nome, a velocidade da fala e
+**🔈 Testar a voz no telão**. O navegador só libera som e voz depois de um clique na tela do telão.
+
+### 🎬 Vídeo do Doc feito com IA (opcional)
+
+Para quem quiser um curta "de cinema" do Doc, gerado no próprio computador com o método do tutorial
+*"Não gaste dinheiro com IA: fiz um filme 100% grátis no PC"* (vídeo local + ComfyUI + agente de IA):
+
+- **🎬 Baixar o kit do vídeo do Doc (.txt)** (Mais opções do passo): passo a passo do tutorial, prompts das
+  imagens de referência (ficha do Doc igual ao personagem do telão, carro, estrada e o jornal de 2027, na
+  paleta do app), o curta de ~1 minuto em segmentos de 6 a 8 s com as falas tiradas da mensagem do Doc, e o
+  **briefing** para colar no agente de IA com a skill do tutorial.
+- Precisa de placa de vídeo com **12 GB de VRAM ou mais** e cada segmento leva minutos: faça antes do evento
+  (chegada genérica) ou, com as respostas do dia, só se houver pelo menos 1 hora até o encerramento.
+- Pronto o vídeo, cole o endereço em **Vídeo do Doc**. Ele toca na chegada. Se o vídeo já traz a fala
+  completa, marque **"O vídeo já traz a fala completa do Doc"**: depois dele o telão vai direto para o jornal
+  de 2027 e o "2027" final, sem repetir a fala. Sem vídeo, a cena ao vivo (Doc animado + voz) faz tudo.
 
 O código está em `server/doc.js` (palavras, IA, roteiro automático e .txt), `public/doc-cena.js` e
 `public/doc-cena.css` (a cena e o personagem no telão).

@@ -309,6 +309,11 @@ app.post('/api/admin/doc', wrapAsync(async req => {
 // O arquivo .txt do encerramento: a mensagem do Doc, as palavras mais citadas e todas as respostas das 4 dinâmicas.
 app.get('/api/admin/doc.txt', (req, res) => res.type('text/plain; charset=utf-8').set('Content-Disposition', 'attachment; filename="Visao_2027_Doc.txt"')
   .send(doc.toTxt(engine.state.doc.message, sucessoExport(), engine.settings.eventName)));
+// Kit do vídeo do Doc: o curta de ~1 minuto em segmentos (prompts, falas, imagens de referência e o passo a passo)
+app.get('/api/admin/doc-video.txt', (req, res) => {
+  const message = engine.state.doc.message || doc.autoFrom(sucessoExport());
+  res.type('text/plain; charset=utf-8').set('Content-Disposition', 'attachment; filename="Kit_Video_do_Doc.txt"').send(doc.videoKit(message, { eventName: engine.settings.eventName }).text);
+});
 app.get('/api/admin/reflexao/votes', wrap(() => ({ votes: reflexao.votes() })));
 app.get('/api/admin/reflexao/votes.csv', (req, res) => res.type('text/csv; charset=utf-8').set('Content-Disposition', 'attachment; filename="Votos_Reflexao.csv"').send(reflexao.votesCsv()));
 
