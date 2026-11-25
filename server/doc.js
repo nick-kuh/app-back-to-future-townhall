@@ -254,8 +254,8 @@ function fala(text, max, fromEnd = false) {
 }
 const sentenceCase = h => (h === upper(h) ? h.charAt(0) + h.slice(1).toLocaleLowerCase('pt-BR') : h).replace(/[.!?]*$/, '');
 const STYLE = 'cinematic shot, 35mm anamorphic lens, 16:9, night, synthwave color palette of magenta and orange with cyan accents, neon grid road leading to a striped sunset, light haze, volumetric light, high detail';
-const DOC_LOOK = 'Doc, an original eccentric elderly scientist: wild spiky white hair, bushy white eyebrows, brass goggles with cyan lenses pushed up on his forehead, white lab coat over a magenta-to-orange gradient shirt, teal bow tie, colored pens in the chest pocket, small yellow Y-shaped badge on the coat; warm, energetic, friendly expression; original design, not resembling any real actor';
-const DOC_SHORT = 'Doc (wild white hair, brass goggles on his forehead, white lab coat)';
+const DOC_LOOK = 'Doc, an original eccentric elderly scientist: wild, voluminous white hair swept back and falling to the shoulders, wide startled eyes under raised bushy white eyebrows, dark green round welding goggles pushed up on his forehead, white zip-up radiation-style coat with a stand-up collar and a colorful patterned scarf, a big silver wristwatch, a small remote control on a black cord; amazed, energetic expression; original design, not resembling any real actor';
+const DOC_SHORT = 'Doc (wild swept-back white hair, dark green welding goggles on his forehead, white zip-up coat)';
 const CAR = 'a stainless-steel 1980s sports car with gull-wing doors, retrofitted with glowing cyan conduits and gadgets on the rear, time-machine look';
 const SCENE = {
   d1: ['Medium close-up', `${DOC_SHORT} stands in front of the car holding a glowing tablet with floating words, looks up to the camera with a proud smile and speaks`, 'gentle orbit to the right'],
@@ -292,7 +292,7 @@ function videoKit(message, { eventName } = {}) {
     'IMPORTANTE: o Doc é um personagem original. Não use o rosto, a voz ou cenas do filme nem do ator.',
     '', '=== BRIEFING PARA O AGENTE DE IA (cole junto com a skill do tutorial) ===', '',
     `Quero um vídeo longo de cerca de ${total} segundos, em ${segs.length} segmentos, no estilo cinematográfico, para fechar um encontro da empresa com o tema "De Volta ao Futuro".`,
-    'Personagem: Doc, um cientista idoso e excêntrico, original (não pode lembrar nenhum ator): cabelo branco arrepiado, sobrancelhas brancas grossas, óculos de proteção de latão com lentes azul-turquesa na testa, jaleco branco sobre camisa em degradê magenta e laranja, gravata-borboleta turquesa, canetas no bolso e um crachá amarelo em forma de Y. Simpático e empolgado.',
+    'Personagem: Doc, um cientista idoso e excêntrico, original (não pode lembrar nenhum ator): cabelo branco volumoso jogado para trás e caindo até os ombros, olhos arregalados sob sobrancelhas brancas grossas e erguidas, óculos de solda verdes e redondos na testa, jaleco branco fechado com zíper e gola alta, lenço estampado no pescoço, relógio de pulso grande e um controle remoto pendurado num cabo preto. Espantado e empolgado.',
     'Carro: esportivo dos anos 80 de aço inox com portas asa de gaivota, adaptado como máquina do tempo, com tubos que brilham em azul.',
     'Estilo e cores: noite, estrada com grade neon até um pôr do sol listrado, paleta magenta e laranja com detalhes em azul-turquesa, névoa leve.',
     'Voz: masculina, idosa, empolgada e calorosa, em português do Brasil. Vou carregar a voz do segmento 2 como áudio de referência para manter a mesma voz.',
