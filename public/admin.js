@@ -135,6 +135,7 @@
       ${A.connected ? '' : '<span class="pill off">sem conexão</span>'}
       <span class="nowchip" title="No ar agora: ${esc(nowText())}"><small>NO AR</small><span>${esc(nowText())}</span></span>
       <span class="pill" title="Pessoas que já fizeram check-in">👥 ${O.counts.checkedIn}/${O.counts.total}</span>
+      ${Mic.on ? '<span class="pill on" title="O microfone deste aparelho está ouvindo a sala (aplausos do Reconhecimento). O som não é gravado.">🎤 ouvindo</span>' : ''}
       <a class="pill ${tl.count ? (tl.auth ? 'on' : 'hot') : 'off'}" href="/telao.html" target="_blank" title="${tl.count ? (tl.auth ? 'Telão aberto e logado' : 'Telão aberto sem login: não mostra as respostas do Sucesso') : 'Nenhum telão aberto. Clique para abrir.'}">📽 Telão ${tl.count ? (tl.auth ? '✓' : 'sem login') : 'fechado'}</a>`;
     if (html !== A.statusHtml) { A.statusHtml = html; $('#status').innerHTML = html; }
   }
@@ -323,48 +324,65 @@
 
   /* ---------- microfone dos aplausos (Reconhecimento) ----------
    * Na cerimônia dos prêmios, o Flux Capacitor do telão carrega com o barulho da sala. Quem ouve é o microfone do
-   * computador (ou celular) em que este painel está aberto: o som não é gravado nem enviado, só o volume é medido
-   * aqui mesmo, e o painel manda para o servidor "quanto a carga anda" algumas vezes por segundo.
-   *   - "silêncio da sala": o painel acompanha sozinho os momentos mais quietos;
-   *   - acima disso, quanto mais alto, mais rápido carrega (aplauso forte enche em uns 7 segundos);
-   *   - sensibilidade: quantos decibéis acima do silêncio valem como "aplauso forte" (ajuste fino, ou "Calibrar"). */
-  const MIC_GATE = 6, MIC_FILL = 7, clamp01 = v => Math.max(0, Math.min(1, v));
-  const Mic = { on: false, starting: false, stream: null, ctx: null, src: null, an: null, buf: null, timer: null, floor: null, avg: -100, level: 0, acc: 0, last: 0, sent: 0, err: '', cal: null,
+   * aparelho em que este painel está aberto: o som não é gravado nem enviado, só o volume é medido aqui mesmo, e o
+   * painel manda para o servidor "quanto a carga anda" algumas vezes por segundo.
+   * Para quem apresenta é um clique só ("Liberar o microfone" → "Permitir" no navegador), uma única vez. Depois disso:
+   *   - o microfone liga sozinho quando o Reconhecimento entra no ar e desliga quando ele sai;
+   *   - o painel descobre sozinho o "silêncio da sala" e, se o microfone for fraco, ajusta a régua ao volume dos aplausos;
+   *   - quanto mais alto, mais rápido carrega (aplauso forte enche em uns 7 segundos).
+   * "Ajuste fino" (sensibilidade e calibrar com palmas) é opcional. */
+  const MIC_GATE = 6, MIC_FILL = 7, MIC_SPAN_MIN = 16, MIC_AUTO_MS = 5000, clamp01 = v => Math.max(0, Math.min(1, v));
+  const Mic = { on: false, starting: false, auto: false, userOff: false, autoTried: false, perm: '', permAsked: false, stream: null, ctx: null, src: null, an: null, buf: null, timer: null,
+    floor: null, avg: -100, level: 0, acc: 0, last: 0, sent: 0, err: '', cal: null, chargeAt: 0, peak: -120,
     span: Math.max(8, Math.min(44, +localStorage.getItem('bttf.micSpan') || 28)) };
   const micMode = () => ((A.O && A.O.cenas && A.O.cenas.config.reconhecimento.carga) || 'mic');
   const recOnAir = () => { const O = A.O; if (!O || !O.cenas) return false; const { step } = liveStep(); return step.type === 'cena' && step.cena === 'reconhecimento' && O.state.block === 'cena' && !O.state.presentation; };
-  const micCharging = () => { if (!recOnAir() || micMode() === 'toques') return false; const s = A.O.cenas.state.reconhecimento; return s.fase === 'cerimonia' && s.passo === 'carga'; };
+  const micWanted = () => recOnAir() && micMode() !== 'toques';
+  const micCharging = () => { if (!micWanted()) return false; const s = A.O.cenas.state.reconhecimento; return s.fase === 'cerimonia' && s.passo === 'carga'; };
   async function micStart(auto) {
     if (Mic.on || Mic.starting) return;
-    Mic.starting = true; Mic.err = '';
+    Mic.starting = true; Mic.err = ''; render(true);
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error('sem acesso'), { name: 'NoApi' });
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
-      const C = new (window.AudioContext || window.webkitAudioContext)(); if (C.state === 'suspended') await C.resume().catch(() => {});
+      const C = new (window.AudioContext || window.webkitAudioContext)(); if (C.state === 'suspended') C.resume().catch(() => {});
       const an = C.createAnalyser(); an.fftSize = 2048; an.smoothingTimeConstant = 0; const src = C.createMediaStreamSource(stream); src.connect(an);
-      Object.assign(Mic, { on: true, stream, ctx: C, src, an, buf: new Float32Array(an.fftSize), floor: null, avg: -100, level: 0, acc: 0, last: performance.now(), sent: 0, cal: null });
-      stream.getTracks().forEach(t => t.addEventListener('ended', () => micStop(true)));
-      localStorage.setItem('bttf.mic', '1'); Mic.timer = setInterval(micTick, 80);
+      // ligado com o Reconhecimento no ar: desliga sozinho quando o bloco sair; ligado fora dele (teste): fica até você desligar
+      Object.assign(Mic, { on: true, auto: recOnAir(), userOff: false, perm: 'granted', stream, ctx: C, src, an, buf: new Float32Array(an.fftSize), floor: null, avg: -100, level: 0, acc: 0, last: performance.now(), sent: 0, cal: null, chargeAt: 0 });
+      stream.getTracks().forEach(t => t.addEventListener('ended', () => micStop(false)));
+      Mic.timer = setInterval(micTick, 80);
     } catch (e) {
       const n = e && e.name;
-      Mic.err = n === 'NoApi' ? 'Este navegador não libera o microfone aqui. Abra o painel pelo endereço https, no Chrome ou no Edge.' : n === 'NotAllowedError' || n === 'SecurityError' ? 'O navegador bloqueou o microfone. Clique no cadeado ao lado do endereço, libere o microfone e tente de novo.'
+      if (n === 'NotAllowedError' || n === 'SecurityError') Mic.perm = 'denied';
+      Mic.err = n === 'NoApi' ? 'Este navegador não libera o microfone aqui. Abra o painel pelo endereço https, no Chrome ou no Edge.'
+        : n === 'NotAllowedError' || n === 'SecurityError' ? 'O navegador está bloqueando o microfone para este site. Clique no cadeado (ou no ícone de câmera/microfone) ao lado do endereço, escolha "Permitir" no microfone e clique de novo em "Liberar o microfone".'
         : n === 'NotFoundError' ? 'Nenhum microfone encontrado neste aparelho.' : `Não deu para ligar o microfone (${(e && e.message) || e}).`;
       if (!auto) toast(Mic.err, true);
     } finally { Mic.starting = false; render(true); }
   }
-  function micStop(keep) {
+  function micStop(byUser) {
     clearInterval(Mic.timer); if (Mic.stream) Mic.stream.getTracks().forEach(t => t.stop()); if (Mic.ctx) Mic.ctx.close().catch(() => {});
-    Object.assign(Mic, { on: false, stream: null, ctx: null, src: null, an: null, level: 0, acc: 0, cal: null });
-    if (!keep) localStorage.removeItem('bttf.mic');
+    Object.assign(Mic, { on: false, auto: false, stream: null, ctx: null, src: null, an: null, level: 0, acc: 0, cal: null, chargeAt: 0 });
+    if (byUser) Mic.userOff = true; // desligado de propósito: não liga sozinho de novo neste bloco
     render(true);
   }
-  // já foi ligado antes neste navegador e a permissão continua valendo: liga sozinho quando o Reconhecimento entra no ar
+  // se o navegador já deixou usar o microfone ('granted'), ele liga sozinho quando o Reconhecimento entra no ar e desliga quando sai
   function micAuto() {
-    if (Mic.on || Mic.starting || Mic.autoTried || localStorage.getItem('bttf.mic') !== '1' || !recOnAir() || micMode() === 'toques') return;
-    Mic.autoTried = true;
-    const go = () => micStart(true);
-    if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: 'microphone' }).then(p => { if (p.state === 'granted') go(); }).catch(() => {}); // sem a permissão, espera o clique em "Ligar o microfone"
+    if (!Mic.permAsked && navigator.permissions && navigator.permissions.query) {
+      Mic.permAsked = true;
+      navigator.permissions.query({ name: 'microphone' }).then(p => { Mic.perm = p.state; p.onchange = () => { Mic.perm = p.state; render(true); }; render(true); }).catch(() => {});
+    }
+    if (!micWanted()) { // fora do Reconhecimento
+      Mic.autoTried = false; Mic.userOff = false;
+      if (Mic.on && Mic.auto) setTimeout(() => { if (Mic.on && Mic.auto && !micWanted()) micStop(false); }, 0);
+      return;
+    }
+    if (Mic.on) { Mic.auto = true; return; }
+    if (Mic.starting || Mic.userOff || Mic.autoTried || Mic.perm !== 'granted') return;
+    Mic.autoTried = true; micStart(true);
   }
+  // sem um clique na página o navegador pode deixar o áudio "dormindo": o primeiro clique acorda
+  document.addEventListener('pointerdown', () => { if (Mic.ctx && Mic.ctx.state === 'suspended') Mic.ctx.resume().catch(() => {}); }, true);
   function micTick() {
     if (!Mic.on) return;
     const t = performance.now(), dt = Math.min(1.5, (t - Mic.last) / 1000); Mic.last = t;
@@ -377,7 +395,13 @@
     // baixo entregam silêncio absoluto: o piso não desce de −65 dB.
     if (Mic.floor === null) Mic.floor = db; else if (db < Mic.floor) Mic.floor += (db - Mic.floor) * Math.min(1, dt / .4); else if (!charging && !Mic.cal) Mic.floor += (db - Mic.floor) * Math.min(1, dt / 25);
     Mic.floor = Math.max(-65, Mic.floor);
-    const x = clamp01((db - Mic.floor - MIC_GATE) / Mic.span);
+    // Régua do volume: "aplauso forte" = Mic.span decibéis acima do silêncio. Ajuste automático: se depois de 5 s de carga o som
+    // mais alto que a sala fez ainda está longe disso (microfone fraco ou longe das pessoas), a régua encolhe para esse som
+    // valer uns 80%, e a cerimônia não empaca. Volta a crescer sozinha se vier um barulho mais forte.
+    if (charging) { if (!Mic.chargeAt) { Mic.chargeAt = t; Mic.peak = -120; } Mic.peak = Math.max(Mic.peak, Mic.avg); } else Mic.chargeAt = 0;
+    let span = Mic.span;
+    if (charging && t - Mic.chargeAt > MIC_AUTO_MS) span = Math.max(Math.min(MIC_SPAN_MIN, Mic.span), Math.min(Mic.span, (Mic.peak - Mic.floor - MIC_GATE) / .8));
+    const x = clamp01((db - Mic.floor - MIC_GATE) / span);
     Mic.level += (x - Mic.level) * (x > Mic.level ? .65 : .22);           // sobe rápido, desce devagar (como um medidor de volume)
     if (Mic.cal) { Mic.cal.peak = Math.max(Mic.cal.peak, Mic.avg); if (t >= Mic.cal.until) micCalDone(); }
     if (charging) {
@@ -386,7 +410,7 @@
     } else Mic.acc = 0;
     const bar = $('#micLvl'); if (bar) { bar.style.width = (Mic.level * 100).toFixed(0) + '%'; bar.parentNode.classList.toggle('loud', Mic.level > .6); }
   }
-  // "Calibrar": por 4 segundos ouve uma salva de palmas de teste e ajusta a sensibilidade para ela valer como aplauso forte
+  // "Calibrar" (opcional): por 4 segundos ouve uma salva de palmas de teste e ajusta a sensibilidade para ela valer como aplauso forte
   function micCal() { if (!Mic.on || Mic.cal) return; Mic.cal = { until: performance.now() + 4000, peak: -120 }; render(true); toast('👏 Peça uma salva de palmas agora (4 segundos)…'); }
   function micCalDone() {
     const gain = Mic.cal.peak - Mic.floor - MIC_GATE; Mic.cal = null;
@@ -394,15 +418,21 @@
     else { Mic.span = Math.max(8, Math.min(44, gain * .9)); localStorage.setItem('bttf.micSpan', Mic.span.toFixed(1)); toast('Microfone calibrado ✔ Palmas como essas enchem o Flux Capacitor em uns 7 segundos.'); }
     render(true);
   }
-  function micBox() {
-    if (micMode() === 'toques') return '';
+  // O quadro do microfone: um botão só para liberar; ligado, mostra o som da sala. "test" = cartão de Preparar → Testes
+  function micBox(where) {
+    if (micMode() === 'toques') return where === 'test' ? '<p class="small">Hoje o Flux Capacitor está configurado para carregar só com os <b>toques nos celulares</b>, então o microfone não é usado. Para carregar com os aplausos, troque em <a href="#" data-go="cenas" data-sec="reconhecimento">Agenda e cenas → Reconhecimento</a>.</p>' : '';
     const sens = Math.round((44 - Mic.span) / 4) + 1; // 1 (pouco sensível) … 10 (muito sensível)
+    const pill = Mic.on ? '<span class="pill on">✔ ouvindo a sala</span>' : Mic.starting ? '<span class="pill hot">clique em "Permitir" no aviso do navegador…</span>' : Mic.perm === 'denied' ? '<span class="pill off">bloqueado no navegador</span>' : Mic.perm === 'granted' ? '<span class="pill">liberado · desligado agora</span>' : '<span class="pill off">ainda não liberado</span>';
+    const fine = `<div class="microw"><label class="small">Sensibilidade <input type="range" min="1" max="10" step="1" value="${sens}" data-act="micSens" aria-label="Sensibilidade do microfone"></label>${btn(Mic.cal ? '👏 Ouvindo as palmas…' : '🎚 Calibrar com uma salva de palmas', 'micCal', { cls: 'ghost xs', disabled: !!Mic.cal })}</div>
+      <p class="small" style="margin-top:6px">Normalmente não precisa mexer: o painel descobre sozinho o silêncio da sala e se ajusta ao volume dos aplausos. Use só se, no ensaio, a barra subir pouco com palmas fortes (aumente) ou encher com qualquer conversa (diminua).</p>`;
     return `<div class="micbox ${Mic.on ? 'on' : ''}">
-      <div class="mich"><b>🎤 Microfone dos aplausos</b><span class="pill ${Mic.on ? 'on' : 'off'}">${Mic.on ? 'ouvindo a sala' : Mic.starting ? 'ligando…' : 'desligado'}</span>${Mic.on ? btn('Desligar', 'micOff', { cls: 'ghost xs' }) : btn('🎤 Ligar o microfone', 'micOn', { cls: 'xs', disabled: Mic.starting })}</div>
-      ${Mic.err ? `<div class="sb-warn">${esc(Mic.err)}</div>` : ''}
+      <div class="mich"><b>🎤 Microfone dos aplausos</b>${pill}${Mic.on ? btn('Desligar', 'micOff', { cls: 'ghost xs' }) : ''}</div>
       ${Mic.on ? `<div class="micmeter" title="Som da sala agora"><i id="micLvl" style="width:${(Mic.level * 100).toFixed(0)}%"></i></div>
-        <div class="microw"><label class="small">Sensibilidade <input type="range" min="1" max="10" step="1" value="${sens}" data-act="micSens" aria-label="Sensibilidade do microfone"></label>${btn(Mic.cal ? '👏 Ouvindo as palmas…' : '🎚 Calibrar com uma salva de palmas', 'micCal', { cls: 'ghost xs', disabled: !!Mic.cal })}</div>` : ''}
-      <p class="small">Este aparelho ouve a sala: quanto mais aplausos e barulho, mais rápido o Flux Capacitor do telão carrega (aplauso forte enche em uns 7 segundos). ${Mic.on ? 'Teste agora: bata palmas e veja a barra subir. Se subir pouco, aumente a sensibilidade ou use "Calibrar".' : 'Ligue antes da cerimônia: o navegador pede a permissão do microfone uma vez.'} O som não é gravado. O botão "+15% de carga" continua valendo como reserva.</p></div>`;
+          <p class="small"><b>Pronto, não precisa fazer mais nada.</b> Bata palmas para testar: a barra tem de subir. Na hora da carga, é só a sala fazer barulho (aplauso forte enche o Flux Capacitor em uns 7 segundos). O som não é gravado.${where === 'test' ? ' No dia, ele liga sozinho quando o Reconhecimento entrar no ar.' : ''}</p>${det('micFine', 'Ajuste fino (opcional)', fine)}`
+        : `${Mic.err ? `<div class="sb-warn">${esc(Mic.err)}</div>` : ''}
+          <div class="actions"><button class="btn ${where === 'test' ? '' : 'sm'}" data-act="micOn" ${Mic.starting ? 'disabled' : ''}>🎤 ${Mic.perm === 'granted' ? 'Ligar o microfone' : 'Liberar o microfone'}</button></div>
+          <p class="small">${Mic.perm === 'granted' ? 'O microfone já está liberado neste navegador: ele liga sozinho quando o Reconhecimento entra no ar (e neste botão, para testar).' : 'É um clique só. O navegador vai perguntar se este site pode usar o microfone: clique em <b>Permitir</b>. Depois disso ele não pergunta mais, e o microfone liga sozinho sempre que o Reconhecimento entrar no ar.'} O som não é gravado: só o volume da sala é medido.</p>`}
+    </div>`;
   }
 
   /* ---------- Spotify: a música do evento vem da conta de quem está no painel ---------- */
@@ -502,9 +532,9 @@
         out.body = `<div class="phase">Cerimônia · ${esc(p.n)} (${esc(p.k)}) · no telão: ${REC_PASSO[st.passo]}</div>
           <p class="small">Indicados: ${esc(p.indicados.map(x => x.nome).join(' · '))}</p><p class="small">Vencedor definido: <b>${esc(w.nome)}</b> (${esc(w.projeto)}) · “${esc(p.citacao)}”</p>
           ${st.passo === 'carga' ? `<p style="margin-top:10px">Flux Capacitor: <b id="recPct">${pct}%</b> · ${how}; com 100% o raio cai sozinho.</p><div class="bar"><i id="recBar" style="width:${pct}%"></i></div>` : ''}
-          ${byMic && !Mic.on && ['indicados', 'carga'].includes(st.passo) ? '<div class="sb-warn" style="margin-top:8px">🎤 O microfone está desligado: sem ele os aplausos não carregam o Flux Capacitor. Ligue logo abaixo (ou use "+15% de carga").</div>' : ''}`;
+          ${byMic && !Mic.on && !Mic.starting && st.passo === 'carga' ? '<div class="sb-warn" style="margin-top:8px">🎤 O microfone está desligado: sem ele os aplausos não carregam o Flux Capacitor. Clique em "Liberar o microfone" logo abaixo (ou use "+15% de carga").</div>' : ''}`;
         if (st.passo === 'categoria') out.primary = cenaBtn('Conhecer os indicados →', k, 'indicados', { cls: 'big' });
-        else if (st.passo === 'indicados') { out.primary = cenaBtn(`⚡ Carregar o Flux Capacitor (${mode === 'mic' ? 'aplausos' : mode === 'ambos' ? 'aplausos e celulares' : 'celulares'})`, k, 'carregar', { cls: 'big' }); out.secondary = [cenaBtn('Raio agora ⚡ (sem a carga)', k, 'raio', { cls: 'ghost' })]; }
+        else if (st.passo === 'indicados') { out.primary = cenaBtn(byMic && !Mic.on ? '🎤 Liberar o microfone e carregar o Flux Capacitor' : `⚡ Carregar o Flux Capacitor (${mode === 'mic' ? 'aplausos' : mode === 'ambos' ? 'aplausos e celulares' : 'celulares'})`, k, 'carregar', { cls: 'big' }); out.secondary = [cenaBtn('Raio agora ⚡ (sem a carga)', k, 'raio', { cls: 'ghost' })]; }
         else if (st.passo === 'carga') { out.primary = cenaBtn('⚡ +15% de carga', k, 'carga', { cls: 'big', data: { v: .15 } }); out.secondary = [cenaBtn('Raio agora ⚡', k, 'raio', { cls: 'ghost' })]; }
         else if (st.passo === 'sorteio') { out.secondary = [cenaBtn('Revelar já', k, 'vencedor', { cls: 'ghost' })]; out.busy = 'O sorteio está acontecendo no telão. Avançar mesmo assim?'; out.primary = '<span class="phase">🥁 O holofote está girando…</span>'; }
         else { out.primary = cenaBtn(next >= 0 ? 'Voltar aos prêmios →' : 'Grande final · Hall da Fama ★', k, 'fase', { cls: 'big', data: { fase: next >= 0 ? 'premios' : 'hall' } }); out.secondary = [cenaBtn('Bis ✦ (refazer esta cerimônia)', k, 'abrir', { cls: 'ghost', data: { premio: st.premio } })]; }
@@ -1172,6 +1202,9 @@
           <button class="btn ghost" data-act="normalTime">⏱ Tempos normais (40s encontro · 2 min conversa · 6s intervalo · 2 min avaliação)</button>
           <button class="btn cyan" data-act="testRandomRankings">🎲 Avaliações aleatórias (na fase de avaliação)</button>
         </div></div>
+      <div class="card"><h2>🎤 Microfone dos aplausos (Reconhecimento)</h2>
+        <p class="small" style="margin-bottom:4px">Na cerimônia dos prêmios, os aplausos da sala carregam o Flux Capacitor do telão. Quem ouve é o microfone <b>deste aparelho</b>. Libere aqui uma vez, antes do evento, no mesmo computador e navegador que você vai usar no dia; depois é automático.</p>
+        ${micBox('test')}</div>
       <div class="card"><h2>↺ Reiniciar</h2>
         <p class="small" style="margin-bottom:10px">Depois do ensaio, reinicie tudo para o evento começar do zero. Dá para reiniciar tudo de uma vez ou um bloco por vez; o que foi preparado (pessoas, fotos, perguntas, roteiro e textos) não é apagado.</p>
         <div class="actions">
@@ -1324,8 +1357,8 @@
       case 'spPlay': return run(async () => { A.spQuiet = Date.now(); await SP.play({ uri: el.dataset.uri }); if ((O.state.audio || {}).mode !== 'spotify') await act('setAudio', { mode: 'spotify' }); }, '▶ Tocando no Spotify');
       case 'copy': return run(async () => { await navigator.clipboard.writeText(el.dataset.text); }, 'Endereço copiado');
       // --- microfone dos aplausos (Reconhecimento) ---
-      case 'micOn': Mic.autoTried = true; return micStart(false);
-      case 'micOff': return micStop(false);
+      case 'micOn': Mic.userOff = false; return micStart(false);
+      case 'micOff': return micStop(true);
       case 'micCal': return micCal();
       case 'micSens': Mic.span = 44 - (Math.max(1, Math.min(10, +el.value)) - 1) * 4; localStorage.setItem('bttf.micSpan', String(Mic.span)); return;
       case 'audioBeeps': return run(() => act('setAudio', { beeps: !!el.dataset.on }), el.dataset.on ? '⏱ Bipes do cronômetro ligados' : 'Bipes do cronômetro desligados');
@@ -1335,6 +1368,10 @@
       // --- roteiro: ao vivo ---
       case 'goStep': { // coloca o passo no ar: é aqui (e só aqui) que o telão e os celulares mudam
         if (el.dataset.guard && !confirm(el.dataset.guard)) return;
+        { // o Reconhecimento vai entrar no ar: aproveita este clique para já pedir/ligar o microfone dos aplausos
+          const x = O.settings.steps.find(y => y.id === id);
+          if (x && x.type === 'cena' && x.cena === 'reconhecimento' && micMode() !== 'toques' && !Mic.on) { Mic.userOff = false; Mic.autoTried = true; micStart(true); }
+        }
         A.edit = null;
         return run(async () => { await api('POST', '/api/admin/step', { id }); A.sel = null; render(true); });
       }
@@ -1372,6 +1409,9 @@
         for (const f of ['mes', 'premio', 'min', 'seconds', 'v']) if (d[f] !== undefined) body[f] = +d[f];
         for (const f of ['fase', 'key']) if (d[f] !== undefined) body[f] = d[f];
         if (el.type === 'checkbox') body.on = el.checked; else if (d.on !== undefined) body.on = !!d.on; else if (d.a === 'pagina') body.on = false;
+        // "Carregar o Flux Capacitor": se os aplausos é que carregam e o microfone ainda está desligado, este mesmo clique o liga
+        // (o navegador pergunta uma vez; a carga começa depois da resposta, com ou sem microfone)
+        if (d.kind === 'reconhecimento' && d.a === 'carregar' && micMode() !== 'toques' && !Mic.on) { Mic.userOff = false; await micStart(true); if (!Mic.on && Mic.err) toast(`${Mic.err} A carga começou mesmo assim: use "+15% de carga".`, true); }
         return run(() => api('POST', '/api/admin/cena', body));
       }
       case 'cenaSec': A.cenaSec = el.dataset.sec; return render(true);

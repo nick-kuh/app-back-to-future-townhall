@@ -95,7 +95,7 @@ const DEFAULT_CONFIG = () => ({
       { ato: 2, t: 'Reflexão', d: 'Como a IA nos ajudou em 2026 · da experimentação à geração de valor', min: 15, ref: 'reflexao' },
       { ato: 3, t: 'Reconhecimento 2026', d: 'Homenagens aos stakeholders · 2 BPC + 2 HC', min: 25, ref: 'reconhecimento' },
       { ato: 3, t: 'Intervalo', d: 'Fechar 2026 · reabastecer antes da viagem para 2027', min: 15, ref: 'intervalo' },
-      { ato: 4, t: 'Transição e visão 2027', d: 'De Volta para o Futuro · Claudia Meira', min: 30, ref: 'visao' },
+      { ato: 4, t: 'Transição e visão 2027', d: 'De Volta para o Futuro · Claudia e Fermín', min: 30, ref: 'visao' },
       { ato: 4, t: 'Sucesso', d: 'Manifesto 2027 · compromisso coletivo no app', min: 15, ref: 'sucesso' },
       { ato: 4, t: '88 MPH · Encerramento', d: 'Vozes jovens · acelerar juntos', min: 5, ref: 'mph' },
     ],
@@ -153,7 +153,7 @@ const DEFAULT_CONFIG = () => ({
     ],
   },
   intervalo: { kicker: 'Intervalo', titulo: 'Reabastecendo a *DeLorean*', min: 15, texto: 'O Mr. Fusion está recarregando. Pegue um café, conheça alguém novo e volte antes de o relógio zerar.' },
-  visao: { kicker: 'Visão 2027', titulo: 'Para onde vamos…', nota: 'Estratégia CDIO LATAM 2027 · interativa', quem: 'Claudia Meira', min: 30 },
+  visao: { kicker: 'Visão 2027', titulo: 'Para onde vamos…', nota: 'Estratégia CDIO LATAM 2027 · interativa', quem: 'Claudia Meira e Fermín Grandas', min: 30 },
   manifesto: { kicker: 'Frente 3 · Compromisso 2027', mes: 'DEZ', dia: '11', ano: '2027', titulo: 'Nós conhecemos o destino de 2027.', pergunta: 'O que fez dele um sucesso?', faixa: 'QR INTERATIVO / APP · MANIFESTO COLETIVO 2027', quem: 'Lucas e Giovana', min: 15 },
   mph: { kicker: 'Encerramento', antes: '2026 nos deu o impulso.', chegada: 'Bem-vindos a 2027', depois: 'Para onde vamos, construímos a estrada juntos.', quem: 'Vozes jovens · acelerar juntos', min: 5 },
   // Quem conduz cada bloco: aparece no telão com o nome e a foto de perfil (como nas boas-vindas).
@@ -163,7 +163,7 @@ const DEFAULT_CONFIG = () => ({
     almanaque: ['Claudia Meira', 'Fermín Grandas'],
     reflexao: ['Felipe Zompero', 'Mayara Gomes', 'Pedro Teixeira', 'Geovanna Moreira'],
     reconhecimento: ['Felipe Resck'],
-    visao: ['Claudia Meira'],
+    visao: ['Claudia Meira', 'Fermín Grandas'],
     sucesso: ['Lucas Barbosa', 'Giovana Romão', 'Maria Eduarda'],
   },
   creditos: {
@@ -278,7 +278,7 @@ const defaultState = () => ({
   mph: { at: null },
 });
 
-const CONFIG_VERSION = 2; // v2: Reflexão e Sucesso na agenda, anfitriões por bloco, Visão 2027 com a Claudia Meira
+const CONFIG_VERSION = 2; // v2: Reflexão e Sucesso na agenda, anfitriões por bloco (na Visão 2027 os nomes saem da linha de cima e vão para as placas)
 function createCenas() {
   const saved = kvGet('cenas', {}) || {};
   if (saved.config && (saved.v || 1) < CONFIG_VERSION) for (const k of ['agenda', 'visao']) delete saved.config[k];

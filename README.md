@@ -66,18 +66,24 @@ do almanaque (`mês | tipo | BU | benefício | texto`), prêmios (indicados, ven
 ### 🎤 Aplausos carregam o Flux Capacitor
 
 Na cerimônia de cada prêmio, quem ouve a sala é o **microfone do aparelho em que o Painel do Doc está aberto**
-(computador ou celular). No passo Reconhecimento do Ao vivo há o quadro **🎤 Microfone dos aplausos**:
+(computador ou celular). Para quem apresenta é **um clique só, uma única vez**:
 
-1. Clique em **Ligar o microfone** (o navegador pede a permissão uma vez; precisa de https). Uma barra mostra o som
-   da sala. O som **não é gravado nem enviado**: só o volume é medido ali mesmo.
-2. O painel descobre sozinho o "silêncio da sala". Acima dele, quanto mais alto, mais rápido a carga anda: aplauso
-   forte enche o capacitor em uns 7 segundos; fala normal carrega devagar; silêncio faz a carga escorrer.
-3. Ajuste fino: **Sensibilidade** (1 a 10) ou **🎚 Calibrar com uma salva de palmas** (ouve 4 segundos de palmas de
-   teste e ajusta para elas valerem como aplauso forte). Vale testar no ensaio, com o aparelho no lugar do dia.
+1. **Liberar o microfone.** Em Preparar → Testes (ou no próprio passo Reconhecimento) clique em `🎤 Liberar o
+   microfone`; o navegador pergunta se o site pode usar o microfone: clique em **Permitir**. Precisa de https
+   (o endereço do Render serve) e o Chrome/Edge guardam a resposta, então ele não pergunta de novo.
+2. **Depois é automático.** O microfone liga sozinho quando o Reconhecimento entra no ar e desliga quando ele sai;
+   um aviso "🎤 ouvindo" aparece no topo do painel. Se ainda não tiver sido liberado, o botão principal vira
+   `🎤 Liberar o microfone e carregar o Flux Capacitor` e faz as duas coisas no mesmo clique.
+3. **Sem calibrar.** O painel descobre sozinho o "silêncio da sala"; acima dele, quanto mais alto, mais rápido a carga
+   anda (aplauso forte enche em uns 7 segundos; fala normal carrega devagar; silêncio faz a carga escorrer). Se o
+   microfone for fraco ou estiver longe, depois de 5 segundos de carga a régua se ajusta ao barulho mais alto que a
+   sala fez, para a cerimônia não empacar. Sensibilidade e "Calibrar com uma salva de palmas" ficam em
+   "Ajuste fino (opcional)".
 
-No telão, a faixa "FAÇAM BARULHO!" ganha um medidor de aplausos; nos celulares aparece "aplaudam!". Em Preparar →
-Agenda e cenas → Reconhecimento dá para escolher como o capacitor carrega: **aplausos** (padrão), **toques no botão
-⚡ CARREGAR dos celulares** (em média, 6 toques por pessoa enchem) ou **os dois**.
+O som **não é gravado nem enviado**: só o volume é medido no próprio navegador. No telão, a faixa "FAÇAM BARULHO!"
+ganha um medidor de aplausos; nos celulares aparece "aplaudam!". O painel mantém `+15%` e `Raio agora` de reserva.
+Em Preparar → Agenda e cenas → Reconhecimento dá para escolher como o capacitor carrega: **aplausos** (padrão),
+**toques no botão ⚡ CARREGAR dos celulares** (em média, 6 toques por pessoa enchem) ou **os dois**.
 
 Onde o deck dizia uma coisa no slide e outra na agenda, vale a **agenda** (ela é a versão atualizada): intervalo de
 15 min (o slide dizia 10), Sucesso/Manifesto de 15 min (o slide dizia 10) e o Intervalo dentro do Ato III. As notas para quem

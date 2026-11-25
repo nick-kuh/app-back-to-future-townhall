@@ -101,7 +101,7 @@ const STRATEGY_SHA256 = '07d7a467caaec2b26381eab3be2d32ff5b8054262768b371868aafc
   assert.deepEqual(HOST_KEYS, ['connections', 'almanaque', 'reflexao', 'reconhecimento', 'visao', 'sucesso']);
   assert.deepEqual(c.hosts('connections'), ['Nicolas Kuhnast', 'Douglas Hamasaki']); assert.deepEqual(c.hosts('reflexao'), ['Felipe Zompero', 'Mayara Gomes', 'Pedro Teixeira', 'Geovanna Moreira']);
   assert.deepEqual(c.hosts('sucesso'), ['Lucas Barbosa', 'Giovana Romão', 'Maria Eduarda']); assert.deepEqual(c.hosts('reconhecimento'), ['Felipe Resck']); assert.deepEqual(c.hosts('agenda'), []); assert.deepEqual(c.hosts('xyz'), []);
-  assert.equal(c.publicState('almanaque').quem, 'Claudia Meira e Fermín Grandas'); assert.equal(c.publicState('visao').quem, 'Claudia Meira'); assert.equal(c.publicState('reconhecimento').quem, 'Felipe Resck');
+  assert.equal(c.publicState('almanaque').quem, 'Claudia Meira e Fermín Grandas'); assert.equal(c.publicState('visao').quem, 'Claudia Meira e Fermín Grandas'); assert.deepEqual(c.hosts('visao'), ['Claudia Meira', 'Fermín Grandas']); assert.equal(c.publicState('reconhecimento').quem, 'Felipe Resck');
   c.setConfig({ anfitrioes: { visao: ['Ana', '  ', 'Bia', 'Caio'], sucesso: [] } }); assert.deepEqual(c.hosts('visao'), ['Ana', 'Bia', 'Caio']); assert.equal(c.publicState('visao').quem, 'Ana, Bia e Caio'); assert.deepEqual(c.hosts('sucesso'), []);
   assert.deepEqual(c.hosts('connections'), ['Nicolas Kuhnast', 'Douglas Hamasaki'], 'os outros blocos não mudam'); c.resetConfig('anfitrioes'); assert.deepEqual(c.hosts('sucesso'), ['Lucas Barbosa', 'Giovana Romão', 'Maria Eduarda']);
 
@@ -142,7 +142,7 @@ const STRATEGY_SHA256 = '07d7a467caaec2b26381eab3be2d32ff5b8054262768b371868aafc
   // conteúdo guardado antes de juntar os blocos (versão 1): a agenda e a Visão 2027 voltam ao padrão novo uma vez; o resto editado fica
   const old = kvGet('cenas'); old.v = 1; old.config.agenda.itens = [{ ato: 2, t: 'Como a IA nos ajudou em 2026', d: 'antigo', min: 15 }]; old.config.visao.quem = 'Outra pessoa'; old.config.intervalo.min = 22; delete old.config.anfitrioes; kvSet('cenas', old);
   const up = createCenas(), ucfg = up.adminState().config;
-  assert.equal(ucfg.agenda.itens.length, 10); assert.equal(ucfg.agenda.itens[4].t, 'Reflexão'); assert.equal(ucfg.visao.quem, 'Claudia Meira'); assert.equal(ucfg.intervalo.min, 22, 'o que não mudou de formato continua como foi editado');
+  assert.equal(ucfg.agenda.itens.length, 10); assert.equal(ucfg.agenda.itens[4].t, 'Reflexão'); assert.equal(ucfg.visao.quem, 'Claudia Meira e Fermín Grandas'); assert.equal(ucfg.visao.kicker, 'Visão 2027'); assert.equal(ucfg.intervalo.min, 22, 'o que não mudou de formato continua como foi editado');
   assert.deepEqual(up.hosts('connections'), ['Nicolas Kuhnast', 'Douglas Hamasaki']);
   up.setConfig({ intervalo: { min: 15 } }); assert.equal(kvGet('cenas').v, 2, 'depois de atualizado, não volta a mexer');
   console.log('OK · cenas: agenda, almanaque, reconhecimento (aplausos e toques), anfitriões, intervalo, 88 MPH e conteúdo editável');
@@ -204,7 +204,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await call('POST', '/api/admin/action', { type: 'settings', settings: { spotifyBreak: false } });
 
     // estratégia e 88 MPH; um aviso rápido no meio não recomeça a cena
-    r = await go('visao'); st = await state(); assert.equal(st.cena.src, '/estrategia-2027.html'); assert.equal(st.audio.mode, 'off'); assert.deepEqual(st.cena.hosts.map(h => h.nome), ['Claudia Meira']);
+    r = await go('visao'); st = await state(); assert.equal(st.cena.src, '/estrategia-2027.html'); assert.equal(st.audio.mode, 'off'); assert.deepEqual(st.cena.hosts.map(h => h.nome), ['Claudia Meira', 'Fermín Grandas']);
     r = await go('mph'); await cena('mph', { action: 'go' }); st = await state(); assert.ok(st.cena.live.at > 0);
     r = await call('POST', '/api/admin/action', { type: 'setMessage', message: { title: 'Aviso', body: 'x', emoji: '📣' }, show: true }); st = await state(); assert.equal(st.block, 'message'); assert.equal(st.cena, null);
     r = await cena('mph', { action: 'reset' }); assert.equal(r.status, 409, 'com um aviso no ar, a cena não aceita comandos');
