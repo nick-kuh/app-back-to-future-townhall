@@ -60,7 +60,7 @@ function units() {
   // kit do vídeo do Doc: chegada, saída do carro, uma cena por dinâmica, jornal e encerramento, ~7 s cada
   const kit = doc.videoKit(auto, { eventName: 'Townhall Teste' });
   assert.equal(kit.segments.length, 2 + auto.blocos.length + 2); assert.ok(kit.total >= 40 && kit.total <= 70, String(kit.total));
-  assert.equal(kit.segments[0].line, ''); assert.match(kit.segments[kit.segments.length - 2].line, /^Vejam só a manchete de 2027:/);
+  assert.equal(kit.segments[0].line, ''); assert.match(kit.segments[kit.segments.length - 2].line, /^Vejam só a manchete/); assert.ok(!/2027: 2027/.test(kit.text), 'manchete sem o ano repetido');
   for (const sg of kit.segments.slice(1)) assert.ok(sg.line.split(/\s+/).length <= 20, `fala longa demais: ${sg.line}`);
   for (const k of ['BRIEFING', 'ficha_doc.png', 'jornal_2027.png', 'Project Save', '12 GB', 'personagem original', 'SEGMENTO 1 · 0:00–0:06']) assert.ok(kit.text.includes(k), k);
   assert.ok(!kit.text.includes('Ana'), 'o kit não leva nomes');
