@@ -243,7 +243,7 @@ h3{font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--cyan)}
 .msgbox a{color:var(--cyan);text-decoration:underline}
 
 /* ---- modo "olhos no telão" (off) ---- */
-body.off .sky .grid{opacity:.25;animation-play-state:paused}
+body.off .sky .grid{opacity:.25}
 body.off .sky .horizon,body.off .sky .sun{opacity:.2}
 .logo.dim{opacity:.45;filter:grayscale(.6)}
 .circuits.off{opacity:.55}

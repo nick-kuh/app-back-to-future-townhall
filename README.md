@@ -354,8 +354,10 @@ organiza o evento.
 
 - **Blocos de fala** (passos do roteiro): cada um tem **nome, tema e quem fala**, editáveis a qualquer
   momento. Quando o bloco entra no ar, os celulares mostram o nome e o tema dele e o telão entra no
-  **modo calmo**: fundo parado e escurecido, sem raios, sem carro passando, só o tema. (Nas cenas do deck o fundo
-  continua rodando, só um pouco mais escuro; a estratégia 2027 é a única cena com o fundo parado.)
+  **modo calmo**: fundo bem mais escuro, sem raios, sem carro passando, só o tema.
+- **O fundo roda em loop em todos os blocos**, no telão e nos celulares (o céu e a estrada nunca ficam parados).
+  O que muda é só o brilho: mais escuro nas telas calmas e na estratégia 2027, um pouco mais escuro nas cenas com
+  texto, e vivo nas dinâmicas, no intervalo e nos 88 MPH.
 - **Som** (botões no topo do Painel do Doc, sempre à mão): **🎵 Música** (animada),
   **🎼 Trilha sonora** (fundo calmo), **🎧 Spotify** (a música da sua conta, veja abaixo) e **🔇 Sem áudio**, mais o volume. A música é original, gerada
   no navegador (`public/trilha.js`, Web Audio), sem arquivos. Exibir um bloco de fala desliga o som

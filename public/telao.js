@@ -546,11 +546,12 @@
       if (key === 'closing' && S.people) startFinale();
       if (key === 'roundEnd' || key === 'results') flash();
       if (key === 'projection') pollScreen(); else { clearTimeout(S.pollT); S.responses = null; }
-      // telas calmas (bloco de fala, estratégia): fundo parado e escurecido, sem raios.
-      // Nas outras cenas do deck o céu e a estrada continuam rodando, só um pouco mais escuros para o texto ficar fácil de ler.
+      // O céu e a estrada rodam em loop em TODOS os blocos (parado, parecia que o telão tinha travado).
+      // Telas calmas (bloco de fala, estratégia): fundo bem mais escuro e sem raios. Nas outras cenas do deck, só um pouco
+      // mais escuro, para o texto ficar fácil de ler.
       S.calm = key === 'stage' || (key === 'cena' && Cenas.calm(S.state)); document.body.classList.toggle('calm', S.calm);
       document.body.classList.toggle('dim', key === 'cena' && !S.calm && Cenas.dim(S.state));
-      if (key !== 'cena') S.duck = false; if (window.Delorean3D) Delorean3D.pause(S.calm);
+      if (key !== 'cena') S.duck = false; if (window.Delorean3D) Delorean3D.pause(false);
     } else {
       const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), S.checked !== null && S.state.counts.checkedIn > S.checked); }
       if (key === 'projection') patchProjection();

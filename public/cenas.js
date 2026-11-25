@@ -406,8 +406,8 @@ window.Cenas = (() => {
   function tick() { const c = cena(); if (c && root && c.kind === 'intervalo') tIntervalo(c); }
   function pulse(p) { if (p && p.kind === 'reconhecimento' && kind === 'reconhecimento') { const c = cena(); if (c && c.live.passo === 'carga') { c.live.carga = p.carga; c.live.nivel = p.nivel || 0; rcCharge(p.carga, p.nivel); } } }
   // O céu e a estrada continuam rodando no fundo em todas as cenas (parado, parecia que o telão tinha travado).
-  // Só a estratégia (uma moldura que ocupa a tela inteira) deixa o fundo parado; nas cenas com texto ele fica um pouco
-  // mais escuro (dim), e no intervalo e nos 88 MPH fica com o céu vivo.
+  // Na estratégia (uma moldura que ocupa a tela inteira) o fundo fica bem escuro e sem raios (calm); nas cenas com texto,
+  // um pouco mais escuro (dim); no intervalo e nos 88 MPH, com o céu vivo.
   const calm = state => { const c = state && state.cena; return !!c && c.kind === 'visao'; };
   const dim = state => { const c = state && state.cena; return !!c && !['intervalo', 'mph', 'visao'].includes(c.kind); };
   // nome para os circuitos de tempo da transição e a frase do deck

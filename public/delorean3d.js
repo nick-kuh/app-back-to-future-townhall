@@ -286,7 +286,7 @@
       const s = new Scene(canvas, o); if (!o.manual) items.add(s); return s; // manual: quem chama cuida do laço (painel do Sucesso)
     },
     setFps(n) { fps = Math.max(10, Math.min(60, n)); },
-    pause(on) { paused = !!on; }, // telas calmas (bloco de fala, olhos no telão): o cenário fica parado
+    pause(on) { paused = !!on; }, // deixa o cenário parado (hoje ninguém usa: o fundo roda em loop em todos os blocos)
     get reducedMotion() { return reducedMotion; },
   };
 })();

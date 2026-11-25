@@ -187,7 +187,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .tcbox.big b{font-size:clamp(40px,6vw,104px);padding:2px 24px}
 .tcbox[hidden]{display:none}
 
-/* ===== bloco de fala: telão calmo (fundo parado e escuro, nada piscando) ===== */
+/* ===== bloco de fala: telão calmo (fundo escuro, ainda rodando, sem raios) ===== */
 /* Título no estilo do logo de "De Volta para o Futuro": maiúsculas largas e inclinadas, gradiente do vermelho-alaranjado
    ao amarelo, contorno azul fino e a seta que sai da primeira linha. Se houver um arquivo de fonte em public/fonts
    (ex.: "Back to the Future 2002"), ele é usado; senão entra a Russo One inclinada. */

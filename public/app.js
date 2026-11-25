@@ -267,10 +267,10 @@
       const b = S.state.block;
       app.innerHTML = b === 'standby' ? vStandby() : b === 'stage' ? vStage() : b === 'welcome' ? vWelcome() : b === 'message' ? vMessage() : b === 'closing' ? vClosing() : b === 'doc' ? vDoc() : vConnections();
     }
-    // "olhos no telão" e blocos de fala: tela calma, fundo parado
+    // "olhos no telão" e blocos de fala: tela calma, com o fundo mais apagado (mas sempre rodando: parado, parecia travado)
     const calm = !presentation && S.screen === 'app' && !!S.state && !!S.me && (['standby', 'stage'].includes(S.state.block) || (!!cena && CENA_CALM.includes(cena.kind)));
     document.body.classList.toggle('off', calm);
-    if (window.Delorean3D) Delorean3D.pause(calm);
+    if (window.Delorean3D) Delorean3D.pause(false);
     const ans = $('#ans'); if (ans) { ans.value = S.answerDraft; countAnswer(); if (typing && !ans.disabled) { ans.focus(); ans.setSelectionRange(ans.value.length, ans.value.length); } }
     const rq = $('#rfQ'); if (rq) { rq.value = S.rfQ; if (searching) { rq.focus(); rq.setSelectionRange(rq.value.length, rq.value.length); } }
     if (reflexao) loadProjects(reflexao.rev);
