@@ -937,7 +937,7 @@
 
   function vTests() {
     return `
-      <div class="card"><h2>Modo teste / ensaio</h2><p class="small" style="margin-bottom:12px">Para ensaiar a dinâmica sem 47 pessoas na sala. Nada disso é necessário no dia.</p>
+      <div class="card"><h2>Modo teste / ensaio</h2><p class="small" style="margin-bottom:12px">Para ensaiar a dinâmica sem todo mundo na sala. Nada disso é necessário no dia.</p>
         <div class="actions">
           <button class="btn cyan" data-act="testCheckinAll">✔ Check-in de todos</button>
           <button class="btn cyan" data-act="demoTime">⏱ Modo demo (10s encontro · 30s conversa · 3s intervalo · 30s avaliação)</button>

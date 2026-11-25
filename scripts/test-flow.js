@@ -6,7 +6,9 @@ const { Engine } = require('../server/engine');
 const e = new Engine();
 e.updateSettings({ autoFlow: false }); // primeira parte: fluxo manual (o painel no modo manual)
 const people = e.listPeople();
-assert.strictEqual(people.length, 47, '47 pessoas na lista inicial');
+assert.strictEqual(people.length, 48, '48 pessoas na lista inicial');
+assert(!people.some(p => p.name === 'Jonathan Toledo'), 'Jonathan Toledo saiu da lista');
+assert.deepStrictEqual(people.filter(p => ['Evelyn Aguiar', 'Renato Malvino'].includes(p.name)).map(p => [p.name, p.wl, p.area, p.team]), [['Evelyn Aguiar', 'WL1', 'Consumer', ''], ['Renato Malvino', 'WL2', 'Architecture', 'Tech Found']]);
 // banco do "Speed Dating": 30 perguntas em três categorias de 10
 assert.strictEqual(e.listQuestions().length, 30, '30 perguntas no banco');
 for (const c of ['quebragelo', 'conexao', 'alem']) assert.strictEqual(e.listQuestions().filter(q => q.cat === c).length, 10, `10 perguntas em ${c}`);

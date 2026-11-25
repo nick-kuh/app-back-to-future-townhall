@@ -405,7 +405,7 @@ parou. A sala das dinâmicas do Sucesso é criada sozinha.
 
 1. **Roteiro** · a ordem dos passos: reordenar, remover, adicionar cenas, blocos de fala e avisos. Pode mudar
    durante o evento. **Agenda e cenas** · o conteúdo de cada cena do deck.
-2. **Pessoas** · a lista do townhall já vem carregada (47 pessoas). Dá para editar WL/área, adicionar,
+2. **Pessoas** · a lista do townhall já vem carregada (48 pessoas). Dá para editar WL/área, adicionar,
    marcar ausente, fazer check-in manual, importar outra lista (colar do Excel), **importar as fotos de perfil** e **importar as respostas
    do forms** (CSV/planilha): as respostas aparecem na tela da dupla como "para puxar assunto".
 3. **Perguntas** · banco com 30 perguntas em três categorias (Quebra-gelo, Conexão, Além do óbvio) e o modo de
@@ -425,7 +425,7 @@ dupla" no passo Conexões, com um botão para incluir a pessoa nas próximas via
 
 - **Duplas**: área diferente **e** WL diferente (ex.: Estag ↔ WL2/WL3, WL1 ↔ WL3/Estag), nunca a mesma dupla
   em duas viagens. Número ímpar de pessoas forma um trio. Só se for impossível, o app relaxa a regra
-  (primeiro libera WL, depois área) e avisa no painel. Com a lista atual (47 pessoas) as três rodadas saem
+  (primeiro libera WL, depois área) e avisa no painel. Com a lista atual (48 pessoas) as três rodadas saem
   sem relaxar nada.
 - **Perguntas**: sorteadas para cada dupla (ver "Conexões: tempos e perguntas"); ninguém recebe uma pergunta que
   já viu e as duplas começam por perguntas diferentes enquanto houver perguntas sobrando na categoria.

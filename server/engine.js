@@ -127,12 +127,30 @@ const normText = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 class Engine {
   constructor() {
     seedIfEmpty();
+    // Atualização da lista pedida pela organização (vale uma vez, para bancos que já tinham a lista antiga):
+    // sai Jonathan Toledo; entram Evelyn Aguiar e Renato Malvino.
+    const added = []; // quem entrou na lista agora (para buscar a foto no pacote da instalação)
+    if (!kvGet('peopleV2', false)) {
+      const byName = name => db.prepare('SELECT id FROM people WHERE name = ?').get(name);
+      const out = byName('Jonathan Toledo');
+      if (out) {
+        // quem já está em duplas sorteadas não pode sumir da lista: fica marcado como ausente
+        if (this.allGroups().some(g => g.members.includes(out.id))) db.prepare('UPDATE people SET active = 0 WHERE id = ?').run(out.id);
+        else for (const sql of ['DELETE FROM people WHERE id = ?', 'DELETE FROM rankings WHERE person_id = ?', 'DELETE FROM results WHERE person_id = ?', 'DELETE FROM seen WHERE person_id = ?', 'DELETE FROM photos WHERE person_id = ?']) db.prepare(sql).run(out.id);
+      }
+      let order = db.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM people').get().m;
+      for (const p of require('./seed/people').filter(x => ['Evelyn Aguiar', 'Renato Malvino'].includes(x.name))) {
+        if (!byName(p.name)) added.push(Number(db.prepare('INSERT INTO people (name, email, wl, team, manager, area, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)').run(p.name, p.email, p.wl, p.team, p.manager, p.area, ++order).lastInsertRowid));
+      }
+      kvSet('peopleV2', true);
+    }
     // fotos de perfil: guardadas no banco; a pasta de fotos da instalação (se houver) entra quando o banco começa vazio
     this.fotos = createFotos();
     { // fotos que acompanham a instalação: a pasta (se houver) e o pacote criptografado (aberto com FOTOS_KEY)
       const people = db.prepare('SELECT id, name FROM people').all();
       this.fotos.seedFromDir(people);
       const r = this.fotos.seedFromPack(people);
+      for (const id of added) this.fotos.seedFor(id, people); // quem entrou na lista agora ganha a foto que já está no pacote
       const quiet = process.env.DB_PATH === ':memory:'; // nos testes, sem avisos
       if (r && r.locked) { if (!quiet) console.warn(`[fotos] o pacote de fotos da instalação não foi aberto: ${r.reason}. O app segue com as iniciais.`); }
       else if (r && !quiet) console.log(`[fotos] ${r.matched} fotos de perfil carregadas do pacote da instalação.`);

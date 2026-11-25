@@ -32,7 +32,7 @@ function run(people, label) {
 const all = seed.map((p, i) => ({ ...p, id: i + 1 }));
 let strictCount = 0;
 const N = 10;
-for (let i = 0; i < N; i++) if (run(all, `47 pessoas #${i + 1}`)) strictCount++;
+for (let i = 0; i < N; i++) if (run(all, `${all.length} pessoas #${i + 1}`)) strictCount++;
 console.log(`\nSoluções estritas: ${strictCount}/${N}`);
 
 // Subconjuntos (quem aparece no dia varia)
@@ -40,7 +40,7 @@ for (const n of [12, 23, 30, 40]) {
   const sub = all.slice().sort(() => Math.random() - 0.5).slice(0, n);
   run(sub, `${n} pessoas`);
 }
-if (strictCount < N) { console.error('FALHA: nem todas as execuções com 47 pessoas foram estritas'); process.exit(1); }
+if (strictCount < N) { console.error(`FALHA: nem todas as execuções com ${all.length} pessoas foram estritas`); process.exit(1); }
 
 // Caso patológico: um WL com mais da metade dos presentes (20 WL2 entre 38) → nível estrito impossível.
 // Precisa responder rápido (antes travava o servidor por dezenas de segundos) e devolver duplas válidas.
