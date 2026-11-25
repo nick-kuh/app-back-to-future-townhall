@@ -110,6 +110,12 @@ function createSucesso({ dbPath, adminPassword }) {
     for (const k of Object.keys(mod.DEFINITIONS)) await internal(`/api/rooms/${roomId}/activities/${k}/command`, { action: 'clear' });
     for (const fn of listeners) fn();
   }
+  // Zera as respostas de uma dinâmica só (d1 a d4)
+  async function clearActivity(roomId, k) {
+    if (!roomExists(roomId) || !mod.DEFINITIONS[k]) return;
+    await internal(`/api/rooms/${roomId}/activities/${k}/command`, { action: 'clear' });
+    for (const fn of listeners) fn();
+  }
   // Situação das quatro dinâmicas para o Painel do Doc (sem textos de respostas)
   function overview(roomId) {
     if (!roomExists(roomId)) return null;
@@ -219,7 +225,7 @@ function createSucesso({ dbPath, adminPassword }) {
 
   return {
     init, mount, prepare, storePresentation, publicPresentation,
-    live, responses, mine, answer, roomExists, latestRoom, createRoom, clearRoom, overview, exportData,
+    live, responses, mine, answer, roomExists, latestRoom, createRoom, clearRoom, clearActivity, overview, exportData,
     hasCookie, setCookie, clearCookie,
     onChange: fn => listeners.push(fn),
     ready: () => !!mod,

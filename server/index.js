@@ -193,6 +193,30 @@ app.post('/api/admin/action', wrap(req => {
   return { ok: true };
 }));
 
+// Reiniciar: tudo de uma vez ou um bloco por vez. Apaga o que foi feito durante o evento ou o ensaio (check-ins, duplas,
+// votos, respostas, prêmios revelados, cronômetros). Não mexe no que foi preparado: pessoas, fotos, perguntas, roteiro,
+// textos e conteúdo das cenas.
+//   scope: all (keepCheckins opcional) · checkin · connections · reflexao · sucesso · sucesso:d1..d4 · doc · cenas ·
+//          cena:<almanaque|reconhecimento|intervalo|visao|mph> · roteiro (só volta para o primeiro passo)
+app.post('/api/admin/reset', wrapAsync(async req => {
+  const b = req.body || {}, scope = String(b.scope || ''), room = engine.state.sucessoRoom, bad = () => { throw Object.assign(new Error('Não sei reiniciar isso.'), { status: 400 }); };
+  if (scope === 'all') {
+    dropPresentation(); reflexao.clearAll({ silent: true }); cenas.resetState({ silent: true });
+    engine.resetEvent({ keepCheckins: !!b.keepCheckins });
+    await sucesso.clearRoom(room).catch(e => console.error('[sucesso] limpar sala:', e.message));
+  } else if (scope === 'checkin') engine.resetCheckins();
+  else if (scope === 'connections') engine.resetConnections();
+  else if (scope === 'reflexao') reflexao.clearAll();
+  else if (scope === 'sucesso') { if (!sucesso.ready()) bad(); await sucesso.clearRoom(room); }
+  else if (/^sucesso:d[1-4]$/.test(scope)) { if (!sucesso.ready()) bad(); await sucesso.clearActivity(room, scope.slice(8)); }
+  else if (scope === 'doc') engine.setDocMessage(null);
+  else if (scope === 'cenas') cenas.resetState();
+  else if (scope.startsWith('cena:')) cenas.resetKind(scope.slice(5));
+  else if (scope === 'roteiro') return goStep(engine.settings.steps[0].id);
+  else bad();
+  return { ok: true };
+}));
+
 // Exibir uma dinâmica do Sucesso no telão e nos celulares ({roomId, activityId}) ou voltar ao townhall ({roomId: null}).
 // A sala das dinâmicas do Sucesso é escolhida sozinha: a que já está em uso, a mais recente ou uma nova.
 async function ensureRoom() {

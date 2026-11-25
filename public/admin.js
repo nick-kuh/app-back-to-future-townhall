@@ -195,6 +195,7 @@
     const extras = `<div class="road-extra">
         <div class="small">Fora do roteiro</div>
         <div class="actions">${btn('📣 Aviso rápido', 'quickMessage', { cls: 'ghost sm' })}${btn('📺 Olhos no telão', 'standbyNow', { cls: 'ghost sm' })}</div>
+        <div class="actions">${btn('↺ Reiniciar…', 'resetOpen', { cls: 'ghost sm' })}</div>
         ${det('telao', '📽 Tela do telão', `<div class="actions" style="margin-top:8px">${[['auto', 'Segue o roteiro'], ['logo', 'Só o logo']].map(([k, l]) => `<button class="btn xs ${scene === k ? '' : 'ghost'}" data-act="setScene" data-scene="${k}">${l}</button>`).join('')}</div>
           <label class="sw" style="margin-top:8px"><input type="checkbox" data-act="toggleMutual" ${O.settings.showMutualOnScreen ? 'checked' : ''}> Mostrar no telão os nomes das conexões mútuas</label>`)}
         <a href="#" class="small" data-go="roteiro">✎ Editar roteiro</a>
@@ -240,6 +241,7 @@
       <div class="sb-nav">${prev ? `<a href="#" data-act="jumpStep" data-id="${prev.id}">← abrir o passo anterior: ${esc(stepTitle(prev))}</a>` : '<span></span>'}${nextBig ? '' : nextBtn}</div>
       ${p.after || ''}
       ${p.more ? det('more-' + step.type, 'Mais opções', `<div class="sb-more-in">${p.more}</div>`, 'sb-more') : ''}
+      ${(r => (r ? `<div class="sb-reset"><a href="#" data-act="resetOne" data-id="${step.id}" class="${r.dirty ? '' : 'off'}" title="${esc(r.what)}">↺ Reiniciar este bloco</a><span class="small">${r.dirty ? esc(r.what) : 'este bloco já está no começo'}</span><a href="#" data-act="resetOpen" class="small">reiniciar outro bloco ou tudo…</a></div>` : ''))(resetInfo(step))}
     </section>`;
   }
   function panelDetour(kind, step) {
@@ -322,7 +324,7 @@
       out.secondary = st.pagina ? [] : [cenaBtn('← Mês', k, 'ant', { cls: 'ghost', disabled: m <= 0 }), cenaBtn('Mês →', k, 'prox', { cls: 'ghost', disabled: m >= 11 }), cenaBtn('★ O ano em uma página', k, 'pagina', { cls: 'ghost', data: { on: 1 } })];
       out.busy = st.tocando ? 'O ano ainda está tocando no telão. Avançar mesmo assim?' : '';
       out.more = `<div class="actions" style="align-items:center"><span class="small">Mostrar nos cartões:</span>${[...Object.keys(C.bus).map(u => [u, C.bus[u]]), ['E', 'Entregue'], ['M', 'Marco'], ['C', 'Contexto']].map(([key, l]) => `<button class="btn xs ${off.has(key) ? 'ghost' : ''}" data-act="cena" data-kind="almanaque" data-a="filtro" data-key="${key}">${off.has(key) ? '○' : '●'} ${esc(l)}</button>`).join('')}</div>
-        <div class="actions" style="margin-top:8px">${cenaBtn('↺ Recomeçar o almanaque (em branco)', k, 'reiniciar', { cls: 'ghost sm' })}</div>${note}`;
+        ${note}`;
     } else if (k === 'ia') {
       out.body = `<div class="theme">${esc(cfg.titulo.replace(/\*/g, ''))}</div><div class="speaker">com ${esc(cfg.quem)} · ${cfg.min} min</div><p class="lead">${esc(cfg.texto)}</p>
         ${cfg.nota ? `<div class="sb-warn">📝 Para quem apresenta (não aparece no telão): ${esc(cfg.nota)}</div>` : ''}<p class="small" style="margin-top:8px">O telão mostra o QR do app. A parte interativa da Frente 2 é o próximo passo: a Reflexão.</p>${note}`;
@@ -356,7 +358,7 @@
         if (st.passo !== 'vencedor' && st.passo !== 'sorteio') out.busy = 'A cerimônia deste prêmio ainda não terminou. Avançar mesmo assim?';
       }
       if (cfg.exemplo) out.warn = `⚠ Os indicados e os vencedores ainda são os <b>nomes de exemplo</b> do deck (o telão avisa isso na tela dos prêmios). Troque em ${cfgLink('reconhecimento', 'Preparar → Agenda e cenas → Reconhecimento')}.`;
-      out.more = `<div class="actions">${cenaBtn('↺ Recomeçar o reconhecimento (lacra os prêmios de novo)', k, 'reset', { cls: 'red sm', data: { confirm: 'Lacrar todos os prêmios de novo e voltar para a abertura?' } })}</div>${note}`;
+      out.more = note;
     } else if (k === 'intervalo') {
       const ph = ivPhase();
       out.body = `<div class="phase">${{ idle: 'Cronômetro parado', run: 'Intervalo em andamento', paused: 'Cronômetro pausado', done: 'O intervalo terminou' }[ph]}</div>
@@ -668,6 +670,53 @@
       $('#skSave').onclick = () => run(async () => { await act('settings', { settings: { skip: { [block]: [...document.querySelectorAll('#skList input:checked')].map(i => +i.value) } } }); closeDialog(); }, 'Lista salva');
     });
   }
+  /* ====================== REINICIAR: tudo ou um bloco ======================
+   * Reiniciar apaga o que foi feito durante o evento ou o ensaio; não mexe no que foi preparado (pessoas, fotos,
+   * perguntas, roteiro, textos e conteúdo das cenas). Cada bloco do roteiro tem o seu "escopo" no servidor. */
+  const CENA_RESET = { almanaque: 'Volta o almanaque para o começo (em branco, sem filtros).', reconhecimento: 'Lacra todos os prêmios de novo e volta para a abertura.', intervalo: 'Zera o cronômetro do intervalo.', visao: 'Volta a página da estratégia para o modo padrão (direto no mapa).', mph: 'Volta o velocímetro para 0 MPH.' };
+  // o que dá para reiniciar em um passo do roteiro: escopo, como está agora, se há algo para apagar e o que o reinício faz
+  function resetInfo(x) {
+    const O = A.O, C = O.cenas;
+    if (x.type === 'checkin') return { scope: 'checkin', now: `${O.counts.checkedIn} de ${O.counts.total} a bordo`, dirty: O.counts.checkedIn > 0 || !!O.state.conn.generatedAt, what: 'Desfaz o check-in de todo mundo: cada pessoa escolhe o nome de novo. As Conexões são reiniciadas junto, porque as duplas dependem de quem está a bordo.' };
+    if (x.type === 'connections') { const c = O.state.conn; return { scope: 'connections', now: c.phase === 'idle' ? 'sem duplas' : c.phase === 'ready' ? 'duplas sorteadas' : c.phase === 'results' ? 'conexões enviadas' : `${PHASE_LABEL[c.phase]}${c.round ? ` · viagem ${c.round}/3` : ''}`, dirty: c.phase !== 'idle', what: 'Apaga as duplas sorteadas, as perguntas já vistas, as avaliações e as conexões calculadas. Os check-ins ficam.' }; }
+    if (x.type === 'reflexao' && O.reflexao) { const R = O.reflexao, votes = R.paradas.reduce((a, p) => a + p.votes, 0), done = R.paradas.filter(p => p.top.length).length; return { scope: 'reflexao', now: `${votes} ${votes === 1 ? 'voto' : 'votos'} · ${done} de ${R.paradas.length} paradas reveladas`, dirty: votes > 0 || done > 0 || R.open !== null || R.paradas.some(p => p.phase !== 'idle'), what: 'Apaga os votos e os mais votados de todas as paradas e volta para o menu das paradas.' }; }
+    if (x.type === 'sucesso') { const a = sucAct(x.activity), n = a.responseCount || 0; return { scope: 'sucesso:' + x.activity, now: `${n} ${n === 1 ? 'resposta' : 'respostas'}`, dirty: n > 0 || ['paused', 'done'].includes(a.phase) || (a.phase === 'run' && !!a.endsAt), what: 'Apaga as respostas desta dinâmica, o sorteio e a nuvem revelada. O recebimento volta ao começo.' }; }
+    if (x.type === 'doc') { const d = O.state.doc || {}; return { scope: 'doc', now: d.message ? `mensagem pronta${d.play ? ' · cena no telão' : ''}` : 'sem mensagem', dirty: !!d.message || d.status === 'generating', what: 'Apaga a mensagem do Doc e tira a cena do telão. Dá para gerar de novo.' }; }
+    if (x.type === 'cena' && C && CENA_RESET[x.cena]) { const st = C.state[x.cena] || {};
+      const dirty = x.cena === 'almanaque' ? st.mes >= 0 || !!st.pagina || (st.off || []).length > 0 : x.cena === 'reconhecimento' ? (st.feitos || []).length > 0 || st.fase !== 'intro' : x.cena === 'intervalo' ? st.phase !== 'idle' : x.cena === 'visao' ? !!st.intro : !!st.at;
+      return { scope: 'cena:' + x.cena, now: cenaSub(x, true) || 'no começo', dirty, what: CENA_RESET[x.cena] }; }
+    return null;
+  }
+  const resetScope = (scope, extra = {}) => api('POST', '/api/admin/reset', { scope, ...extra });
+  function resetDialog() {
+    const O = A.O, { steps, i } = liveStep(), rows = [], seen = new Set();
+    for (const x of steps) { const r = resetInfo(x); if (r && !seen.has(r.scope)) { seen.add(r.scope); rows.push({ x, ...r }); } }
+    const dirtyN = rows.filter(r => r.dirty).length, atStart = i === 0 && !O.state.detour;
+    dialog(`<h3>↺ Reiniciar</h3>
+      <p class="small">Reiniciar apaga o que foi feito durante o evento ou o ensaio: check-ins, duplas, votos, respostas, prêmios revelados e cronômetros. <b>Não mexe no que foi preparado</b>: lista de pessoas e fotos, perguntas, roteiro, textos e conteúdo das cenas. Para guardar os dados antes, use <a href="/dados.html" target="_blank">📊 Dados</a>.</p>
+      <div class="rs-all"><div><b>Reiniciar tudo</b><span class="small">O roteiro volta para o primeiro passo e todos os blocos abaixo voltam ao começo, de uma vez.</span>
+          <label class="sw" style="margin-top:8px"><input type="checkbox" id="rsKeep"> Manter os check-ins (as ${O.counts.checkedIn} pessoas a bordo continuam a bordo)</label></div>
+        <button class="btn red" id="rsAll">↺ Reiniciar tudo</button></div>
+      <h3 style="margin-top:16px">Reiniciar um bloco</h3>
+      <p class="small">Só o bloco escolhido volta ao começo; o resto fica como está. ${dirtyN ? '' : 'Agora todos os blocos já estão no começo.'}</p>
+      <div class="tblwrap" style="margin-top:8px;max-height:46vh;overflow:auto"><table class="tbl rs-tbl">
+        ${rows.map(r => `<tr class="${r.dirty ? '' : 'clean'}"><td>${stepIcon(r.x)} <b>${esc(stepTitle(r.x))}</b><div class="small">${esc(r.what)}</div></td><td class="small" style="white-space:nowrap">${r.dirty ? esc(r.now) : '✓ no começo'}</td>
+          <td class="r"><button class="btn xs ${r.dirty ? 'red' : 'ghost'}" data-reset="1" data-scope="${r.scope}" data-title="${esc(stepTitle(r.x))}" data-what="${esc(r.what)}" ${r.dirty ? '' : 'disabled'}>↺ Reiniciar</button></td></tr>`).join('')}
+        <tr class="${atStart ? 'clean' : ''}"><td>🧭 <b>Roteiro</b><div class="small">Volta o telão e os celulares para o primeiro passo, sem apagar nada.</div></td><td class="small" style="white-space:nowrap">${atStart ? '✓ no começo' : `passo ${i + 1} de ${steps.length}`}</td>
+          <td class="r"><button class="btn xs ghost" data-reset="1" data-scope="roteiro" data-title="o roteiro" data-what="O telão e os celulares voltam para o primeiro passo. Nada é apagado." ${atStart ? 'disabled' : ''}>↺ Voltar ao início</button></td></tr>
+      </table></div>
+      <div class="actions" style="margin-top:12px"><button class="btn ghost" data-close>Fechar</button></div>`, () => {
+      $('#dlg').classList.add('wide'); // esta janela tem uma tabela: fica mais larga
+      const again = () => setTimeout(() => { if ($('#dlg').open && $('#rsAll')) resetDialog(); }, 800); // mostra como ficou depois de reiniciar
+      $('#rsAll').onclick = () => { const keep = $('#rsKeep').checked;
+        if (!confirm(`Reiniciar TUDO? O roteiro volta para o primeiro passo e são apagados ${keep ? '' : 'os check-ins, '}as duplas e avaliações, os votos da Reflexão, as respostas do Sucesso, a mensagem do Doc, os prêmios revelados e os cronômetros.${keep ? ' Os check-ins ficam.' : ''} Não dá para desfazer.`)) return;
+        run(async () => { await resetScope('all', { keepCheckins: keep }); A.sel = null; again(); }, 'Tudo reiniciado'); };
+      document.querySelectorAll('#dlg [data-reset]').forEach(b => { b.onclick = () => { const d = b.dataset;
+        if (!confirm(`Reiniciar ${d.title}? ${d.what}${d.scope === 'roteiro' ? '' : ' Não dá para desfazer.'}`)) return;
+        run(async () => { await resetScope(d.scope); again(); }, d.scope === 'roteiro' ? 'Roteiro no primeiro passo' : `${d.title}: reiniciado`); }; });
+    });
+  }
+
   function quickMessageDialog() {
     const m = A.O.state.message;
     dialog(`<h3>📣 Aviso rápido</h3><p class="small">Aparece na hora em todos os celulares e no telão, fora do roteiro (intervalo, recado, link). Depois é só voltar ao roteiro.</p>
@@ -944,17 +993,17 @@
           <button class="btn ghost" data-act="normalTime">⏱ Tempos normais (40s encontro · 2 min conversa · 6s intervalo · 2 min avaliação)</button>
           <button class="btn cyan" data-act="testRandomRankings">🎲 Avaliações aleatórias (na fase de avaliação)</button>
         </div></div>
-      <div class="card"><h2>Zona de perigo</h2>
+      <div class="card"><h2>↺ Reiniciar</h2>
+        <p class="small" style="margin-bottom:10px">Depois do ensaio, reinicie tudo para o evento começar do zero. Dá para reiniciar tudo de uma vez ou um bloco por vez; o que foi preparado (pessoas, fotos, perguntas, roteiro e textos) não é apagado.</p>
         <div class="actions">
-          <button class="btn red" data-act="resetConnections">Resetar bloco de conexões</button>
-          <button class="btn red" data-act="resetEvent">Resetar o evento inteiro</button>
+          <button class="btn red" data-act="resetOpen">↺ Reiniciar tudo ou um bloco…</button>
         </div>
         <p class="small" style="margin-top:8px">Resetar o evento volta o roteiro para o primeiro passo e apaga check-ins, duplas, avaliações e as respostas do Sucesso (bom para usar depois do ensaio). A lista de pessoas, as perguntas e o roteiro são mantidos.</p></div>`;
   }
 
   /* ---------- diálogos ---------- */
   function dialog(html, onMount) {
-    const d = $('#dlg'); $('#dlgBody').innerHTML = html; const m = $('#dlgMsg'); if (m) m.remove(); d.showModal(); if (onMount) onMount(d);
+    const d = $('#dlg'); $('#dlgBody').innerHTML = html; const m = $('#dlgMsg'); if (m) m.remove(); d.classList.remove('wide'); if (!d.open) d.showModal(); if (onMount) onMount(d);
   }
   const closeDialog = () => $('#dlg').close();
   function personForm(p = {}) {
@@ -1052,8 +1101,13 @@
       case 'setBlock': return run(() => act('setBlock', { block: el.dataset.block }));
       case 'setScene': return run(() => act('setScene', { scene: el.dataset.scene }));
       case 'toggleMutual': return run(() => act('settings', { settings: { showMutualOnScreen: el.checked } }));
-      case 'resetConnections': return confirmRun('Resetar o bloco de conexões? Apaga duplas, avaliações e resultados.', () => act('resetConnections'), 'Bloco resetado');
-      case 'resetEvent': return confirmRun('Resetar o EVENTO inteiro? O roteiro volta para o primeiro passo e são apagados check-ins, duplas, avaliações e as respostas do Sucesso.', () => act('resetEvent'), 'Evento resetado');
+      case 'resetConnections': return confirmRun('Reiniciar as Conexões? Apaga duplas, avaliações e resultados. Os check-ins ficam.', () => resetScope('connections'), 'Conexões reiniciadas');
+      case 'resetOpen': return resetDialog();
+      case 'resetOne': { // "Reiniciar este bloco", no passo aberto no Ao vivo
+        const x = O.settings.steps.find(y => y.id === id), r = x && resetInfo(x); if (!r) return;
+        if (!r.dirty) return toast('Este bloco já está no começo.');
+        return confirmRun(`Reiniciar ${stepTitle(x)}? ${r.what} Não dá para desfazer.`, () => resetScope(r.scope), `${stepTitle(x)}: reiniciado`);
+      }
       case 'testCheckinAll': return run(() => act('testCheckinAll'), 'Check-in de todos feito');
       case 'testRandomRankings': return run(() => act('testRandomRankings'), 'Avaliações aleatórias enviadas');
       case 'demoTime': return run(() => act('settings', { settings: { roundSeconds: 30, findSeconds: 10, breakSeconds: 3, rankingSeconds: 30 } }), 'Modo demo: tempos curtos');

@@ -490,8 +490,19 @@ function createCenas() {
     if (silent) save(); else emit();
   }
 
+  // Reinicia uma cena só (o mês do almanaque, os prêmios revelados, o cronômetro, o velocímetro…), sem mexer no conteúdo
+  function resetKind(kind) {
+    if (!(kind in state)) fail('Esta cena não tem nada para reiniciar.', 400);
+    if (kind === 'almanaque') stopPlay();
+    if (kind === 'reconhecimento') { clearTimeout(drawT); drawT = null; }
+    if (kind === 'intervalo') { clearTimeout(breakT); breakT = null; }
+    for (const k of Object.keys(state[kind])) delete state[kind][k];
+    Object.assign(state[kind], defaultState()[kind]);
+    emit();
+  }
+
   armBreak();
-  return { publicState, adminState, evento, creditos, command, tap, enter, sync, setConfig, resetConfig, resetState,
+  return { publicState, adminState, evento, creditos, command, tap, enter, sync, setConfig, resetConfig, resetState, resetKind,
     onChange: fn => listeners.push(fn), onPulse: fn => pulses.push(fn), agendaView, config: () => config };
 }
 

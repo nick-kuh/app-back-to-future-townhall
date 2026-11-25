@@ -72,6 +72,32 @@ A estratégia é `public/estrategia-2027.html`, cópia byte a byte do arquivo en
   - **As três categorias misturadas**: em toda viagem, uma pergunta de cada categoria, em ordem sorteada.
 - No celular aparece **só a pergunta** (com o nome da categoria): não há "pergunta 2 de 10" nem quantas faltam.
 
+## ↺ Reiniciar: tudo ou um bloco
+
+O botão **↺ Reiniciar…** (no "Ao vivo", embaixo do roteiro, e em Preparar → Testes) abre uma janela com as duas formas:
+
+- **Reiniciar tudo:** o roteiro volta para o primeiro passo e todos os blocos voltam ao começo de uma vez. A opção
+  **Manter os check-ins** deixa as pessoas a bordo (útil para recomeçar com a sala já cheia).
+- **Reiniciar um bloco:** cada bloco do roteiro tem o seu botão, com o que ele tem agora ("9 votos", "viagem 1/3",
+  "1 de 4 prêmios revelados"). Só o bloco escolhido volta ao começo; quem já está no começo aparece como "✓ no começo".
+
+| Bloco | O que o reinício apaga |
+|---|---|
+| Chegada · Check-in | os check-ins de todo mundo (cada pessoa escolhe o nome de novo) e, junto, as Conexões |
+| Conexões | duplas, perguntas já vistas, avaliações e conexões calculadas (os check-ins ficam) |
+| Reflexão | votos e mais votados de todas as paradas |
+| Sucesso 01 a 04 | as respostas de cada dinâmica, o sorteio e a nuvem revelada |
+| Visão 2027 · o Doc | a mensagem do Doc e a cena no telão |
+| Jornada 2026 · Reconhecimento · Intervalo · Estratégia · 88 MPH | o mês do almanaque, os prêmios revelados, o cronômetro, o velocímetro |
+| Roteiro | nada: só volta o telão e os celulares para o primeiro passo |
+
+Dentro de cada passo do "Ao vivo" há também o link **↺ Reiniciar este bloco**.
+
+Reiniciar **não mexe no que foi preparado**: lista de pessoas e fotos, perguntas, roteiro, textos e conteúdo das
+cenas. Antes de reiniciar depois do evento, baixe os dados em 📊 Dados. No servidor é um endereço só:
+`POST /api/admin/reset` com `scope` (`all`, `checkin`, `connections`, `reflexao`, `sucesso`, `sucesso:d1`…, `doc`,
+`cenas`, `cena:<nome>`, `roteiro`).
+
 ## 📷 Fotos de perfil
 
 Cada pessoa pode ter uma foto, que aparece no lugar das iniciais: na lista e na confirmação do check-in, na polaroid
@@ -413,8 +439,8 @@ parou. A sala das dinâmicas do Sucesso é criada sozinha.
    `[além do óbvio]`; `[off]` marca uma desativada).
 4. **Ajustes** · tempos das viagens, fluxo automático ou manual, textos, som (onde toca, arquivos
    próprios) e acesso.
-5. **Testes** · check-in de todos, modo demo com tempos curtos, avaliações aleatórias e **resetar o
-   evento** (volta o roteiro ao começo e apaga check-ins, duplas e respostas: use depois do ensaio).
+5. **Testes** · check-in de todos, modo demo com tempos curtos, avaliações aleatórias e **↺ Reiniciar**
+   (tudo ou um bloco: use depois do ensaio).
 
 No check-in, a pessoa digita o próprio nome e a lista aparece já filtrada (ela fica oculta até começar a
 digitar). Quem já embarcou e voltou (celular novo, navegador limpo) acha o nome marcado como "já

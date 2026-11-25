@@ -763,12 +763,23 @@ class Engine {
     this.state.screen = { scene: ok.includes(scene) ? scene : 'auto' };
     this.commit();
   }
-  resetEvent() {
+  // Reiniciar tudo: o roteiro volta para o primeiro passo e somem check-ins, duplas, avaliações e a mensagem do Doc.
+  // keepCheckins: as pessoas continuam a bordo (útil para recomeçar com a sala já cheia). Pessoas, fotos, perguntas,
+  // roteiro e textos não são tocados. (Reflexão, Sucesso e cenas são reiniciados pelo servidor, que conhece esses blocos.)
+  resetEvent({ keepCheckins = false } = {}) {
     this.resetConnections();
-    db.exec("UPDATE people SET checked_in_at = NULL, token = NULL");
-    this.state.presentation = null; this.state.returnStep = null;
+    if (!keepCheckins) db.exec("UPDATE people SET checked_in_at = NULL, token = NULL");
+    this.state.presentation = null; this.state.returnStep = null; this.state.drawn = {};
     this.state.doc = defaultDoc();
+    this.state.screen = Object.assign({}, DEFAULT_SCREEN);
     this.applyStep(this.settings.steps[0].id); // o roteiro volta para o começo
+  }
+  // Reiniciar o check-in: todo mundo escolhe o nome de novo. As Conexões vão junto, porque as duplas dependem de quem está a bordo.
+  resetCheckins() {
+    db.exec('DELETE FROM groups; DELETE FROM seen; DELETE FROM rankings; DELETE FROM results;');
+    this.clearTimer(); this.state.conn = defaultConn();
+    db.exec("UPDATE people SET checked_in_at = NULL, token = NULL");
+    this.commit();
   }
   // utilidades de teste
   testCheckinAll() { db.prepare('UPDATE people SET checked_in_at = COALESCE(checked_in_at, ?) WHERE active = 1').run(iso()); this.commit(); }

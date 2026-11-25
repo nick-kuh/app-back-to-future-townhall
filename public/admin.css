@@ -355,3 +355,17 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
 .av.foto{color:transparent}
 .tbl .av{width:34px;height:34px;font-size:11px}
+
+/* reiniciar: tudo ou um bloco */
+.rs-all{display:flex;gap:14px;align-items:center;justify-content:space-between;margin-top:12px;padding:12px 14px;border:1px solid rgba(255,90,90,.5);border-radius:12px;background:rgba(255,60,60,.06)}
+.rs-all b{display:block;font-size:15px}
+.rs-all .small{display:block;margin-top:2px}
+.rs-tbl tr.clean{opacity:.5}
+.sb-reset{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,255,255,.14)}
+.sb-reset a:first-child{color:#ff7a7a;font-weight:700;white-space:nowrap}
+.sb-reset a.off{color:var(--muted,#8b8ba7);font-weight:400}
+.sb-reset a:last-child{margin-left:auto;white-space:nowrap}
+dialog.wide{width:min(860px,96vw)}
+dialog a{color:var(--cyan)}
+.rs-tbl .btn{white-space:nowrap}
+.rs-tbl td:first-child .small{max-width:52ch}
