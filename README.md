@@ -59,10 +59,16 @@ para este app) chega de 2027, lê tudo o que foi escrito nas quatro dinâmicas e
      3 ou 4 manchetes do jornal de 2027 e o encerramento.
    - Sem a chave (ou se a IA falhar), o app monta o texto com as **palavras mais citadas** em cada dinâmica.
    - **✎ Editar o texto**: você revisa e ajusta tudo antes de ir para o telão.
-2. **🎬 Começar a cena no telão**, em partes:
-   - **Chegada**: os circuitos de tempo marcam 2027, o carro carrega até 1,21 GW, três raios, e o Doc aparece.
-   - **Abertura**, depois **uma parte por dinâmica** (com as palavras mais citadas em destaque), o
-     **jornal de 2027** (Gazeta do Futuro, girando como nos filmes) e o **encerramento** com o "2027" em letras do logo.
+2. **🎬 Começar a cena no telão**, com linguagem de cinema (barras pretas, granulação, névoa, poeira na
+   luz, fundo fora de foco, cortes secos entre planos e legendas embaixo), em partes:
+   - **Chegada**: os circuitos de tempo marcam 2027, o carro (plano aberto) carrega até 1,21 GW, três raios,
+     e a silhueta do Doc sai da fumaça contra a luz do portal.
+   - **Abertura** (plano médio, com título de filme), depois **um capítulo por dinâmica** (cartela "CAPÍTULO 01"
+     com as palavras mais citadas e o Doc em close ou plano médio), o **jornal de 2027** (Gazeta do Futuro,
+     girando como nos filmes) e o **encerramento** com o "2027" em letras do logo.
+   - O Doc é um retrato em estilo graphic novel (`public/doc-retrato.js`), com luz quente de um lado e
+     contorno azul-turquesa do outro; pisca, mexe a boca, as sobrancelhas e a mão. Dá para trocar por um
+     **retrato feito com IA** (Mais opções → Imagem do Doc; o prompt está no kit do vídeo).
    - O telão **lê o texto em voz alta** (voz em português do navegador do telão, de preferência masculina;
      no Windows, o Microsoft Edge tem as vozes mais naturais, como a "Antonio"). As palavras acendem
      enquanto ele fala, a boca e os braços do Doc mexem, e a música abaixa durante a fala.
@@ -89,8 +95,8 @@ Para quem quiser um curta "de cinema" do Doc, gerado no próprio computador com 
   completa, marque **"O vídeo já traz a fala completa do Doc"**: depois dele o telão vai direto para o jornal
   de 2027 e o "2027" final, sem repetir a fala. Sem vídeo, a cena ao vivo (Doc animado + voz) faz tudo.
 
-O código está em `server/doc.js` (palavras, IA, roteiro automático e .txt), `public/doc-cena.js` e
-`public/doc-cena.css` (a cena e o personagem no telão).
+O código está em `server/doc.js` (palavras, IA, roteiro automático, .txt e kit do vídeo), `public/doc-cena.js` e
+`public/doc-cena.css` (a cena no telão) e `public/doc-retrato.js` (o personagem).
 
 ## 💭 Reflexão · Ato 1: O Combustível do Futuro
 

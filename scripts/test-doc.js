@@ -62,7 +62,7 @@ function units() {
   assert.equal(kit.segments.length, 2 + auto.blocos.length + 2); assert.ok(kit.total >= 40 && kit.total <= 70, String(kit.total));
   assert.equal(kit.segments[0].line, ''); assert.match(kit.segments[kit.segments.length - 2].line, /^Vejam só a manchete/); assert.ok(!/2027: 2027/.test(kit.text), 'manchete sem o ano repetido');
   for (const sg of kit.segments.slice(1)) assert.ok(sg.line.split(/\s+/).length <= 20, `fala longa demais: ${sg.line}`);
-  for (const k of ['BRIEFING', 'ficha_doc.png', 'jornal_2027.png', 'Project Save', '12 GB', 'personagem original', 'SEGMENTO 1 · 0:00–0:06']) assert.ok(kit.text.includes(k), k);
+  for (const k of ['BRIEFING', 'retrato_doc.png', 'ficha_doc.png', 'jornal_2027.png', 'Project Save', '12 GB', 'personagem original', 'SEGMENTO 1 · 0:00–0:06']) assert.ok(kit.text.includes(k), k);
   assert.ok(!kit.text.includes('Ana'), 'o kit não leva nomes');
   console.log('OK · palavras, roteiro automático, validação, edição, .txt e kit do vídeo');
 }
@@ -190,8 +190,10 @@ async function serverFlow() {
     // ajustes da voz e do vídeo (endereços inválidos são descartados)
     r = await call('POST', '/api/admin/action', { type: 'settings', settings: { docVoice: false, docRate: 3, docVoiceName: 'Antonio', docVideoUrl: 'javascript:alert(1)' } }); assert.equal(r.status, 200);
     st = (await call('GET', '/api/state')).json; assert.equal(st.settings.docVoice, false); assert.equal(st.settings.docRate, 1.4); assert.equal(st.settings.docVideoUrl, '');
-    await call('POST', '/api/admin/action', { type: 'settings', settings: { docVideoUrl: '/videos/doc.mp4', docVideoFull: true } });
-    st = (await call('GET', '/api/state')).json; assert.equal(st.settings.docVideoUrl, '/videos/doc.mp4'); assert.equal(st.settings.docVideoFull, true);
+    await call('POST', '/api/admin/action', { type: 'settings', settings: { docVideoUrl: '/videos/doc.mp4', docVideoFull: true, docImageUrl: 'https://exemplo.com/doc.png' } });
+    st = (await call('GET', '/api/state')).json; assert.equal(st.settings.docVideoUrl, '/videos/doc.mp4'); assert.equal(st.settings.docVideoFull, true); assert.equal(st.settings.docImageUrl, 'https://exemplo.com/doc.png');
+    await call('POST', '/api/admin/action', { type: 'settings', settings: { docImageUrl: 'data:image/png;base64,xx' } });
+    st = (await call('GET', '/api/state')).json; assert.equal(st.settings.docImageUrl, '', 'só endereços http(s) ou do próprio site');
 
     // apagar a mensagem e resetar o evento
     r = await call('POST', '/api/admin/doc', { action: 'clear' }); st = (await call('GET', '/api/state')).json; assert.equal(st.doc.ready, false); assert.equal(st.doc.phones, false);

@@ -391,6 +391,7 @@
         <label class="f">Voz preferida (parte do nome, opcional)<input class="input" id="docVoiceName" value="${esc(S2.docVoiceName || '')}" placeholder="ex.: Antonio · vazio = a melhor voz masculina em português"></label>
         <label class="f">Velocidade da fala<select class="input" id="docRate">${rates.map(([v, l]) => `<option value="${v}" ${Math.abs((S2.docRate || 1) - v) < .01 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <label class="f">Vídeo do Doc (opcional: .mp4 feito com IA, tocado na chegada)<input class="input" id="docVideoUrl" value="${esc(S2.docVideoUrl || '')}" placeholder="https://… ou /videos/doc.mp4"></label>
+        <label class="f">Imagem do Doc (opcional: retrato feito com IA, fundo escuro, no lugar do desenho; o prompt está no kit do vídeo)<input class="input" id="docImageUrl" value="${esc(S2.docImageUrl || '')}" placeholder="https://… ou /imagens/doc.png"></label>
         <label class="sw"><input type="checkbox" id="docVideoFull" ${S2.docVideoFull ? 'checked' : ''}> O vídeo já traz a fala completa do Doc (depois dele, o telão vai direto para o jornal de 2027 e o "2027" final, sem repetir a fala)</label>
         <div class="actions">${btn('Salvar', 'docSaveCfg', { cls: 'sm' })}${btn('🔈 Testar a voz no telão', 'docTestVoice', { cls: 'ghost sm' })}</div>
         <p class="small">${tp && tp.voice ? `Voz em uso no telão: <b>${esc(tp.voice)}</b>.` : 'O telão escolhe a voz quando abre. No Windows, o Microsoft Edge tem as vozes mais naturais (ex.: "Antonio").'}</p>
@@ -895,7 +896,7 @@
       case 'docTxt': return run(() => docTxt(), 'Download iniciado');
       case 'docKit': return run(() => docTxt('/api/admin/doc-video.txt', 'Kit_Video_do_Doc.txt'), 'Kit do vídeo baixado 🎬');
       case 'docTestVoice': return run(() => api('POST', '/api/admin/doc', { action: 'testVoice' }), 'O telão vai falar uma frase de teste');
-      case 'docSaveCfg': return run(() => act('settings', { settings: { docVoice: $('#docVoice').checked, docVoiceName: $('#docVoiceName').value, docRate: +$('#docRate').value, docVideoUrl: $('#docVideoUrl').value, docVideoFull: $('#docVideoFull').checked } }), 'Ajustes do Doc salvos');
+      case 'docSaveCfg': return run(() => act('settings', { settings: { docVoice: $('#docVoice').checked, docVoiceName: $('#docVoiceName').value, docRate: +$('#docRate').value, docVideoUrl: $('#docVideoUrl').value, docVideoFull: $('#docVideoFull').checked, docImageUrl: $('#docImageUrl').value } }), 'Ajustes do Doc salvos');
       case 'sucAnswers': return run(() => sucAnswersDialog(el.dataset.k));
       case 'sucDownload': return sucDownload(el.dataset.type);
       case 'sucCmd': {

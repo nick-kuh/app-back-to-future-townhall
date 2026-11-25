@@ -301,6 +301,7 @@ function videoKit(message, { eventName } = {}) {
     ...segs.map((s, i) => `  ${i + 1}. ${s.titulo} (${s.dur} s): ${s.line ? `"${s.line}"` : '(sem fala: raios, estrondo e o carro chegando)'}`),
     'Gere os prompts e a configuração de cada segmento para o workflow de vídeo longo.',
     '', '=== IMAGENS DE REFERÊNCIA (prompts em inglês, que os geradores entendem melhor) ===', '',
+    `[retrato_doc.png] (opcional, para usar no telão no lugar do desenho: Painel do Doc → Visão 2027 → Mais opções → Imagem do Doc) Cinematic head-and-shoulders portrait of ${DOC_LOOK}, facing the camera, big excited smile, dark background, cyan rim light from the left, warm orange key light from the right, 35mm, shallow depth of field, 3:4 vertical.`,
     `[ficha_doc.png] Character sheet on a plain light gray background, three views side by side: full body front view, the same character holding a small glowing remote control, and a close-up of the face. ${DOC_LOOK}. Clean studio lighting, consistent proportions.`,
     `[carro.png] ${CAR}, three-quarter front view, parked on a wet neon grid road at night, ${STYLE}.`,
     `[cenario_estrada.png] Empty road at night with a neon grid to the horizon, a big striped sunset sun, low wireframe mountains in magenta, no people, no cars, ${STYLE}.`,
