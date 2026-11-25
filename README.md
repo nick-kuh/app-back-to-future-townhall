@@ -1,13 +1,76 @@
 # ⚡ De Volta ao Futuro · app do townhall
 
-App em tempo real para o townhall: check-in dos participantes (cada pessoa só escolhe o próprio nome na lista),
-blocos controlados pelo apresentador e o bloco **Conexões**: três "viagens no tempo" em duplas de áreas e
-WLs diferentes, com perguntas sincronizadas nos dois celulares, timer de 4 minutos, avaliação por ranking e
-cálculo automático de quem cada pessoa deve procurar depois.
+App em tempo real para o townhall **CDIO HC + BPC · Townhall 2026**: check-in dos participantes (cada pessoa só
+escolhe o próprio nome na lista), o **roteiro do evento em 4 atos** controlado pelo apresentador (as cenas do deck
+no telão, em português) e os blocos interativos. O bloco **Conexões** são três "viagens no tempo" em duplas de
+áreas e WLs diferentes, com perguntas sorteadas e sincronizadas nos dois celulares, timer de 2 minutos, avaliação
+por ranking e cálculo automático de quem cada pessoa deve procurar depois.
 
 - **App do viajante** (celular): `http://SEU-SERVIDOR/`
 - **Painel do Doc** (apresentador/admin): `http://SEU-SERVIDOR/admin.html` · senha padrão `doc1985`
   (troque definindo a variável de ambiente `ADMIN_PASSWORD`).
+
+## 🎬 Roteiro em 4 atos e as cenas do deck
+
+O roteiro padrão segue a agenda do deck `CDIO_HC_BPC_Townhall_2026_BTTF_v18` (14:00 às 17:00, 180 minutos).
+Todo o conteúdo do deck está no app, **em português** e com o visual do app; **Conexões, Reflexão e Sucesso
+continuam como eram**.
+
+| Ato | Passo do roteiro | O que é |
+|---|---|---|
+| I · Reconectar | 🚪 Chegada · Check-in | QR do app, o carro carregando e os circuitos de tempo do evento (destino DEZ 11 2027) |
+| | 🗺️ Plano de voo | a agenda do dia em 4 atos, com horários; marca o item que está NO AR (no celular também) |
+| | 👋 Boas-vindas e jornada | "Fechar 2026 com orgulho. Sair com um destino claro para 2027." e quem fala |
+| | ⚡ Conexões | bloco interativo (sem mudanças de tela, só os ajustes abaixo) |
+| II · Rebobinar 2026 | 📅 Jornada 2026 | o **almanaque**: 12 meses, 51 itens, 41 entregas, €51,3M; "tocar o ano" e o ano em uma página |
+| | 🦋 Como a IA nos ajudou em 2026 | abertura da Frente 2, com o QR do app |
+| | 💭 Reflexão | bloco interativo (sem mudanças) |
+| III · Reconhecer | 🏆 Reconhecimento 2026 | abertura → tributo (vídeo) → **Prêmios Torre do Relógio** → cerimônia de cada prêmio → Hall da Fama |
+| | ☕ Intervalo | cronômetro de 15 min no telão e nos celulares; a música entra |
+| IV · Avançar para 2027 | 🔭 Visão 2027 · Estratégia | a **Estratégia CDIO LATAM 2027** no telão, interativa (arquivo original, sem alterações) |
+| | 📜 Manifesto 2027 | "Nós conhecemos o destino de 2027. O que fez dele um sucesso?" e o QR do app |
+| | 🚀 Sucesso 01 a 04 · 🧪 o Doc | bloco interativo (sem mudanças) |
+| | 🏎️ 88 MPH · Encerramento | o velocímetro vai a 88 (telão e celulares) e "Bem-vindos a 2027" |
+| | 🏁 Créditos | as frases finais do deck, os créditos e o elenco (todos os nomes do check-in) |
+
+Como conduzir cada cena (no **Ao vivo**, um botão principal por vez):
+
+- **Jornada 2026:** `▶ Tocar o ano` avança um mês a cada 3 s e, em dezembro, abre o ano em uma página. Dá para clicar
+  direto em um mês, ir mês a mês e esconder/mostrar BUs e tipos (Mais opções).
+- **Reconhecimento 2026:** `▶ Tributo` → `Abrir os Prêmios` → para cada prêmio: `Conhecer os indicados` →
+  `⚡ Carregar o Flux Capacitor` → o raio cai e o vencedor aparece. Na carga, **cada toque no botão ⚡ CARREGAR dos
+  celulares soma energia no telão** (em média, 6 toques por pessoa enchem; o painel tem `+15%` e `Raio agora`).
+  Os vencedores são definidos antes (Preparar → Agenda e cenas); o "sorteio" é o suspense. Os aparelhos só recebem
+  o nome do vencedor quando o sorteio daquele prêmio começa.
+  - Os indicados do deck são **nomes de exemplo**: o telão mostra o aviso "NOMES DE EXEMPLO" até eles serem editados.
+  - Vídeo-tributo: cole o endereço em Agenda e cenas → Reconhecimento, ou arraste o arquivo para a tela do telão.
+- **Intervalo:** `▶ Iniciar intervalo`, pausar, ±1 min. O cronômetro segue contando se outro passo for mostrado.
+- **Visão 2027 · Estratégia:** a página é clicada **direto na tela do telão** (filtros, pilares). Por padrão ela abre
+  no mapa da estratégia, como no deck; há uma opção para começar pela abertura em vídeo da própria página.
+- **88 MPH:** `🏎️ Acelerar até 2027`.
+
+**Preparar → Agenda e cenas** edita todo o conteúdo sem mexer em código: horários e itens da agenda, textos, itens
+do almanaque (`mês | tipo | BU | benefício | texto`), prêmios (indicados, vencedor, citação), créditos.
+`*Asteriscos*` marcam palavras em destaque. Cada seção tem "Restaurar o conteúdo original".
+
+Onde o deck dizia uma coisa no slide e outra na agenda, vale a **agenda** (ela é a versão atualizada): intervalo de
+15 min (o slide dizia 10), Manifesto de 15 min (o slide dizia 10) e o Intervalo dentro do Ato III. As notas para quem
+apresenta ("use apenas destaques selecionados…", "a confirmar") aparecem só no painel, não no telão.
+
+O código está em `server/cenas.js` (conteúdo, estado e comandos), `public/cenas.js` e `public/cenas.css` (telão).
+A estratégia é `public/estrategia-2027.html`, cópia byte a byte do arquivo enviado (o teste confere o SHA-256).
+
+## ⚡ Conexões: tempos e perguntas
+
+- **2 minutos** de conversa em cada viagem e **40 segundos** para a dupla se encontrar (Preparar → Ajustes muda).
+- Banco de perguntas do **Speed Dating** (PDF da organização): 30 perguntas em três categorias,
+  🟢 **Quebra-gelo**, 🟡 **Conexão** e 🔵 **Além do óbvio** (10 em cada).
+- As perguntas são **sorteadas**: cada dupla recebe a sua própria ordem, ninguém vê a mesma pergunta duas vezes e as
+  duplas começam espalhadas por perguntas diferentes. Dois modos (Preparar → Perguntas):
+  - **Uma categoria por viagem** (padrão): viagem 1 sorteia do Quebra-gelo, viagem 2 da Conexão e viagem 3 do Além do
+    óbvio; se a dupla passar por todas, entram as das outras categorias.
+  - **As três categorias misturadas**: em toda viagem, uma pergunta de cada categoria, em ordem sorteada.
+- No celular aparece **só a pergunta** (com o nome da categoria): não há "pergunta 2 de 10" nem quantas faltam.
 
 ## 🚀 De Volta para o Sucesso (parte 2 do townhall)
 
@@ -227,7 +290,7 @@ Variáveis de ambiente:
 | `ADMIN_PASSWORD` | `doc1985`  | senha do Painel do Doc                    |
 | `DATA_DIR`       | `./data`   | pasta do banco SQLite                     |
 
-Testes (algoritmo de duplas + fluxo completo do evento + integração com o Sucesso + testes originais do Lucas):
+Testes (algoritmo de duplas + fluxo completo do evento + sorteio das perguntas + integração com o Sucesso + cenas do deck + testes originais do Lucas):
 
 ```bash
 npm test
@@ -275,8 +338,9 @@ O painel tem duas áreas.
 
 **▶ Ao vivo** (é onde você fica durante o evento)
 
-- À esquerda, o **roteiro**: Check-in → Conexões → Bloco 1 → Reflexão → Bloco 2 → Bloco 3 → Sucesso
-  01 a 04 → Conclusão. O passo que está no ar fica marcado como **NO AR**.
+- À esquerda, o **roteiro** em 4 atos: Chegada → Plano de voo → Boas-vindas → Conexões → Jornada 2026 → IA em 2026 →
+  Reflexão → Reconhecimento → Intervalo → Visão 2027 → Manifesto → Sucesso 01 a 04 → o Doc → 88 MPH → Créditos.
+  O passo que está no ar fica marcado como **NO AR**.
 - À direita, **só o passo atual**: o que os celulares e o telão estão mostrando, os números do momento
   e **um botão principal por vez** (iniciar viagens, iniciar/encerrar recebimento, sortear viajante…).
   Quando o passo não pede mais nada, o botão principal vira **Mostrar o próximo ▶**.
@@ -293,7 +357,8 @@ O que cada passo faz:
 | Passo | Celulares | Telão | Você faz |
 |---|---|---|---|
 | Check-in | cada pessoa digita o nome e embarca | QR do app + carro carregando | acompanha quem falta |
-| Bloco de fala | nome e tema do bloco, no estilo do logo do filme | modo calmo: título no estilo do logo (seta, rastros de fogo, placa com quem fala, circuitos de tempo) | nada (som desliga sozinho) |
+| Cena do townhall | "olhe para o telão" (agenda, cronômetro, prêmios e 88 MPH aparecem no celular) | a cena do deck | os botões da cena (ver "Roteiro em 4 atos") |
+| Bloco de fala (opcional) | nome e tema do bloco, no estilo do logo do filme | modo calmo: título no estilo do logo (seta, rastros de fogo, placa com quem fala, circuitos de tempo) | nada (som desliga sozinho) |
 | Conexões | dupla, perguntas, avaliação e resultado | cronômetros e "88 MPH" | **Iniciar viagens**; o resto anda sozinho |
 | Reflexão | escolher 1 projeto por parada | menu das paradas, Flux Capacitor, os 2 mais votados (com suspense) | **Abrir parada**, **Iniciar / Encerrar votação**, **Revelar os 2 mais votados**, **Próxima parada** |
 | Sucesso 01–04 | pergunta e resposta, com o nome do check-in | carro carregando; nuvem só ao revelar; sorteio | **Iniciar / Encerrar recebimento**, **Revelar respostas**, **Sortear**, tempo de fala |
@@ -305,14 +370,14 @@ parou. A sala das dinâmicas do Sucesso é criada sozinha.
 
 **⚙ Preparar** (antes do evento)
 
-1. **Roteiro** · a ordem dos passos: reordenar, remover, adicionar blocos de fala e avisos, escrever o
-   tema e quem fala em cada bloco. Pode mudar durante o evento.
+1. **Roteiro** · a ordem dos passos: reordenar, remover, adicionar cenas, blocos de fala e avisos. Pode mudar
+   durante o evento. **Agenda e cenas** · o conteúdo de cada cena do deck.
 2. **Pessoas** · a lista do townhall já vem carregada (47 pessoas). Dá para editar WL/área, adicionar,
    marcar ausente, fazer check-in manual, importar outra lista (colar do Excel) e **importar as respostas
    do forms** (CSV/planilha): as respostas aparecem na tela da dupla como "para puxar assunto".
-3. **Perguntas** · banco inicial com 42 perguntas em três eras (presente · 1985, passado · 1955,
-   futuro · 2015). Edite, desative ou substitua em massa (uma por linha, com prefixo `[presente]`,
-   `[passado]` ou `[futuro]`; `[off]` marca uma desativada).
+3. **Perguntas** · banco com 30 perguntas em três categorias (Quebra-gelo, Conexão, Além do óbvio) e o modo de
+   sorteio. Edite, desative ou substitua em massa (uma por linha, com prefixo `[quebra-gelo]`, `[conexão]` ou
+   `[além do óbvio]`; `[off]` marca uma desativada).
 4. **Ajustes** · tempos das viagens, fluxo automático ou manual, textos, som (onde toca, arquivos
    próprios) e acesso.
 5. **Testes** · check-in de todos, modo demo com tempos curtos, avaliações aleatórias e **resetar o
@@ -329,8 +394,8 @@ dupla" no passo Conexões, com um botão para incluir a pessoa nas próximas via
   em duas viagens. Número ímpar de pessoas forma um trio. Só se for impossível, o app relaxa a regra
   (primeiro libera WL, depois área) e avisa no painel. Com a lista atual (47 pessoas) as três rodadas saem
   sem relaxar nada.
-- **Perguntas**: cada viagem prioriza a era correspondente; ninguém recebe uma pergunta que já viu e cada
-  dupla começa em um ponto diferente da lista (duplas vizinhas não discutem a mesma pergunta ao mesmo tempo).
+- **Perguntas**: sorteadas para cada dupla (ver "Conexões: tempos e perguntas"); ninguém recebe uma pergunta que
+  já viu e as duplas começam por perguntas diferentes enquanto houver perguntas sobrando na categoria.
 - **Ranking → conexão**: 1º lugar vale 3 pontos, 2º vale 2, 3º vale 1. Para cada par que conversou, soma-se
   o que cada lado deu ao outro. A conexão sugerida é o par com maior soma (desempate: quem te colocou mais
   alto). Se os dois se escolheram, aparece "conexão mútua".
@@ -341,7 +406,8 @@ dupla" no passo Conexões, com um botão para incluir a pessoa nas próximas via
 server/index.js      servidor HTTP + Socket.IO + API do admin
 server/engine.js     estado do evento: blocos, fases, timer, duplas, filas, ranking, resultados
 server/matching.js   algoritmo de pareamento (área ≠, WL ≠, sem repetição, trio se ímpar)
-server/queues.js     filas de perguntas por dupla (eras, sem repetir, rotação)
+server/queues.js     filas de perguntas por dupla (três categorias, sorteio por dupla, sem repetir)
+server/cenas.js      cenas do deck do townhall: conteúdo em português, estado ao vivo e comandos do Doc
 server/results.js    ranking → conexões
 server/db.js         SQLite (node:sqlite) e esquema
 server/seed/         lista de pessoas e banco de perguntas iniciais
@@ -349,6 +415,8 @@ server/sucesso.js    ponte com o De Volta para o Sucesso (API do Lucas sem alter
 server/reflexao.js   bloco Reflexão: paradas, projetos, votos, cronômetro e os 2 mais votados
 public/dados.*       página de extração de dados (Conexões, Reflexão, Sucesso) com download em .csv
 public/              app do viajante (index.html, app.*), telão (telao.*), Painel do Doc (admin.*)
+public/cenas.*       as cenas do deck no telão (plano de voo, almanaque, prêmios, intervalo, estratégia, 88 MPH)
+public/estrategia-2027.html  a Estratégia CDIO LATAM 2027 (arquivo original, sem alterações)
 public/delorean3d.js motor 3D (céu, estrada, raios, portal) extraído do painel do Sucesso
 public/delorean-model.js  DeLorean realista (Three.js) · public/nuvem.js  nuvem de palavras
 public/flux.js       Flux Capacitor 3D do bloco Reflexão (motor do protótipo, sem bibliotecas)

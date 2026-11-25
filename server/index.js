@@ -9,6 +9,7 @@ const { Engine, TOTAL_ROUNDS } = require('./engine');
 const { DB_PATH, DATA_DIR } = require('./db');
 const { createSucesso } = require('./sucesso');
 const { createReflexao } = require('./reflexao');
+const { createCenas } = require('./cenas');
 const doc = require('./doc');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -27,6 +28,10 @@ const sucesso = createSucesso({ dbPath: process.env.SUCESSO_DB_PATH || path.join
 // Bloco Reflexão (paradas com votação em projetos): está no ar quando o roteiro está nesse passo e não há dinâmica do Sucesso na tela
 const reflexao = createReflexao();
 const reflexaoOnAir = () => engine.state.block === 'reflexao' && !engine.state.presentation;
+// Cenas do deck do townhall (plano de voo, almanaque 2026, reconhecimento, intervalo, estratégia 2027, 88 MPH…):
+// a cena no ar é a do passo atual do roteiro, quando não há dinâmica do Sucesso nem tela avulsa por cima
+const cenas = createCenas();
+const cenaOnAir = () => (engine.state.block === 'cena' && !engine.state.presentation ? engine.currentStep().cena || null : null);
 
 app.disable('x-powered-by');
 app.use(require('compression')()); // gzip: páginas e scripts chegam mais rápido no Wi-Fi do evento
@@ -55,6 +60,10 @@ function publicState() {
   const s = engine.publicState();
   if (s.presentation) s.presentation.live = sucesso.ready() ? sucesso.live(engine.state.presentation) : null;
   s.reflexao = reflexaoOnAir() ? reflexao.publicState() : null;
+  const kind = cenaOnAir();
+  s.cena = kind ? cenas.publicState(kind, { steps: engine.settings.steps, index: s.step.index }) : null;
+  s.evento = cenas.evento();                                         // nome do evento e circuitos de tempo (check-in, créditos)
+  s.creditos = engine.state.block === 'closing' ? cenas.creditos() : null;
   return s;
 }
 // Estado da pessoa + o que ela já respondeu na dinâmica em exibição e se foi a sorteada
@@ -162,7 +171,7 @@ app.post('/api/admin/action', wrap(req => {
     case 'openRanking': engine.openRanking(); break;
     case 'computeResults': engine.computeResults(); break;
     case 'resetConnections': engine.resetConnections(); break;
-    case 'resetEvent': reflexao.clearAll({ silent: true }); engine.resetEvent(); sucesso.clearRoom(engine.state.sucessoRoom).catch(e => console.error('[sucesso] limpar sala:', e.message)); break;
+    case 'resetEvent': reflexao.clearAll({ silent: true }); cenas.resetState({ silent: true }); engine.resetEvent(); sucesso.clearRoom(engine.state.sucessoRoom).catch(e => console.error('[sucesso] limpar sala:', e.message)); break;
     case 'testCheckinAll': engine.testCheckinAll(); break;
     case 'testRandomRankings': engine.testRandomRankings(); break;
     default: throw new Error('Ação desconhecida: ' + a.type);
@@ -184,6 +193,7 @@ async function ensureRoom() {
 async function goStep(id) {
   const step = engine.stepById(id);
   if (!step) throw Object.assign(new Error('Esse passo não está mais no roteiro.'), { status: 404 });
+  if (step.type === 'cena' && engine.state.step !== step.id) cenas.enter(step.cena); // vindo de outro passo, a cena começa do início (voltar de um aviso rápido não recomeça)
   if (step.type === 'sucesso') {
     if (!sucesso.ready()) throw Object.assign(new Error('As dinâmicas do Sucesso ainda estão carregando. Tente de novo em instantes.'), { status: 503 });
     const selection = await sucesso.prepare(await ensureRoom(), step.activity);
@@ -271,6 +281,17 @@ app.post('/api/admin/reflexao', wrap(req => {
   }
   return { ok: true };
 }));
+// Cenas do deck: comandos do Doc (mês do almanaque, cerimônia dos prêmios, cronômetro do intervalo, 88 MPH) e o conteúdo.
+app.post('/api/admin/cena', wrap(req => {
+  const a = req.body || {};
+  if (a.action === 'config') { cenas.setConfig(a.config || {}); return { ok: true }; }
+  if (a.action === 'resetConfig') { cenas.resetConfig(a.key ? String(a.key) : null); return { ok: true }; }
+  if (a.action === 'resetState') { cenas.resetState(); return { ok: true }; }
+  const kind = String(a.kind || '');
+  if (cenaOnAir() !== kind) throw Object.assign(new Error('Coloque essa cena no ar (no roteiro) antes.'), { status: 409 });
+  cenas.command(kind, a);
+  return { ok: true };
+}));
 // Página de extração de dados (/dados.html): tudo o que o evento gerou, em um pedido só.
 app.get('/api/admin/export', wrap(() => {
   const c = engine.publicState().counts;
@@ -350,8 +371,11 @@ function pushAdmin() {
 }
 // O evento saiu da Reflexão (outro passo, aviso, dinâmica do Sucesso): a votação em andamento fica pausada.
 engine.onChange(() => { if (!reflexaoOnAir()) reflexao.hold(); });
+engine.onChange(() => cenas.sync(cenaOnAir())); // saiu de uma cena: o que estava tocando para
 engine.onChange(pushAll);
 reflexao.onChange(pushAll);
+cenas.onChange(pushAll);
+cenas.onPulse(p => io.emit('cena:pulse', p));   // carga do Flux Capacitor subindo com os toques dos celulares
 // Resposta nova ou comando numa dinâmica do Sucesso: celulares, telão e painel atualizam na hora.
 let pulseTimer = null, expiryTimer = null;
 function armExpiry() { // o prazo de recebimento acaba sem nenhum comando: avisa os aparelhos nessa hora
@@ -381,7 +405,7 @@ function telaoStatus() {
   const doc = list.map(t => t.doc).filter(Boolean).sort((a, b) => b.at - a.at)[0] || null; // onde a cena do Doc está no telão
   return { count: list.length, sound: list.some(t => !t.locked), auth: list.some(t => t.auth), doc };
 }
-const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null, reflexao: reflexao.adminState(),
+const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null, reflexao: reflexao.adminState(), cenas: cenas.adminState(),
   doc: { ai: doc.hasAI(), model: doc.MODEL, parts: doc.parts(engine.state.doc.message) } });
 
 // Liga o socket à pessoa dona do token (do evento ou guardado no socket) e revalida sempre:
@@ -425,6 +449,14 @@ io.on('connection', socket => {
       engine.submitRanking(pid, ranks);
       if (typeof ack === 'function') ack({ ok: true });
     } catch (e) { if (typeof ack === 'function') ack({ ok: false, error: e.message }); }
+  });
+  // Reconhecimento: cada toque no celular ("aplauso") soma energia ao Flux Capacitor do telão
+  socket.on('cena:tap', (payload, ack) => {
+    try {
+      const pid = bind(socket, payload && payload.token);
+      if (!pid || cenaOnAir() !== 'reconhecimento') return safeAck(ack, { ok: false });
+      safeAck(ack, { ok: cenas.tap(pid, engine.publicState().counts.checkedIn) });
+    } catch (e) { safeAck(ack, { ok: false }); }
   });
   socket.on('admin:hello', (payload, ack) => {
     try {

@@ -134,7 +134,7 @@ async function serverFlow() {
     for (let i = 0; i < 30 && !ov.sucesso; i++) { await new Promise(r => setTimeout(r, 100)); ov = (await call('GET', '/api/admin/overview')).json; }
     assert.equal(ov.doc.ai, true); assert.equal(ov.state.doc.status, 'idle');
     const steps = ov.settings.steps, docStep = steps.find(x => x.type === 'doc');
-    assert.ok(docStep, 'o roteiro padrão tem a Visão 2027'); assert.equal(steps[steps.indexOf(docStep) + 1].type, 'closing');
+    assert.ok(docStep, 'o roteiro padrão tem a Visão 2027 do Doc'); assert.equal(steps[steps.indexOf(docStep) - 1].activity, 'd4'); assert.equal(steps[steps.indexOf(docStep) + 1].cena, 'mph'); // fecha o Sucesso, antes do 88 MPH
 
     // respostas nas dinâmicas pelo app (com o nome do check-in)
     const people = (await call('GET', '/api/people')).json, tokens = [];

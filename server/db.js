@@ -91,7 +91,7 @@ function resetQuestions() {
   const questions = require('./seed/questions');
   db.exec('DELETE FROM questions');
   const ins = db.prepare('INSERT INTO questions (text, era, sort_order) VALUES (?, ?, ?)');
-  for (const q of questions) ins.run(q.text, q.era, q.sort_order);
+  for (const q of questions) ins.run(q.text, q.cat, q.sort_order); // a coluna "era" guarda a categoria da pergunta
 }
 
 module.exports = { db, kvGet, kvSet, seedIfEmpty, resetQuestions, DB_PATH, DATA_DIR };

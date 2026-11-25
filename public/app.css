@@ -170,7 +170,8 @@ h3{font-size:14px;letter-spacing:2px;text-transform:uppercase;color:var(--cyan)}
 @keyframes reveal{0%{opacity:0;transform:scale(.94);filter:blur(6px)}100%{opacity:1;transform:none;filter:none}}
 .question>*{position:relative}
 .question .ic{font-size:30px}
-.question .k{font:400 8px var(--pixel);letter-spacing:1px;color:var(--orange);margin:8px 0 12px;line-height:1.6}
+.question .k{font:400 8px var(--pixel);letter-spacing:1px;color:var(--qc,var(--orange));margin:8px 0 12px;line-height:1.6}
+.question .ic+.q{margin-top:10px}
 .question .q{font-size:21px;font-weight:700;line-height:1.35}
 .qnav{display:flex;gap:10px;margin-top:4px}
 .qnav .btn{flex:1}
@@ -359,3 +360,20 @@ textarea.input{resize:none;line-height:1.4;font-size:16px;font-weight:500;min-he
 .docpaper span::before{content:"■ ";color:#8d1313}
 .docm.end{text-align:center}
 .docyear{margin-top:10px;font:900 italic 54px var(--display);background:linear-gradient(180deg,#ff2a12,#ffab12 62%,#ffe65c);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 14px rgba(255,120,20,.45))}
+
+/* ===== cenas do deck do townhall (plano de voo, intervalo, prêmios) ===== */
+.panel.ag{border-color:color-mix(in srgb,var(--c) 55%,transparent)}
+.panel.ag::before{background:var(--c)}
+.ag-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}
+.ag-h b{font:400 9px var(--pixel);letter-spacing:1px;color:var(--c);line-height:1.6}
+.ag-h span{font:700 12px var(--led);color:var(--muted);white-space:nowrap}
+.ag-it{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:10px 6px;border-top:1px solid rgba(188,174,224,.16)}
+.ag-it>b{font:700 14px var(--led);color:var(--muted);padding-top:1px}
+.ag-it>span{font:800 15px/1.25 Inter;min-width:0;overflow-wrap:anywhere}
+.ag-it small{display:block;font:500 12.5px/1.35 Inter;color:var(--muted);margin-top:3px}
+.ag-it>i{font:800 11px Inter;font-style:normal;color:#0b0618;background:var(--c);border-radius:99px;padding:2px 9px;white-space:nowrap}
+.ag-it.feito{opacity:.45}
+.ag-it.agora{background:color-mix(in srgb,var(--c) 14%,transparent);box-shadow:inset 3px 0 0 var(--c);border-radius:6px}
+.btn.charge{margin-top:14px;padding:26px 14px;font-size:22px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.btn.charge.hit{animation:chargehit .18s}
+@keyframes chargehit{40%{transform:scale(.96);filter:brightness(1.35)}}

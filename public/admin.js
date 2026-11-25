@@ -13,16 +13,22 @@
   const PHASE_LABEL = { idle: 'sem duplas', ready: 'duplas prontas', matching: 'duplas se encontrando', talk: 'conversa em andamento', roundEnd: '88 MPH (intervalo)', ranking: 'avaliação aberta', results: 'resultados publicados' };
   const TIMER_LABEL = { matching: 'encontro', talk: 'conversa', break: 'intervalo', ranking: 'avaliação' };
   // roteiro do evento
-  const STEP_ICON = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', doc: '🧪', reflexao: '💭', message: '📣', standby: '📺', closing: '🏁' };
-  const STEP_KIND = { checkin: 'Check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', doc: 'Encerramento do Sucesso', reflexao: 'Dinâmica · Reflexão', message: 'Aviso', standby: 'Olhos no telão', closing: 'Conclusão' };
+  const STEP_ICONS = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', doc: '🧪', reflexao: '💭', cena: '🎬', message: '📣', standby: '📺', closing: '🏁' };
+  // cenas do deck do townhall: nome, ícone e resumo vêm do servidor (server/cenas.js)
+  const cenaMeta = x => ((A.O && A.O.cenas && A.O.cenas.meta) || {})[x.cena] || { name: 'Cena', icon: '🎬', hint: '' };
+  const STEP_ICON = new Proxy({}, { get: (_, t) => STEP_ICONS[t] }); // por tipo (o editor do roteiro usa); stepIcon(x) sabe o ícone de cada cena
+  const stepIcon = x => (x.type === 'cena' ? cenaMeta(x).icon : STEP_ICONS[x.type]);
+  const STEP_KIND = { checkin: 'Chegada · check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', doc: 'Encerramento do Sucesso', reflexao: 'Dinâmica · Reflexão', cena: 'Cena do townhall', message: 'Aviso', standby: 'Olhos no telão', closing: 'Créditos' };
   const STEP_HINT = { checkin: 'as pessoas entram pelo nome', connections: '3 viagens em duplas e avaliação', sucesso: 'pergunta ao vivo, nuvem de palavras', doc: 'o Doc chega de 2027 e resume tudo o que foi escrito', reflexao: 'paradas com votação em projetos e os 2 mais votados', standby: 'celulares em pausa, atenção no telão', closing: 'agradecimento e créditos' };
   const SUC_NAME = { d1: 'Antes de Partir', d2: 'Look Back', d3: 'Uso de IA', d4: 'Look Ahead' };
   const SUC_COLOR = { d1: 'var(--cyan)', d2: 'var(--yellow)', d3: 'var(--magenta)', d4: 'var(--orange)' };
   const SUC_PHASE = { idle: 'aguardando você iniciar', run: 'recebendo respostas', paused: 'recebimento pausado', done: 'recebimento encerrado' };
   const TALK = { d2: 120, d3: 180 }; // dinâmicas com sorteio e tempo de fala (como no painel do Lucas)
-  const stepTitle = x => (x.type === 'checkin' ? 'Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : x.type === 'reflexao' ? 'Reflexão' : x.type === 'doc' ? 'Visão 2027 · o Doc' : 'Conclusão');
-  const DEFAULT_STEPS = () => [{ type: 'checkin' }, { type: 'connections' }, { type: 'stage', title: 'Bloco 1', theme: '', speaker: '' }, { type: 'reflexao' }, { type: 'stage', title: 'Bloco 2', theme: '', speaker: '' }, { type: 'stage', title: 'Bloco 3', theme: '', speaker: '' },
-    { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' }, { type: 'doc' }, { type: 'closing' }];
+  const stepTitle = x => (x.type === 'checkin' ? 'Chegada · Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : x.type === 'reflexao' ? 'Reflexão' : x.type === 'doc' ? 'Visão 2027 · o Doc' : x.type === 'cena' ? cenaMeta(x).name : 'Créditos');
+  // roteiro padrão: a agenda do townhall em 4 atos (o mesmo do servidor)
+  const DEFAULT_STEPS = () => { const cena = k => ({ type: 'cena', cena: k }), suc = k => ({ type: 'sucesso', activity: k });
+    return [{ type: 'checkin' }, cena('agenda'), cena('boasvindas'), { type: 'connections' }, cena('almanaque'), cena('ia'), { type: 'reflexao' }, cena('reconhecimento'), cena('intervalo'),
+      cena('visao'), cena('manifesto'), suc('d1'), suc('d2'), suc('d3'), suc('d4'), { type: 'doc' }, cena('mph'), { type: 'closing' }]; };
   const AUDIO_LABEL = { music: '🎵 Música', ambient: '🎼 Trilha', off: '🔇 Sem áudio' };
 
   const A = { key: localStorage.getItem('bttf.admin') || '', O: null, tab: 'live', prep: 'roteiro', sel: null, open: new Set(), edit: null, stepsDraft: null, round: 1, offset: 0, socket: null, peopleQ: '', connected: false, lastHtml: '', pressing: false };
@@ -57,6 +63,10 @@
     A.socket.on('connect', () => A.socket.emit('admin:hello', { key: A.key }, onHello));
     A.socket.on('disconnect', () => { A.connected = false; renderStatus(); });
     A.socket.on('admin:overview', o => { A.O = o; A.offset = o.now - Date.now(); render(); });
+    A.socket.on('cena:pulse', p => { // carga do Flux Capacitor subindo com os toques dos celulares
+      if (!A.O || !A.O.cenas || !p || p.kind !== 'reconhecimento') return; A.O.cenas.state.reconhecimento.carga = p.carga;
+      const n = $('#recPct'), b = $('#recBar'); if (n) n.textContent = Math.round(p.carga * 100) + '%'; if (b) b.style.width = Math.round(p.carga * 100) + '%';
+    });
   }
   function onHello(res) {
     if (!res || !res.ok) { localStorage.removeItem('bttf.admin'); A.key = ''; $('#login').classList.remove('hidden'); $('#loginMsg').textContent = 'Senha inválida.'; return; }
@@ -70,15 +80,15 @@
 
   /* ---------- render ---------- */
   // Duas áreas: "Ao vivo" (o roteiro e o passo que está no ar) e "Preparar" (roteiro, pessoas, perguntas, ajustes, testes).
-  const PREP = [['roteiro', 'Roteiro'], ['reflexao', 'Reflexão'], ['people', 'Pessoas'], ['questions', 'Perguntas'], ['config', 'Ajustes'], ['tests', 'Testes']];
+  const PREP = [['roteiro', 'Roteiro'], ['cenas', 'Agenda e cenas'], ['reflexao', 'Reflexão'], ['people', 'Pessoas'], ['questions', 'Perguntas'], ['config', 'Ajustes'], ['tests', 'Testes']];
   function render(force) {
     if (!A.O) return;
     renderStatus(); renderAudio();
     if (A.pressing) { clearTimeout(A.renderLater); A.renderLater = setTimeout(() => render(force), 250); return; }
     const view = A.tab === 'live' ? 'live' : 'prep-' + A.prep;
-    if (!force && ['prep-config', 'prep-tests', 'prep-reflexao'].includes(view) && $('#main').dataset.view === view) return;
+    if (!force && ['prep-config', 'prep-tests', 'prep-reflexao', 'prep-cenas'].includes(view) && $('#main').dataset.view === view) return;
     const html = A.tab === 'live' ? vLive()
-      : `<div class="subtabs prepnav">${PREP.map(([k, l]) => `<button class="${A.prep === k ? 'on' : ''}" data-prep="${k}">${l}</button>`).join('')}<a class="datalink" href="/dados.html" target="_blank" title="Página de extração: Conexões, Reflexão e Sucesso, com download em .csv">📊 Dados do evento ↗</a></div>` + ({ roteiro: vRoteiro, reflexao: vReflexaoCfg, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.prep]();
+      : `<div class="subtabs prepnav">${PREP.map(([k, l]) => `<button class="${A.prep === k ? 'on' : ''}" data-prep="${k}">${l}</button>`).join('')}<a class="datalink" href="/dados.html" target="_blank" title="Página de extração: Conexões, Reflexão e Sucesso, com download em .csv">📊 Dados do evento ↗</a></div>` + ({ roteiro: vRoteiro, cenas: vCenasCfg, reflexao: vReflexaoCfg, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.prep]();
     if (!force && $('#main').dataset.view === view && html === A.lastHtml) return;
     A.lastHtml = html;
     const y = window.scrollY;
@@ -110,6 +120,7 @@
     if (step.type === 'sucesso') { const a = sucAct(step.activity), ph = sucEff(a); if (ph) extra = ` · ${ph === 'run' ? 'recebendo' + (a.endsAt ? ' ' + fmt(sucLeft(a)) : '') : ph === 'done' ? 'encerrado' : ph === 'paused' ? 'pausado' : 'não iniciado'} · ${a.responseCount} resp.`; }
     if (step.type === 'stage' && step.theme) extra = ` · ${step.theme}`;
     if (step.type === 'reflexao' && O.reflexao) { const R = O.reflexao, p = R.open === null ? null : R.paradas[R.open]; extra = p ? ` · parada ${pad(R.open + 1)} · ${p.phase === 'run' ? 'votando ' + fmt(rfxLeft(p)) : p.phase === 'done' ? 'encerrada' : p.phase === 'paused' ? 'pausada' : 'não iniciada'} · ${p.votes} votos` : ' · menu das paradas'; }
+    if (step.type === 'cena') extra = cenaSub(step, true) ? ` · ${cenaSub(step, true)}` : '';
     return `${i + 1}/${steps.length} · ${step.type === 'sucesso' ? 'Sucesso ' + step.activity.slice(1).padStart(2, '0') : stepTitle(step)}${extra}`;
   }
   function renderStatus() {
@@ -159,6 +170,7 @@
     }
     if (x.type === 'message') return x.body || '';
     if (x.type === 'doc') { const d = O.state.doc || {}, n = docTotal(); return d.status === 'generating' ? 'o Doc está escrevendo…' : d.play ? (d.play.paused ? 'cena pausada' : 'cena no telão') : d.message ? `mensagem pronta${d.phones ? ' · nos celulares' : ''}` : `${n} ${n === 1 ? 'resposta' : 'respostas'} para o Doc ler`; }
+    if (x.type === 'cena') return cenaSub(x) || cenaMeta(x).hint;
     if (x.type === 'reflexao' && O.reflexao) { const R = O.reflexao, done = R.paradas.filter(p => p.top.length).length, votes = R.paradas.reduce((a, p) => a + p.votes, 0); return votes || done ? `${done} de ${R.paradas.length} paradas reveladas · ${votes} votos` : `${R.paradas.length} paradas · votação em projetos`; }
     return STEP_HINT[x.type] || '';
   }
@@ -178,7 +190,7 @@
     // viagem interrompida no meio (o evento saiu do passo Conexões): fica marcada como em pausa, não como feita
     const held = x => x.type === 'connections' && ['matching', 'talk', 'roundEnd', 'ranking'].includes(O.state.conn.phase);
     const road = steps.map((x, n) => `<button class="rs ${n === i ? 'now' : held(x) ? 'held' : n < i ? 'done' : ''} ${sel && sel.id === x.id ? 'sel' : ''}" data-act="jumpStep" data-id="${x.id}" title="${n === i ? 'Este passo está no ar' : 'Abrir este passo aqui no painel (o telão só muda quando você clicar em Mostrar)'}">
-        <span class="n">${n === i ? n + 1 : held(x) ? '⏸' : n < i ? '✓' : n + 1}</span><span class="ic">${STEP_ICON[x.type]}</span>
+        <span class="n">${n === i ? n + 1 : held(x) ? '⏸' : n < i ? '✓' : n + 1}</span><span class="ic">${stepIcon(x)}</span>
         <span class="tx"><b>${esc(stepTitle(x))}</b><small>${esc(stepSub(x))}</small></span>${n === i ? `<span class="air">${detour ? 'pausado' : 'no ar'}</span>` : ''}</button>`).join('');
     const extras = `<div class="road-extra">
         <div class="small">Fora do roteiro</div>
@@ -194,7 +206,7 @@
   function panelPreview(x, n, total, live, detour) {
     const ed = editing(x), O = A.O;
     const what = { checkin: 'Celulares: cada pessoa digita o nome e embarca · Telão: QR do app', stage: 'Celulares: nome e tema do bloco · Telão calmo, com o título do bloco', connections: 'Celulares: dupla, perguntas e avaliação · Telão: cronômetros',
-      reflexao: 'Celulares: escolher 1 projeto por parada · Telão: Flux Capacitor e os 2 mais votados', doc: 'Celulares: "olhe para o telão" e, depois, a mensagem · Telão: o Doc chega de 2027 e lê o resumo das 4 dinâmicas', sucesso: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar', message: 'Celulares e telão: este aviso', standby: 'Celulares em pausa · Telão: logo', closing: 'Celulares: agradecimento e a conexão de cada um · Telão: créditos' }[x.type];
+      reflexao: 'Celulares: escolher 1 projeto por parada · Telão: Flux Capacitor e os 2 mais votados', doc: 'Celulares: "olhe para o telão" e, depois, a mensagem · Telão: o Doc chega de 2027 e lê o resumo das 4 dinâmicas', sucesso: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar', message: 'Celulares e telão: este aviso', standby: 'Celulares em pausa · Telão: logo', closing: 'Celulares: agradecimento e a conexão de cada um · Telão: as frases finais e os créditos', cena: x.type === 'cena' ? CENA_AIR[x.cena] : '' }[x.type];
     let body = `<p class="lead">${esc(what)}</p>`;
     if (x.type === 'stage') body += ed ? `<div class="form editstep">${editField('Nome do bloco', 'title', ed.title)}${editField('Tema (aparece no celular e no telão)', 'theme', ed.theme)}${editField('Quem fala (opcional)', 'speaker', ed.speaker)}${editActions}</div>`
       : `<div class="theme">${esc(x.theme || 'Sem tema definido')}</div>${x.speaker ? `<div class="speaker">com ${esc(x.speaker)}</div>` : ''}<div class="actions">${btn('✎ Editar tema', 'editStep', { cls: 'ghost sm', data: { id: x.id } })}</div>`;
@@ -203,10 +215,11 @@
     if (x.type === 'sucesso') body += `<p class="question">${esc(sucAct(x.activity).question || '')}</p>`;
     if (x.type === 'doc') body += `<p class="small">${docTotal()} respostas nas 4 dinâmicas · ${O.state.doc && O.state.doc.message ? 'mensagem pronta' : 'a mensagem pode ser gerada agora, antes de colocar no ar'}</p>${O.state.doc && O.state.doc.message ? '' : `<div class="actions">${btn('✨ Gerar a mensagem agora', 'docGen', { cls: 'ghost sm', disabled: O.state.doc && O.state.doc.status === 'generating' })}</div>`}`;
     if (x.type === 'reflexao' && O.reflexao) body += `<p class="small">${O.reflexao.config.themes.length} paradas · ${O.reflexao.config.projects.length} projetos na lista · <a href="#" data-go="reflexao">editar</a></p>`;
+    if (x.type === 'cena') body += `<p class="small">${esc(cenaMeta(x).hint)} · <a href="#" data-go="cenas" data-sec="${x.cena}">editar o conteúdo</a></p>`;
     if (SKIP_OF[x.type]) body += skipLine(SKIP_OF[x.type]);
     return `<section class="stepbox preview t-${x.type}" ${x.type === 'sucesso' ? `style="--c:${SUC_COLOR[x.activity]}"` : ''}>
       <div class="sb-head"><span class="kick">Passo ${n + 1} de ${total} · ${STEP_KIND[x.type]}</span><span class="offair">fora do ar · aberto só aqui no painel</span></div>
-      <h1>${STEP_ICON[x.type]} ${esc(stepTitle(x))}</h1>
+      <h1>${stepIcon(x)} ${esc(stepTitle(x))}</h1>
       ${body}
       <div class="sb-actions">${btn('📺 Mostrar no telão e nos celulares', 'goStep', { cls: 'big', data: { id: x.id } })}</div>
       <div class="sb-nav"><a href="#" data-act="jumpStep" data-id="${live.id}">← voltar para o que está no ar: ${esc(detour ? (detour === 'message' ? 'aviso' : 'olhos no telão') : stepTitle(live))}</a><span></span></div>
@@ -214,13 +227,13 @@
   }
   // Painel do passo atual: um botão principal por vez; quando o passo não pede mais nada, o principal é "Próximo".
   function panelStep(step, i, total, next, prev) {
-    const p = ({ checkin: pCheckin, stage: pStage, connections: pConnections, sucesso: pSucesso, doc: pDoc, reflexao: pReflexao, message: pMessage, standby: pStandby, closing: pClosing })[step.type](step);
+    const p = ({ checkin: pCheckin, stage: pStage, connections: pConnections, sucesso: pSucesso, doc: pDoc, reflexao: pReflexao, cena: pCena, message: pMessage, standby: pStandby, closing: pClosing })[step.type](step);
     // "Próximo" vira o botão principal quando o passo não pede mais nada; com algo em andamento ele fica discreto
     const nextBig = !p.primary && !p.busy;
     const nextBtn = next ? btn(`Mostrar o próximo: ${esc(stepTitle(next))} ▶`, 'goStep', { cls: nextBig ? 'big next' : 'ghost next', data: { id: next.id, guard: p.busy || '' } }) : '';
     return `<section class="stepbox t-${step.type}" ${step.type === 'sucesso' ? `style="--c:${SUC_COLOR[step.activity]}"` : p.color ? `style="--c:${p.color}"` : ''}>
       <div class="sb-head"><span class="kick">Passo ${i + 1} de ${total} · ${STEP_KIND[step.type]}</span><span class="onair">${esc(p.onair || '')}</span></div>
-      <h1>${STEP_ICON[step.type]} ${esc(p.title || stepTitle(step))}</h1>
+      <h1>${stepIcon(step)} ${esc(p.title || stepTitle(step))}</h1>
       ${p.body || ''}
       ${p.warn ? `<div class="sb-warn">${p.warn}</div>` : ''}
       <div class="sb-actions">${p.primary || (nextBig ? nextBtn : '')}${(p.secondary || []).join('')}${nextBig && !next ? '<span class="ok">✔ Último passo do roteiro</span>' : ''}</div>
@@ -264,11 +277,110 @@
   }
   const pStandby = () => ({ onair: 'Celulares em pausa · Telão: logo', body: `<p class="lead">${esc(A.O.settings.standbyText || '')}</p>` });
   function pClosing() {
-    return { onair: 'Celulares: agradecimento e a conexão de cada um · Telão: créditos',
-      body: `<p class="lead">${esc(A.O.settings.closingText || '')}</p>
+    return { onair: 'Celulares: agradecimento e a conexão de cada um · Telão: as frases finais e os créditos',
+      body: `<p class="lead">${esc(A.O.settings.closingText || '')}</p><p class="small">Os créditos (produtores, frentes, agradecimentos) e as frases finais ficam em <a href="#" data-go="cenas" data-sec="creditos">Preparar → Agenda e cenas</a>. O elenco (todos os nomes do check-in) entra sozinho.</p>
         <div class="actions"><a class="btn ghost" href="/dados.html" target="_blank">📊 Extrair os dados do evento ↗</a></div>
         <div class="actions" style="align-items:center"><span class="small">Respostas do Sucesso:</span>${['d1', 'd2', 'd3', 'd4'].map(k => btn(`${k.slice(1).padStart(2, '0')} · ${SUC_NAME[k]}`, 'sucAnswers', { cls: 'ghost xs', data: { k } })).join('')}</div>` };
   }
+  /* ---------- cenas do deck do townhall: o que cada uma mostra e os comandos do Doc ---------- */
+  const CENA_AIR = { agenda: 'Celulares: a agenda do dia · Telão: o plano de voo em 4 atos', boasvindas: 'Celulares: "olhe para o telão" · Telão: a frase de abertura e quem fala',
+    almanaque: 'Celulares: "olhe para o telão" · Telão: o almanaque 2026, mês a mês', ia: 'Celulares: "olhe para o telão" · Telão: abertura da Frente 2 e o QR do app',
+    reconhecimento: 'Celulares: o prêmio, o botão de carregar e o vencedor · Telão: a cerimônia', intervalo: 'Celulares e telão: o cronômetro do intervalo · a música entra',
+    visao: 'Celulares: "olhe para o telão" · Telão: a Estratégia CDIO LATAM 2027 (interativa)', manifesto: 'Celulares: "olhe para o telão" · Telão: a pergunta do manifesto e o QR do app', mph: 'Celulares e telão: o velocímetro até 88 MPH e a chegada a 2027' };
+  const cenaBtn = (label, kind, a, o = {}) => btn(label, 'cena', { ...o, data: { kind, a, ...(o.data || {}) } });
+  const cfgLink = (sec, label = 'editar o conteúdo') => `<a href="#" data-go="cenas" data-sec="${sec}">${label}</a>`;
+  const ivLeft = () => { const C = A.O.cenas, s = C.state.intervalo; return s.phase === 'run' && s.endsAt ? Math.max(0, Math.ceil((s.endsAt - Date.now() - A.offset) / 1000)) : s.remaining === null ? C.config.intervalo.min * 60 : s.remaining; };
+  const ivPhase = () => { const s = A.O.cenas.state.intervalo; return s.phase === 'run' && s.endsAt && s.endsAt <= Date.now() + A.offset ? 'done' : s.phase; };
+  const REC_FASE = { intro: 'abertura', tributo: 'tributo', premios: 'prêmios', cerimonia: 'cerimônia', hall: 'Hall da Fama' };
+  const REC_PASSO = { categoria: 'a categoria', indicados: 'os indicados', carga: 'carregando o Flux Capacitor', sorteio: 'sorteio (o raio vai cair)', vencedor: 'vencedor revelado' };
+  // resumo de uma linha (roteiro e "no ar")
+  function cenaSub(x, live) {
+    const C = A.O.cenas; if (!C) return '';
+    if (x.cena === 'almanaque') { const s = C.state.almanaque; return s.pagina ? 'o ano em uma página' : s.mes >= 0 ? `${C.months[s.mes]}${s.tocando ? ' · tocando o ano' : ''}` : live ? 'em branco' : ''; }
+    if (x.cena === 'reconhecimento') { const s = C.state.reconhecimento, n = C.config.reconhecimento.premios.length; return s.feitos.length || live ? `${live ? REC_FASE[s.fase] + ' · ' : ''}${s.feitos.length} de ${n} prêmios revelados` : ''; }
+    if (x.cena === 'intervalo') { const ph = ivPhase(); return ph === 'run' ? `faltam ${fmt(ivLeft())}` : ph === 'paused' ? `pausado em ${fmt(ivLeft())}` : ph === 'done' ? 'terminou' : live ? 'cronômetro parado' : `${C.config.intervalo.min} min`; }
+    if (x.cena === 'mph') return C.state.mph.at ? 'chegamos a 2027' : '';
+    return '';
+  }
+  function pCena(step) {
+    const O = A.O, C = O.cenas, k = step.cena, cfg = C.config[k], st = C.state[k] || {}, note = `<p class="small" style="margin-top:10px">${cfgLink(k)} em Preparar → Agenda e cenas.</p>`;
+    const out = { onair: CENA_AIR[k] };
+    if (k === 'agenda') {
+      const v = C.config.agenda; let t = v.inicio.split(':').reduce((h, m) => +h * 60 + +m);
+      const hm = x => `${pad(Math.floor(x / 60) % 24)}:${pad(x % 60)}`;
+      out.body = `<p class="lead">O plano de voo de hoje, em 4 atos. O item em que o evento está aparece marcado como NO AR.</p>
+        <div class="tblwrap"><table class="tbl">${v.itens.map(x => { const h = hm(t); t += x.min; return `<tr><td class="mono">${h}</td><td><b>${esc(x.t)}</b><div class="small">${esc(x.d)}</div></td><td class="small">ATO ${['I', 'II', 'III', 'IV'][x.ato - 1]}</td><td class="r mono">${x.min}′</td></tr>`; }).join('')}</table></div>${note}`;
+    } else if (k === 'boasvindas') {
+      out.body = `<div class="theme">${esc(cfg.frase.replace(/\*/g, ''))}</div><div class="speaker">com ${esc(cfg.pessoas.map(p => p.nome).join(', '))} · ${cfg.min} min</div>${note}`;
+    } else if (k === 'almanaque') {
+      const m = st.mes, its = m >= 0 ? cfg.itens.filter(x => x.m === m) : [], dl = its.filter(x => x.k === 'E').length, off = new Set(st.off || []);
+      out.body = `<div class="phase">${st.pagina ? 'No telão: o ano em uma página' : m >= 0 ? `No telão: ${C.months[m]} · ${dl} ${dl === 1 ? 'entregue' : 'entregues'} de ${its.length} ${its.length === 1 ? 'item' : 'itens'}${st.tocando ? ' · tocando o ano' : ''}` : 'No telão: o almanaque em branco, pronto para começar'}</div>
+        <p class="small">${C.stats.entregues} entregas · ${esc(C.stats.beneficiosTxt)} em benefícios · com ${esc(cfg.quem)}</p>
+        <div class="subtabs" style="margin:10px 0">${C.months.map((n, i) => `<button class="${m === i && !st.pagina ? 'on' : ''}" data-act="cena" data-kind="almanaque" data-a="mes" data-mes="${i}" title="${cfg.itens.filter(x => x.m === i).length} itens">${n}</button>`).join('')}</div>
+        ${m >= 0 && !st.pagina ? det('almItens', `O que aparece em ${C.months[m]} (${its.length})`, `<ul class="small" style="margin:6px 0 0 18px">${its.map(x => `<li><b>${esc(C.tipos[x.k])}${x.bu ? ' · ' + esc(C.bus[x.bu]) : ''}</b> · ${esc(x.t)}</li>`).join('')}</ul>`) : ''}`;
+      out.primary = st.pagina ? cenaBtn('← Voltar ao almanaque', k, 'pagina', { cls: 'big' }) : st.tocando ? cenaBtn('⏸ Pausar o ano', k, 'tocar', { cls: 'big' }) : cenaBtn(m >= 11 ? '★ Mostrar o ano em uma página' : m >= 0 ? '▶ Continuar tocando o ano' : '▶ Tocar o ano (um mês a cada 3 s)', k, m >= 11 ? 'pagina' : 'tocar', { cls: 'big', data: m >= 11 ? { on: 1 } : {} });
+      out.secondary = st.pagina ? [] : [cenaBtn('← Mês', k, 'ant', { cls: 'ghost', disabled: m <= 0 }), cenaBtn('Mês →', k, 'prox', { cls: 'ghost', disabled: m >= 11 }), cenaBtn('★ O ano em uma página', k, 'pagina', { cls: 'ghost', data: { on: 1 } })];
+      out.busy = st.tocando ? 'O ano ainda está tocando no telão. Avançar mesmo assim?' : '';
+      out.more = `<div class="actions" style="align-items:center"><span class="small">Mostrar nos cartões:</span>${[...Object.keys(C.bus).map(u => [u, C.bus[u]]), ['E', 'Entregue'], ['M', 'Marco'], ['C', 'Contexto']].map(([key, l]) => `<button class="btn xs ${off.has(key) ? 'ghost' : ''}" data-act="cena" data-kind="almanaque" data-a="filtro" data-key="${key}">${off.has(key) ? '○' : '●'} ${esc(l)}</button>`).join('')}</div>
+        <div class="actions" style="margin-top:8px">${cenaBtn('↺ Recomeçar o almanaque (em branco)', k, 'reiniciar', { cls: 'ghost sm' })}</div>${note}`;
+    } else if (k === 'ia') {
+      out.body = `<div class="theme">${esc(cfg.titulo.replace(/\*/g, ''))}</div><div class="speaker">com ${esc(cfg.quem)} · ${cfg.min} min</div><p class="lead">${esc(cfg.texto)}</p>
+        ${cfg.nota ? `<div class="sb-warn">📝 Para quem apresenta (não aparece no telão): ${esc(cfg.nota)}</div>` : ''}<p class="small" style="margin-top:8px">O telão mostra o QR do app. A parte interativa da Frente 2 é o próximo passo: a Reflexão.</p>${note}`;
+    } else if (k === 'reconhecimento') {
+      const P = cfg.premios, done = new Set(st.feitos), p = st.premio !== null ? P[st.premio] : null, w = p ? p.indicados[p.vencedor - 1] : null, next = P.findIndex((x, i) => !done.has(i));
+      const list = `<div class="tblwrap"><table class="tbl">${P.map((x, i) => `<tr><td>${done.has(i) ? '🏆' : '✉️'} <b>${esc(x.n)}</b><div class="small">${esc(x.k)}</div></td><td class="small">${done.has(i) ? `revelado: <b>${esc(x.indicados[x.vencedor - 1].nome)}</b>` : `lacrado · vencedor definido: ${esc(x.indicados[x.vencedor - 1].nome)}`}</td><td class="r">${cenaBtn(done.has(i) ? 'Refazer a cerimônia' : 'Abrir a cerimônia', k, 'abrir', { cls: 'ghost xs', data: { premio: i } })}</td></tr>`).join('')}</table></div>`;
+      const back = cenaBtn('← Todos os prêmios', k, 'fase', { cls: 'ghost', data: { fase: 'premios' } });
+      if (st.fase === 'intro') { out.body = `<div class="phase">No telão: a abertura</div><p class="lead">${esc(cfg.abertura.join(' ').replace(/\*/g, ''))}</p><p class="small">${esc(cfg.aberturaSub)}</p>`; out.primary = cenaBtn('▶ Tributo', k, 'fase', { cls: 'big', data: { fase: 'tributo' } }); out.secondary = [cenaBtn('Pular para os prêmios ⚡', k, 'fase', { cls: 'ghost', data: { fase: 'premios' } })]; }
+      else if (st.fase === 'tributo') {
+        out.body = `<div class="phase">No telão: o tributo</div><p class="lead">${esc(cfg.tributo.replace(/\*/g, ''))}</p><p class="small">Fala: ${esc(cfg.fala)}</p>
+          <p class="small" style="margin-top:6px">${cfg.video ? `Vídeo-tributo configurado · ${st.video ? 'tocando no telão' : 'pausado'}.` : `Sem vídeo configurado: arraste o arquivo do vídeo para a tela do telão, ou cole o endereço dele em ${cfgLink('reconhecimento', 'Agenda e cenas → Reconhecimento')}. Sem vídeo, este espaço fica para a fala da liderança.`}</p>`;
+        out.primary = cenaBtn('Abrir os Prêmios Torre do Relógio ⚡', k, 'fase', { cls: 'big', data: { fase: 'premios' } });
+        out.secondary = [cfg.video ? cenaBtn(st.video ? '⏸ Pausar o vídeo' : '▶ Tocar o vídeo', k, 'video', { cls: 'ghost', data: { on: st.video ? '' : 1 } }) : '', cenaBtn('← Abertura', k, 'fase', { cls: 'ghost', data: { fase: 'intro' } })];
+      } else if (st.fase === 'premios') {
+        out.body = `<div class="phase">No telão: os ${P.length} envelopes · ${done.size} de ${P.length} revelados</div>${list}`;
+        out.primary = next >= 0 ? cenaBtn(`Abrir a cerimônia: ${esc(P[next].n)} →`, k, 'abrir', { cls: 'big', data: { premio: next } }) : cenaBtn('Grande final · Hall da Fama ★', k, 'fase', { cls: 'big', data: { fase: 'hall' } });
+        out.secondary = [next >= 0 && done.size ? cenaBtn('Hall da Fama ★', k, 'fase', { cls: 'ghost', data: { fase: 'hall' } }) : '', cenaBtn('← Tributo', k, 'fase', { cls: 'ghost', data: { fase: 'tributo' } })];
+      } else if (st.fase === 'hall') {
+        out.body = `<div class="phase">No telão: o Hall da Fama 2026</div>${list}`; out.secondary = [back];
+      } else if (p) {
+        const pct = Math.round((st.carga || 0) * 100);
+        out.body = `<div class="phase">Cerimônia · ${esc(p.n)} (${esc(p.k)}) · no telão: ${REC_PASSO[st.passo]}</div>
+          <p class="small">Indicados: ${esc(p.indicados.map(x => x.nome).join(' · '))}</p><p class="small">Vencedor definido: <b>${esc(w.nome)}</b> (${esc(w.projeto)}) · “${esc(p.citacao)}”</p>
+          ${st.passo === 'carga' ? `<p style="margin-top:10px">Flux Capacitor: <b id="recPct">${pct}%</b> · cada toque nos celulares soma energia; com 100% o raio cai sozinho.</p><div class="bar"><i id="recBar" style="width:${pct}%"></i></div>` : ''}`;
+        if (st.passo === 'categoria') out.primary = cenaBtn('Conhecer os indicados →', k, 'indicados', { cls: 'big' });
+        else if (st.passo === 'indicados') { out.primary = cenaBtn('⚡ Carregar o Flux Capacitor (celulares)', k, 'carregar', { cls: 'big' }); out.secondary = [cenaBtn('Raio agora ⚡ (sem a carga)', k, 'raio', { cls: 'ghost' })]; }
+        else if (st.passo === 'carga') { out.primary = cenaBtn('⚡ +15% de carga', k, 'carga', { cls: 'big', data: { v: .15 } }); out.secondary = [cenaBtn('Raio agora ⚡', k, 'raio', { cls: 'ghost' })]; }
+        else if (st.passo === 'sorteio') { out.secondary = [cenaBtn('Revelar já', k, 'vencedor', { cls: 'ghost' })]; out.busy = 'O sorteio está acontecendo no telão. Avançar mesmo assim?'; out.primary = '<span class="phase">🥁 O holofote está girando…</span>'; }
+        else { out.primary = cenaBtn(next >= 0 ? 'Voltar aos prêmios →' : 'Grande final · Hall da Fama ★', k, 'fase', { cls: 'big', data: { fase: next >= 0 ? 'premios' : 'hall' } }); out.secondary = [cenaBtn('Bis ✦ (refazer esta cerimônia)', k, 'abrir', { cls: 'ghost', data: { premio: st.premio } })]; }
+        if (st.passo !== 'vencedor') out.secondary = [...(out.secondary || []), back];
+        if (st.passo !== 'vencedor' && st.passo !== 'sorteio') out.busy = 'A cerimônia deste prêmio ainda não terminou. Avançar mesmo assim?';
+      }
+      if (cfg.exemplo) out.warn = `⚠ Os indicados e os vencedores ainda são os <b>nomes de exemplo</b> do deck (o telão avisa isso na tela dos prêmios). Troque em ${cfgLink('reconhecimento', 'Preparar → Agenda e cenas → Reconhecimento')}.`;
+      out.more = `<div class="actions">${cenaBtn('↺ Recomeçar o reconhecimento (lacra os prêmios de novo)', k, 'reset', { cls: 'red sm', data: { confirm: 'Lacrar todos os prêmios de novo e voltar para a abertura?' } })}</div>${note}`;
+    } else if (k === 'intervalo') {
+      const ph = ivPhase();
+      out.body = `<div class="phase">${{ idle: 'Cronômetro parado', run: 'Intervalo em andamento', paused: 'Cronômetro pausado', done: 'O intervalo terminou' }[ph]}</div>
+        <div class="clock ${ph === 'paused' ? 'paused' : ''}"><b data-timer="iv">${fmt(ivLeft())}</b><span>intervalo</span></div><p class="small">${esc(cfg.texto)}</p>`;
+      out.primary = ph === 'idle' ? cenaBtn(`▶ Iniciar intervalo (${cfg.min} min)`, k, 'start', { cls: 'big' }) : ph === 'run' ? cenaBtn('⏸ Pausar', k, 'pause', { cls: 'big' }) : ph === 'paused' ? cenaBtn('▶ Retomar', k, 'resume', { cls: 'big' }) : null;
+      out.secondary = [cenaBtn('+1 min', k, 'add', { cls: 'ghost', data: { seconds: 60 } }), cenaBtn('−1 min', k, 'add', { cls: 'ghost', data: { seconds: -60 } }), cenaBtn('↺ Zerar', k, 'reset', { cls: 'ghost' })];
+      out.more = `<div class="actions" style="align-items:center"><span class="small">Começar com:</span>${[5, 10, 15, 20].map(n => cenaBtn(`${n} min`, k, 'start', { cls: 'ghost xs', data: { min: n } })).join('')}</div><p class="small" style="margin-top:8px">O cronômetro continua contando se você mostrar outro passo. A música entra sozinha neste passo (desligue em Ajustes → "Desligar o som ao exibir um bloco de fala").</p>${note}`;
+      out.busy = ph === 'run' ? 'O intervalo ainda não terminou. Avançar mesmo assim?' : '';
+    } else if (k === 'visao') {
+      out.body = `<div class="theme">${esc(cfg.titulo)}</div><div class="speaker">com ${esc(cfg.quem)} · ${cfg.min} min</div>
+        <p class="lead">O telão mostra a <b>Estratégia CDIO LATAM 2027</b> (o arquivo original, sem alterações) dentro de uma moldura. Ela é interativa: os filtros e os pilares são clicados <b>direto na tela do telão</b>.</p>
+        <div class="actions"><a class="btn ghost sm" href="/estrategia-2027.html" target="_blank">Abrir a estratégia em outra aba ↗</a></div>
+        <label class="sw" style="margin-top:10px"><input type="checkbox" data-act="cena" data-kind="visao" data-a="intro" ${st.intro ? 'checked' : ''}> Começar pela abertura em vídeo da página (senão, vai direto para o mapa da estratégia, como no deck)</label>${note}`;
+    } else if (k === 'manifesto') {
+      out.body = `<div class="theme">${esc(cfg.titulo)} ${esc(cfg.pergunta)}</div><div class="speaker">com ${esc(cfg.quem)} · ${cfg.min} min</div><p class="small">O telão mostra o calendário de ${esc(cfg.dia)} ${esc(cfg.mes)} ${esc(cfg.ano)}, a pergunta e o QR do app. O manifesto coletivo acontece nos próximos passos: as dinâmicas do Sucesso e a mensagem do Doc.</p>${note}`;
+    } else if (k === 'mph') {
+      out.body = `<div class="phase">${st.at ? 'Chegamos: "' + esc(cfg.chegada) + '"' : 'No telão: o velocímetro em 0 MPH'}</div><p class="lead">${esc(st.at ? cfg.depois : cfg.antes)}</p><p class="small">${esc(cfg.quem)} · ${cfg.min} min</p>`;
+      out.primary = st.at ? null : cenaBtn('🏎️ Acelerar até 2027 (88 MPH)', k, 'go', { cls: 'big' });
+      out.secondary = st.at ? [cenaBtn('↺ Voltar a 0 MPH', k, 'reset', { cls: 'ghost' })] : [];
+      out.more = note;
+    }
+    return out;
+  }
+
   function pConnections() {
     const O = A.O, s = O.state, c = s.conn, ph = c.phase, t = c.timer, S = O.settings;
     const late = O.people.filter(p => p.late), inProgress = ['matching', 'talk', 'roundEnd', 'ranking'].includes(ph);
@@ -300,7 +412,7 @@
       late.length ? `⚠ ${late.length} pessoa(s) entraram depois do sorteio e estão sem dupla: ${esc(late.map(p => p.name).join(', '))}. ${regenFrom <= 3 && inProgress && ph !== 'ranking' ? btn(`↻ Incluir ${ph === 'matching' ? `a partir da viagem ${regenFrom}` : `nas viagens ${regenFrom}–3`}`, 'regenRest', { cls: 'ghost xs' }) : ''}` : ''].filter(Boolean).join('<br>');
     const pairs = c.generatedAt ? det('pairs', 'Ver as duplas de cada viagem', `<div class="subtabs" style="margin-top:8px">${O.rounds.map(r => `<button class="${A.round === r.round ? 'on' : ''}" data-roundtab="${r.round}">Viagem ${r.round} · ${esc(r.era.year)} ${r.round === c.round ? '●' : ''}</button>`).join('')}</div>
         ${round && round.groups.length ? `<div class="small" style="margin-bottom:6px">${round.groups.length} grupos · ${round.check.ok}/${round.check.total} pares com área ≠ e WL ≠ · ${esc(levelTxt[round.level] || round.level || '')}</div>
-          ${round.groups.map(g => `<div class="grp"><span class="code">${esc(g.code)}</span>${g.members.map((m, n) => `${n ? '<span class="x">⇄</span>' : ''}<span class="m">${av(m)}<b>${esc(m.name)}</b><span class="meta">(${esc(m.area)} · ${esc(m.wl)})</span></span>`).join('')}<span class="${g.flags.area && g.flags.wl ? 'ok' : 'warn'}" style="margin-left:auto">${g.flags.area ? '✔ área' : '! área'} ${g.flags.wl ? '✔ WL' : '! WL'}</span>${round.round === c.round && ph === 'talk' && g.currentQuestion ? `<div class="q">pergunta ${g.position + 1}/${g.queueLen}: ${esc(g.currentQuestion)}</div>` : ''}</div>`).join('')}` : '<p class="muted">Rodada ainda não gerada.</p>'}`) : '';
+          ${round.groups.map(g => `<div class="grp"><span class="code">${esc(g.code)}</span>${g.members.map((m, n) => `${n ? '<span class="x">⇄</span>' : ''}<span class="m">${av(m)}<b>${esc(m.name)}</b><span class="meta">(${esc(m.area)} · ${esc(m.wl)})</span></span>`).join('')}<span class="${g.flags.area && g.flags.wl ? 'ok' : 'warn'}" style="margin-left:auto">${g.flags.area ? '✔ área' : '! área'} ${g.flags.wl ? '✔ WL' : '! WL'}</span>${round.round === c.round && ph === 'talk' && g.currentQuestion ? `<div class="q">${g.position + 1}ª pergunta: ${esc(g.currentQuestion)}</div>` : ''}</div>`).join('')}` : '<p class="muted">Rodada ainda não gerada.</p>'}`) : '';
     const results = O.results.length ? det('results', `Ver as conexões calculadas (${O.results.length})`, `<div class="tblwrap" style="margin-top:8px"><table class="tbl"><tr><th>Viajante</th><th>Conexão sugerida</th><th>Pts</th><th>Mútua</th></tr>
         ${O.results.slice().sort((a, b) => (b.mutual - a.mutual) || (b.score - a.score)).map(r => `<tr><td>${av(r.person)}${esc(r.person.name)}</td><td>${r.match ? av(r.match) + esc(r.match.name) : '<span class="x">—</span>'}</td><td class="mono">${r.score}</td><td>${r.mutual ? '<span class="ok">⚡ sim</span>' : '<span class="x">não</span>'}</td></tr>`).join('')}</table></div>`) : '';
     const more = `<div class="actions">
@@ -498,12 +610,13 @@
     const su = $('[data-timer=suc]'); if (su) su.textContent = fmt(sucLeft(sucAct(su.dataset.k)));
     const rx = $('[data-timer=rfx]'), R = A.O.reflexao; if (rx && R && R.open !== null) rx.textContent = fmt(rfxLeft(R.paradas[R.open]));
     const d = A.O.state.presentation && A.O.state.presentation.draw, tk = $('[data-timer=talk]'); if (tk && d) tk.textContent = fmt(talkLeft(d.talk));
+    const iv = $('[data-timer=iv]'); if (iv && A.O.cenas) iv.textContent = fmt(ivLeft());
   }
   setInterval(() => {
     if (!A.O || A.tab !== 'live') return;
     tickLive();
     const { step } = liveStep(), a = step.type === 'sucesso' ? sucAct(step.activity) : null, d = A.O.state.presentation && A.O.state.presentation.draw, left = d ? talkLeft(d.talk) : -1;
-    const key = [step.id, a ? sucEff(a) : '', a && a.phase === 'run' ? sucLeft(a) <= 30 : '', d ? (left > 30 ? 'a' : left > 0 ? 'b' : 'c') : ''].join('|');
+    const key = [step.id, a ? sucEff(a) : '', a && a.phase === 'run' ? sucLeft(a) <= 30 : '', d ? (left > 30 ? 'a' : left > 0 ? 'b' : 'c') : '', step.type === 'cena' && step.cena === 'intervalo' ? ivPhase() : ''].join('|');
     if (key !== A.liveKey) { A.liveKey = key; render(); }
   }, 500);
 
@@ -567,24 +680,107 @@
   /* ====================== PREPARAR → ROTEIRO ====================== */
   function vRoteiro() {
     const O = A.O, list = A.stepsDraft || O.settings.steps, dirty = !!A.stepsDraft;
-    const has = t => list.some(x => x.type === t), hasAct = k => list.some(x => x.type === 'sucesso' && x.activity === k);
+    const has = t => list.some(x => x.type === t), hasAct = k => list.some(x => x.type === 'sucesso' && x.activity === k), hasCena = k => list.some(x => x.type === 'cena' && x.cena === k);
     const row = (x, i) => {
       const f = (field, ph, cls) => `<input class="input ${cls}" data-rs="${i}" data-f="${field}" id="rs-${field}-${i}" value="${esc(x[field] || '')}" placeholder="${ph}" aria-label="${ph}">`;
       const fields = x.type === 'stage' ? `${f('title', 'Nome do bloco', 'w1')}${f('theme', 'Tema (aparece no celular e no telão)', 'w3')}${f('speaker', 'Quem fala (opcional)', 'w2')}`
         : x.type === 'message' ? `${f('emoji', '📣', 'w0')}${f('title', 'Título do aviso', 'w2')}${f('body', 'Texto do aviso', 'w3')}`
-        : `<span class="fixed">${esc(stepTitle(x))}<small>${x.type === 'sucesso' && TALK[x.activity] ? 'pergunta ao vivo, nuvem, sorteio e tempo de fala' : STEP_HINT[x.type]}</small></span>${SKIP_OF[x.type] ? `<button class="btn ghost xs" data-act="skipEdit" data-block="${x.type}" title="Quem coordena ou não participa deste bloco">🚫 Fora deste bloco (${skipIds(x.type).length})</button>` : ''}`;
-      return `<div class="rrow ${!dirty && x.id === O.state.step ? 'now' : ''}"><span class="n">${i + 1}</span><span class="ic" title="${STEP_KIND[x.type]}">${STEP_ICON[x.type]}</span><div class="rf">${fields}</div>
+        : `<span class="fixed">${esc(stepTitle(x))}<small>${x.type === 'cena' ? esc(cenaMeta(x).hint) : x.type === 'sucesso' && TALK[x.activity] ? 'pergunta ao vivo, nuvem, sorteio e tempo de fala' : STEP_HINT[x.type]}</small></span>${SKIP_OF[x.type] ? `<button class="btn ghost xs" data-act="skipEdit" data-block="${x.type}" title="Quem coordena ou não participa deste bloco">🚫 Fora deste bloco (${skipIds(x.type).length})</button>` : ''}`;
+      return `<div class="rrow ${!dirty && x.id === O.state.step ? 'now' : ''}"><span class="n">${i + 1}</span><span class="ic" title="${STEP_KIND[x.type]}">${stepIcon(x)}</span><div class="rf">${fields}</div>
         <div class="rc">${!dirty && x.id === O.state.step ? '<span class="pill hot">no ar</span>' : ''}<button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'} title="Subir">↑</button><button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="1" ${i < list.length - 1 ? '' : 'disabled'} title="Descer">↓</button><button class="btn ghost xs" data-act="rsDel" data-i="${i}" ${list.length > 1 ? '' : 'disabled'} title="Remover">✕</button></div></div>`;
     };
     const add = (label, type, extra = '') => `<button class="btn ghost xs" data-act="rsAdd" data-type="${type}" ${extra}>＋ ${label}</button>`;
     return `<div class="card"><h2>Roteiro do evento</h2>
+      <p class="small">O roteiro padrão segue a agenda do townhall em 4 atos (as cenas do deck mais Conexões, Reflexão e Sucesso). O conteúdo de cada cena fica em <a href="#" data-go="cenas">Agenda e cenas</a>.</p>
       <p class="small">A ordem dos passos do evento. No <a href="#" data-go="live">Ao vivo</a> você abre cada passo e clica em "Mostrar" para ele ir para o telão e os celulares. Dá para mudar a qualquer momento, inclusive durante o evento. Em Conexões, Reflexão e Sucesso, o botão 🚫 marca quem coordena e não participa.</p>
       <div class="rlist">${list.map(row).join('')}</div>
-      <div class="actions radd"><span class="small">Adicionar:</span>${add('Bloco de fala', 'stage')}${add('Aviso / intervalo', 'message')}${add('Olhos no telão', 'standby')}${add('Check-in', 'checkin')}${has('connections') ? '' : add('Conexões', 'connections')}${has('reflexao') ? '' : add('Reflexão', 'reflexao')}${has('doc') ? '' : add('Visão 2027 · o Doc', 'doc')}${['d1', 'd2', 'd3', 'd4'].filter(k => !hasAct(k)).map(k => add(`Sucesso ${k.slice(1).padStart(2, '0')}`, 'sucesso', `data-activity="${k}"`)).join('')}${add('Encerramento', 'closing')}</div>
+      <div class="actions radd"><span class="small">Adicionar:</span>${add('Bloco de fala', 'stage')}${add('Aviso / intervalo', 'message')}${add('Olhos no telão', 'standby')}${add('Check-in', 'checkin')}${has('connections') ? '' : add('Conexões', 'connections')}${has('reflexao') ? '' : add('Reflexão', 'reflexao')}${has('doc') ? '' : add('Visão 2027 · o Doc', 'doc')}${['d1', 'd2', 'd3', 'd4'].filter(k => !hasAct(k)).map(k => add(`Sucesso ${k.slice(1).padStart(2, '0')}`, 'sucesso', `data-activity="${k}"`)).join('')}${add('Créditos', 'closing')}</div>
+      ${(O.cenas ? O.cenas.kinds : []).some(k => !hasCena(k)) ? `<div class="actions radd"><span class="small">Cenas do townhall:</span>${O.cenas.kinds.filter(k => !hasCena(k)).map(k => add(`${O.cenas.meta[k].icon} ${O.cenas.meta[k].name}`, 'cena', `data-cena="${k}"`)).join('')}</div>` : ''}
       <div class="actions" style="margin-top:14px;align-items:center">${dirty ? '<button class="btn" data-act="rsSave">Salvar roteiro</button><button class="btn ghost" data-act="rsDiscard">Descartar alterações</button><span class="warn">alterações não salvas</span>' : '<span class="ok">✔ Roteiro salvo</span>'}<button class="btn ghost sm" data-act="rsDefault" style="margin-left:auto">Restaurar o roteiro padrão</button></div>
     </div>`;
   }
   const draftSteps = () => (A.stepsDraft = A.stepsDraft || A.O.settings.steps.map(x => ({ ...x })));
+
+  /* ====================== PREPARAR → AGENDA E CENAS ======================
+   * O conteúdo das cenas do deck (em português): textos, horários, itens do almanaque, prêmios e créditos.
+   * Listas são digitadas uma por linha, com as colunas separadas por " | ". *Asteriscos* marcam palavras em destaque. */
+  const T = (k, l) => ({ k, l, t: 'text' }), AREA = (k, l) => ({ k, l, t: 'area' }), NUM = (k, l) => ({ k, l, t: 'num' }), LIST = (k, l) => ({ k, l, t: 'list' }), LINES = (k, l, cols, map) => ({ k, l, t: 'lines', cols, map }), CHECK = (k, l) => ({ k, l, t: 'check' });
+  const MONTH_MAP = { out: v => A.O.cenas.months[v] || 'JAN', in: v => { const i = A.O.cenas.months.indexOf(String(v).trim().toUpperCase().slice(0, 3)); return i < 0 ? Math.max(0, Math.min(11, (parseInt(v, 10) || 1) - 1)) : i; } };
+  const BU_MAP = { out: v => v || '-', in: v => { const u = String(v).trim().toUpperCase(); return u === 'HC' || u === 'BPC' ? u : u.startsWith('X') || u.startsWith('CROSS') ? 'X' : ''; } };
+  const TIPO_MAP = { out: v => v, in: v => { const u = String(v).trim().toUpperCase()[0]; return 'EMRC'.includes(u) ? u : 'M'; } };
+  const BLOCO_MAP = { out: v => (Array.isArray(v) ? v.join(' | ') : v), in: v => String(v).split('|').map(x => x.trim()).filter(Boolean) };
+  const CENA_FORM = {
+    evento: ['Evento · check-in e créditos', 'O nome do evento aparece no telão do check-in e nos créditos; os três circuitos de tempo aparecem no check-in.',
+      [T('titulo', 'Título'), T('sub', 'Subtítulo'), T('data', 'Data'), T('local', 'Local'), T('destino', 'Circuito de tempo · destino'), T('presente', 'Circuito de tempo · presente'), T('partida', 'Circuito de tempo · última partida')]],
+    agenda: ['🗺️ Plano de voo (agenda)', 'Os horários são calculados a partir do início e dos minutos de cada item.',
+      [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('inicio', 'Início (HH:MM)'), LINES('itens', 'Itens, um por linha: ato (1 a 4) | título | detalhe | minutos', ['ato', 't', 'd', 'min'])]],
+    boasvindas: ['👋 Boas-vindas e jornada', '', [T('kicker', 'Linha de cima'), AREA('frase', 'Frase de abertura'), LINES('pessoas', 'Quem fala, um por linha: nome | papel', ['nome', 'papel']), NUM('min', 'Minutos'), T('faixa', 'Faixa de baixo')]],
+    almanaque: ['📅 Jornada 2026 · almanaque', 'Os números "entregues" e "benefícios" são calculados a partir dos itens: contam os do tipo E (entregue) e somam o valor em euros.',
+      [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('sub', 'Subtítulo'), T('quem', 'Quem apresenta'), NUM('min', 'Minutos'),
+        LINES('kpis', 'Indicadores fixos, um por linha: valor | rótulo', ['v', 'l']), T('kpiEntregas', 'Rótulo do total de entregas'), T('kpiBeneficios', 'Rótulo do total de benefícios'),
+        LINES('itens', 'Itens do ano, um por linha: mês | tipo (E entregue · M marco · R resultado · C contexto) | BU (HC, BPC, X ou -) | benefício somado em € (0 se não soma) | texto', ['m', 'k', 'bu', 'v', 't'], { m: MONTH_MAP, k: TIPO_MAP, bu: BU_MAP }),
+        AREA('fonte', 'Fonte (rodapé)'), T('pagina.kicker', 'Uma página · linha de cima'), T('pagina.titulo', 'Uma página · título'), AREA('pagina.nota', 'Uma página · nota dos benefícios'), AREA('pagina.lideranca', 'Uma página · aprendizados da liderança')]],
+    ia: ['🦋 Como a IA nos ajudou em 2026', '', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), AREA('texto', 'Texto'), T('quem', 'Quem apresenta'), NUM('min', 'Minutos'), T('faixa', 'Faixa de baixo'), AREA('nota', 'Nota para quem apresenta (só aparece no painel)')]],
+    reconhecimento: ['🏆 Reconhecimento 2026', 'Os vencedores já ficam definidos aqui: o "sorteio" no telão é o suspense da cerimônia. Só o Painel do Doc vê o vencedor antes da revelação.',
+      [T('kicker', 'Linha de cima'), NUM('min', 'Minutos'), LIST('abertura', 'Frases da abertura, uma por linha'), T('aberturaSub', 'Abertura · frase menor'), T('tributo', 'Tributo · título'), T('fala', 'Tributo · quem fala'),
+        T('video', 'Vídeo-tributo (endereço https://… ou caminho do site; vazio = arrastar o arquivo para o telão)'), T('premiosTitulo', 'Prêmios · título'), T('hallTitulo', 'Hall da Fama · título'), T('hallSub', 'Hall da Fama · frase'),
+        CHECK('exemplo', 'Os nomes ainda são de exemplo (mostra o aviso "NOMES DE EXEMPLO" no telão)')]],
+    intervalo: ['☕ Intervalo', '', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), NUM('min', 'Duração (minutos)'), AREA('texto', 'Texto')]],
+    visao: ['🔭 Visão 2027 · Estratégia', 'A página da estratégia é o arquivo original (public/estrategia-2027.html): aqui só mudam o título e a linha de cima da moldura.', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('nota', 'Nota à direita'), T('quem', 'Quem apresenta'), NUM('min', 'Minutos')]],
+    manifesto: ['📜 Manifesto 2027', '', [T('kicker', 'Linha de cima'), T('mes', 'Calendário · mês'), T('dia', 'Calendário · dia'), T('ano', 'Calendário · ano'), T('titulo', 'Título'), T('pergunta', 'Pergunta (aparece sendo digitada)'), T('faixa', 'Faixa de baixo'), T('quem', 'Quem conduz'), NUM('min', 'Minutos')]],
+    mph: ['🏎️ 88 MPH · Encerramento', '', [T('kicker', 'Linha de cima'), T('antes', 'Frase antes de acelerar'), T('chegada', 'Chegada (em letras do logo)'), T('depois', 'Frase da chegada'), T('quem', 'Quem conduz'), NUM('min', 'Minutos')]],
+    creditos: ['🏁 Créditos', 'O elenco (todos os nomes do check-in) entra sozinho depois destes blocos.',
+      [LINES('blocos', 'Blocos, um por linha: TÍTULO | nome | nome…', ['h', 'l'], { l: BLOCO_MAP }), LINES('final', 'Frases finais (passam antes dos créditos), uma por linha: palavra | frase', ['0', '1']), T('fim', 'Última palavra'), T('fimSub', 'Última frase')]],
+  };
+  const cfGet = (o, k) => k.split('.').reduce((v, p) => (v == null ? v : v[p]), o);
+  const cfSet = (o, k, v) => { const ps = k.split('.'); let t = o; ps.slice(0, -1).forEach(p => { t = t[p] = t[p] || {}; }); t[ps[ps.length - 1]] = v; };
+  const linesOut = (list, f) => (list || []).map(x => f.cols.map(c => (f.map && f.map[c] ? f.map[c].out(x[c]) : x[c] ?? '')).join(' | ')).join('\n');
+  const linesIn = (text, f) => String(text).split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const parts = l.split('|').map(x => x.trim()), row = /^\d+$/.test(f.cols[0]) ? [] : {};
+    f.cols.forEach((c, i) => { const v = i === f.cols.length - 1 ? parts.slice(i).join(' | ') : parts[i] ?? ''; row[c] = f.map && f.map[c] ? f.map[c].in(v) : v; });
+    return row;
+  });
+  function cenaField(f, cfg) {
+    const v = cfGet(cfg, f.k), id = `cf-${f.k.replace('.', '-')}`;
+    if (f.t === 'check') return `<label class="sw"><input type="checkbox" id="${id}" data-cf="${f.k}" ${v ? 'checked' : ''}> ${esc(f.l)}</label>`;
+    if (f.t === 'area') return `<label class="f">${esc(f.l)}<textarea class="input" id="${id}" data-cf="${f.k}">${esc(v ?? '')}</textarea></label>`;
+    if (f.t === 'list') return `<label class="f">${esc(f.l)}<textarea class="input" id="${id}" data-cf="${f.k}">${esc((v || []).join('\n'))}</textarea></label>`;
+    if (f.t === 'lines') return `<label class="f">${esc(f.l)}<textarea class="input mono" id="${id}" data-cf="${f.k}" style="min-height:${Math.min(420, 60 + (v || []).length * 21)}px;white-space:pre;overflow-x:auto">${esc(linesOut(v, f))}</textarea></label>`;
+    return `<label class="f">${esc(f.l)}<input class="input" id="${id}" data-cf="${f.k}" ${f.t === 'num' ? 'type="number" min="0"' : ''} value="${esc(v ?? '')}"></label>`;
+  }
+  // lê o formulário da seção aberta e devolve só o que o servidor entende
+  function cenaCollect(sec) {
+    const out = {}, [, , fields] = CENA_FORM[sec];
+    for (const f of fields) {
+      const el = document.querySelector(`[data-cf="${f.k}"]`); if (!el) continue;
+      cfSet(out, f.k, f.t === 'check' ? el.checked : f.t === 'num' ? +el.value : f.t === 'list' ? el.value.split('\n').map(x => x.trim()).filter(Boolean) : f.t === 'lines' ? linesIn(el.value, f) : el.value);
+    }
+    const patch = { [sec]: out };
+    if (sec === 'agenda') patch.atos = [0, 1, 2, 3].map(i => ($(`#cf-ato${i}`) || {}).value || '');
+    if (sec === 'reconhecimento') out.premios = A.O.cenas.config.reconhecimento.premios.map((p, i) => { const g = k => ($(`#pf-${i}-${k}`) || {}).value ?? '';
+      return { ic: g('ic'), n: g('n'), k: g('k'), porque: g('porque'), criterios: g('criterios').split('\n').map(x => x.trim()).filter(Boolean), indicados: linesIn(g('indicados'), { cols: ['nome', 'projeto'] }), vencedor: +g('vencedor') || 1, citacao: g('citacao') }; });
+    return patch;
+  }
+  function vCenasCfg() {
+    const C = A.O.cenas, sec = CENA_FORM[A.cenaSec] ? A.cenaSec : 'agenda', [title, hint, fields] = CENA_FORM[sec], cfg = C.config[sec];
+    A.cenaSec = sec;
+    let extra = '';
+    if (sec === 'agenda') extra = `<div class="grid" style="grid-template-columns:repeat(4,1fr);gap:10px">${C.config.atos.map((a, i) => `<label class="f">Ato ${['I', 'II', 'III', 'IV'][i]}<input class="input" id="cf-ato${i}" value="${esc(a)}"></label>`).join('')}</div>`;
+    if (sec === 'reconhecimento') extra = cfg.premios.map((p, i) => { const f = (k, l, tag = 'input', v = p[k]) => `<label class="f">${l}${tag === 'area' ? `<textarea class="input" id="pf-${i}-${k}" ${k === 'indicados' ? 'style="min-height:110px"' : ''}>${esc(v)}</textarea>` : `<input class="input" id="pf-${i}-${k}" value="${esc(v)}">`}</label>`;
+      return `<div class="card" style="margin-top:12px"><h2>Prêmio ${i + 1} · ${esc(p.n)}</h2><div class="form">
+        <div class="grid" style="grid-template-columns:2fr 2fr 1fr;gap:10px">${f('n', 'Nome do prêmio')}${f('k', 'Categoria')}<label class="f">Ícone<select class="input" id="pf-${i}-ic">${[['i', '⚡ raio'], ['c', '👥 dupla'], ['b', '🔧 ferramenta'], ['f', '🕒 relógio']].map(([v, l]) => `<option value="${v}" ${p.ic === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
+        ${f('porque', 'Por que este prêmio', 'area')}${f('criterios', 'Critérios, um por linha', 'area', p.criterios.join('\n'))}
+        ${f('indicados', 'Indicados, um por linha: nome | projeto', 'area', p.indicados.map(x => `${x.nome} | ${x.projeto}`).join('\n'))}
+        <label class="f">Vencedor: a posição na lista de indicados (1 = primeira linha)<input class="input" id="pf-${i}-vencedor" type="number" min="1" max="6" value="${p.vencedor}"><span class="small">Hoje: <b>${esc((p.indicados[p.vencedor - 1] || {}).nome || '?')}</b></span></label>
+        ${f('citacao', 'Citação lida na revelação', 'area')}</div></div>`; }).join('');
+    return `<div class="card"><h2>Agenda e cenas</h2>
+        <p class="small">O conteúdo do deck do townhall, em português. Cada seção é uma cena do roteiro; o que você salvar aqui vai para o telão e os celulares. <span class="mono">*Asteriscos*</span> marcam as palavras em destaque. Nas listas, uma linha por item, com as colunas separadas por <span class="mono"> | </span>.</p>
+        <div class="subtabs" style="margin-top:10px;flex-wrap:wrap">${Object.keys(CENA_FORM).map(k => `<button class="${k === sec ? 'on' : ''}" data-act="cenaSec" data-sec="${k}">${esc(CENA_FORM[k][0])}</button>`).join('')}</div></div>
+      <div class="card"><h2>${esc(title)}</h2>${hint ? `<p class="small" style="margin-bottom:10px">${esc(hint)}</p>` : ''}
+        <div class="form">${extra && sec === 'agenda' ? extra : ''}${fields.map(f => cenaField(f, cfg)).join('')}
+          <div class="actions"><button class="btn" data-act="cenaSave">Salvar</button><button class="btn ghost sm" data-act="cenaReset" style="margin-left:auto">Restaurar o conteúdo original desta seção</button></div></div></div>
+      ${sec === 'reconhecimento' ? `${extra}<div class="card"><div class="actions"><button class="btn" data-act="cenaSave">Salvar os prêmios</button></div></div>` : ''}`;
+  }
 
   function vPeople() {
     const O = A.O, q = A.peopleQ.trim().toLowerCase();
@@ -628,10 +824,12 @@
       </div>`;
   }
 
+  // Banco de perguntas das Conexões: três categorias (Quebra-gelo, Conexão, Além do óbvio), sorteadas para cada dupla
+  const CAT_ORDER = ['quebragelo', 'conexao', 'alem'];
+  const catName = k => { const c = (A.O.cats || {})[k]; return c ? `${c.dot} ${c.name}` : k; };
   function vQuestions() {
-    const O = A.O, byEra = {};
-    O.questions.forEach(q => { (byEra[q.era] = byEra[q.era] || []).push(q); });
-    const eraName = e => (O.eras[e] ? `${O.eras[e].icon} ${O.eras[e].label} · ${O.eras[e].year}` : e);
+    const O = A.O, byCat = {}, mix = O.settings.questionMode === 'mix';
+    O.questions.forEach(q => { (byCat[q.cat] = byCat[q.cat] || []).push(q); });
     return `
       <div class="card">
         <div class="row" style="justify-content:space-between">
@@ -642,14 +840,18 @@
             <button class="btn sm ghost" data-act="resetQuestions">↺ Restaurar banco padrão</button>
           </div>
         </div>
-        <p class="small" style="margin-top:8px">Viagem 1 usa prioritariamente as perguntas do <b>presente</b>, viagem 2 do <b>passado</b> e viagem 3 do <b>futuro</b>. Ninguém recebe a mesma pergunta duas vezes, e cada dupla começa em um ponto diferente da lista.</p>
+        <p class="small" style="margin-top:8px">As perguntas são <b>sorteadas</b>: cada dupla recebe a sua própria ordem e ninguém recebe a mesma pergunta duas vezes. No celular aparece só a pergunta (sem "pergunta 2 de 10").</p>
+        <div class="actions" style="margin-top:10px;align-items:center"><span class="small">Como sortear:</span>
+          <button class="btn sm ${mix ? 'ghost' : ''}" data-act="questionMode" data-mode="rodada" title="Viagem 1: Quebra-gelo · Viagem 2: Conexão · Viagem 3: Além do óbvio. Dentro da categoria, a ordem é sorteada para cada dupla.">Uma categoria por viagem</button>
+          <button class="btn sm ${mix ? '' : 'ghost'}" data-act="questionMode" data-mode="mix" title="Em toda viagem a dupla recebe as três categorias misturadas: uma de cada, em ordem sorteada.">As três categorias misturadas</button>
+        </div>
+        <p class="small" style="margin-top:8px">${mix ? 'Agora: em toda viagem a dupla recebe as três categorias intercaladas (uma de cada, em ordem sorteada).' : 'Agora: viagem 1 sorteia do <b>Quebra-gelo</b>, viagem 2 da <b>Conexão</b> e viagem 3 do <b>Além do óbvio</b>. Se a dupla passar por todas as da categoria, entram as outras.'}</p>
       </div>
-      ${['presente', 'passado', 'futuro'].map(e => `<div class="card"><h2>${esc(eraName(e))} <span class="small">(${(byEra[e] || []).length})</span></h2>
-        <table class="tbl">${(byEra[e] || []).map(q => `<tr style="${q.active ? '' : 'opacity:.45'}"><td>${esc(q.text)}</td><td class="r" style="white-space:nowrap"><div class="actions" style="justify-content:flex-end">
+      ${CAT_ORDER.map(k => `<div class="card"><h2>${esc(catName(k))} <span class="small">(${(byCat[k] || []).length})</span></h2><p class="small" style="margin:-4px 0 8px">${esc(((O.cats || {})[k] || {}).hint || '')}</p>
+        <table class="tbl">${(byCat[k] || []).map(q => `<tr style="${q.active ? '' : 'opacity:.45'}"><td>${esc(q.text)}</td><td class="r" style="white-space:nowrap"><div class="actions" style="justify-content:flex-end">
           <button class="btn xs ghost" data-act="editQuestion" data-id="${q.id}">editar</button>
           <button class="btn xs ghost" data-act="toggleQuestion" data-id="${q.id}" data-v="${q.active ? 0 : 1}">${q.active ? 'desativar' : 'ativar'}</button>
-          <button class="btn xs red" data-act="deleteQuestion" data-id="${q.id}">excluir</button></div></td></tr>`).join('') || '<tr><td class="muted">Nenhuma pergunta nesta era.</td></tr>'}</table></div>`).join('')}
-      ${Object.keys(byEra).filter(e => !O.eras[e]).map(e => `<div class="card"><h2>${esc(e)}</h2><table class="tbl">${byEra[e].map(q => `<tr><td>${esc(q.text)}</td><td class="r"><button class="btn xs ghost" data-act="editQuestion" data-id="${q.id}">editar</button></td></tr>`).join('')}</table></div>`).join('')}`;
+          <button class="btn xs red" data-act="deleteQuestion" data-id="${q.id}">excluir</button></div></td></tr>`).join('') || '<tr><td class="muted">Nenhuma pergunta nesta categoria.</td></tr>'}</table></div>`).join('')}`;
   }
 
   function vConfig() {
@@ -658,7 +860,7 @@
       <div class="grid">
         <div class="card"><h2>Tempos das viagens</h2><div class="form">
           <label class="sw"><input type="checkbox" id="cfgAuto" ${s.autoFlow ? 'checked' : ''}> Fluxo automático (encontro → conversa → próxima dupla → avaliação, sem precisar liberar)</label>
-          <label class="f">Conversa de cada viagem (segundos)<input class="input" id="cfgSeconds" type="number" min="10" max="3600" value="${s.roundSeconds}"><span class="small">240 = 4 minutos</span></label>
+          <label class="f">Conversa de cada viagem (segundos)<input class="input" id="cfgSeconds" type="number" min="10" max="3600" value="${s.roundSeconds}"><span class="small">120 = 2 minutos</span></label>
           <label class="f">Tempo para a dupla se encontrar (segundos)<input class="input" id="cfgFind" type="number" min="0" max="600" value="${s.findSeconds}"><span class="small">0 = a conversa começa na hora em que a dupla aparece</span></label>
           <label class="f">Intervalo "88 MPH" entre viagens (segundos)<input class="input" id="cfgBreak" type="number" min="0" max="120" value="${s.breakSeconds}"></label>
           <label class="f">Avaliação fecha em (segundos)<input class="input" id="cfgRanking" type="number" min="0" max="1800" value="${s.rankingSeconds}"><span class="small">Fecha antes se todos avaliarem. 0 = só quando você clicar em "Calcular".</span></label>
@@ -669,7 +871,7 @@
           <label class="f">Boas-vindas (check-in)<textarea class="input" id="cfgWelcome">${esc(s.welcomeText)}</textarea></label>
           <label class="f">Olhos no telão<textarea class="input" id="cfgStandby">${esc(s.standbyText || '')}</textarea></label>
           <label class="f">Encerramento<textarea class="input" id="cfgClosing">${esc(s.closingText)}</textarea></label>
-          <label class="f">Roteiro (uma linha por item: <span class="mono">horário | título</span>)<textarea class="input" id="cfgAgenda">${esc((s.agenda || []).map(a => `${a.time}${a.time ? ' | ' : ''}${a.title}`).join('\n'))}</textarea></label>
+          <p class="small">A agenda do dia (plano de voo), os textos das cenas e os créditos ficam em <a href="#" data-go="cenas">Agenda e cenas</a>.</p>
           <label class="sw"><input type="checkbox" id="cfgHints" ${s.showFormHints ? 'checked' : ''}> Mostrar respostas do forms na tela da dupla ("para puxar assunto")</label>
           <div class="actions"><button class="btn" data-act="saveSettings">Salvar</button></div>
         </div></div>
@@ -694,7 +896,7 @@
         <div class="actions">
           <button class="btn cyan" data-act="testCheckinAll">✔ Check-in de todos</button>
           <button class="btn cyan" data-act="demoTime">⏱ Modo demo (10s encontro · 30s conversa · 3s intervalo · 30s avaliação)</button>
-          <button class="btn ghost" data-act="normalTime">⏱ Tempos normais (60s · 4 min · 6s · 2 min)</button>
+          <button class="btn ghost" data-act="normalTime">⏱ Tempos normais (40s encontro · 2 min conversa · 6s intervalo · 2 min avaliação)</button>
           <button class="btn cyan" data-act="testRandomRankings">🎲 Avaliações aleatórias (na fase de avaliação)</button>
         </div></div>
       <div class="card"><h2>Zona de perigo</h2>
@@ -810,13 +1012,13 @@
       case 'testCheckinAll': return run(() => act('testCheckinAll'), 'Check-in de todos feito');
       case 'testRandomRankings': return run(() => act('testRandomRankings'), 'Avaliações aleatórias enviadas');
       case 'demoTime': return run(() => act('settings', { settings: { roundSeconds: 30, findSeconds: 10, breakSeconds: 3, rankingSeconds: 30 } }), 'Modo demo: tempos curtos');
-      case 'normalTime': return run(() => act('settings', { settings: { roundSeconds: 240, findSeconds: 60, breakSeconds: 6, rankingSeconds: 120 } }), 'Tempos normais');
+      case 'normalTime': return run(() => act('settings', { settings: { roundSeconds: 120, findSeconds: 40, breakSeconds: 6, rankingSeconds: 120 } }), 'Tempos normais');
+      case 'questionMode': return run(() => act('settings', { settings: { questionMode: el.dataset.mode } }), el.dataset.mode === 'mix' ? 'Perguntas: as três categorias misturadas' : 'Perguntas: uma categoria por viagem');
       case 'saveSettings': {
         const num = (id, min, max) => { const v = +$(id).value; return Number.isFinite(v) && v >= min && v <= max ? v : null; };
         const secs = num('#cfgSeconds', 10, 3600), find = num('#cfgFind', 0, 600), brk = num('#cfgBreak', 0, 120), rk = num('#cfgRanking', 0, 1800);
         if ([secs, find, brk, rk].some(v => v === null)) return toast('Confira os tempos: conversa 10–3600 s, encontro 0–600 s, intervalo 0–120 s, avaliação 0–1800 s.', true);
-        const agenda = $('#cfgAgenda').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const i = l.indexOf('|'); return i >= 0 ? { time: l.slice(0, i).trim(), title: l.slice(i + 1).trim() } : { time: '', title: l }; });
-        return run(async () => { await act('settings', { settings: { autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, agenda, stageText: $('#cfgStageText').value, stageMutes: $('#cfgStageMutes').checked, transitions: $('#cfgTransitions').checked, transitionSeconds: +$('#cfgTransSecs').value || 15, musicUrl: $('#cfgMusicUrl').value, ambientUrl: $('#cfgAmbientUrl').value } }); await act('setAudio', { out: $('#cfgAudioOut').value }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
+        return run(async () => { await act('settings', { settings: { autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, stageText: $('#cfgStageText').value, stageMutes: $('#cfgStageMutes').checked, transitions: $('#cfgTransitions').checked, transitionSeconds: +$('#cfgTransSecs').value || 15, musicUrl: $('#cfgMusicUrl').value, ambientUrl: $('#cfgAmbientUrl').value } }); await act('setAudio', { out: $('#cfgAudioOut').value }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
       }
       case 'saveMessage': case 'showMessage': return run(() => act('setMessage', { message: { emoji: $('#msgEmoji').value, title: $('#msgTitle').value, body: $('#msgBody').value }, show: act_ === 'showMessage' }), act_ === 'showMessage' ? 'Mensagem exibida nos celulares' : 'Mensagem salva');
       case 'logout': localStorage.removeItem('bttf.admin'); api('POST', '/api/admin/logout').finally(() => location.reload()); return;
@@ -848,7 +1050,7 @@
       // --- roteiro: editor (Preparar) ---
       case 'rsAdd': {
         const t = el.dataset.type, list = draftSteps();
-        list.push(t === 'stage' ? { type: t, title: `Bloco ${list.filter(x => x.type === 'stage').length + 1}`, theme: '', speaker: '' } : t === 'message' ? { type: t, emoji: '☕', title: 'Intervalo', body: 'Voltamos em 15 minutos.' } : t === 'sucesso' ? { type: t, activity: el.dataset.activity } : { type: t });
+        list.push(t === 'stage' ? { type: t, title: `Bloco ${list.filter(x => x.type === 'stage').length + 1}`, theme: '', speaker: '' } : t === 'message' ? { type: t, emoji: '☕', title: 'Intervalo', body: 'Voltamos em 15 minutos.' } : t === 'sucesso' ? { type: t, activity: el.dataset.activity } : t === 'cena' ? { type: t, cena: el.dataset.cena } : { type: t });
         return render(true);
       }
       case 'rsDel': draftSteps().splice(+el.dataset.i, 1); return render(true);
@@ -856,6 +1058,18 @@
       case 'rsDiscard': A.stepsDraft = null; return render(true);
       case 'rsDefault': if (!confirm('Trocar o roteiro pelo padrão? Você ainda precisa salvar para valer.')) return; A.stepsDraft = DEFAULT_STEPS(); return render(true);
       case 'rsSave': return run(async () => { await act('settings', { settings: { steps: A.stepsDraft } }); A.stepsDraft = null; }, 'Roteiro salvo');
+      // --- cenas do deck do townhall ---
+      case 'cena': {
+        const d = el.dataset, body = { kind: d.kind, action: d.a };
+        if (d.confirm && !confirm(d.confirm)) return;
+        for (const f of ['mes', 'premio', 'min', 'seconds', 'v']) if (d[f] !== undefined) body[f] = +d[f];
+        for (const f of ['fase', 'key']) if (d[f] !== undefined) body[f] = d[f];
+        if (el.type === 'checkbox') body.on = el.checked; else if (d.on !== undefined) body.on = !!d.on; else if (d.a === 'pagina') body.on = false;
+        return run(() => api('POST', '/api/admin/cena', body));
+      }
+      case 'cenaSec': A.cenaSec = el.dataset.sec; return render(true);
+      case 'cenaSave': return run(async () => { await api('POST', '/api/admin/cena', { action: 'config', config: cenaCollect(A.cenaSec) }); setTimeout(() => render(true), 600); }, 'Conteúdo salvo');
+      case 'cenaReset': return confirmRun('Voltar esta seção para o conteúdo original do deck? O que foi editado nela se perde.', async () => { await api('POST', '/api/admin/cena', { action: 'resetConfig', key: A.cenaSec }); setTimeout(() => render(true), 600); }, 'Seção restaurada');
       // --- dinâmicas do Sucesso ---
       case 'sucDraw': return run(() => api('POST', '/api/admin/sucesso/draw', { action: el.dataset.cmd }));
       // --- Reflexão ---
@@ -915,28 +1129,28 @@
       case 'importForm': return importFormDialog();
       case 'exportCsv': return exportCsv();
       case 'addQuestion': case 'editQuestion': {
-        const q = id ? O.questions.find(x => x.id === +id) : { text: '', era: 'presente' };
+        const q = id ? O.questions.find(x => x.id === +id) : { text: '', cat: 'quebragelo' };
         return dialog(`<h3>${id ? 'Editar pergunta' : 'Nova pergunta'}</h3><div class="form">
           <label class="f">Pergunta<textarea class="input" id="qText">${esc(q.text)}</textarea></label>
-          <label class="f">Era<select class="input" id="qEra">${['presente', 'passado', 'futuro'].map(e => `<option value="${e}" ${q.era === e ? 'selected' : ''}>${O.eras[e].icon} ${O.eras[e].label} · ${O.eras[e].year}</option>`).join('')}</select></label>
+          <label class="f">Categoria<select class="input" id="qCat">${CAT_ORDER.map(k => `<option value="${k}" ${q.cat === k ? 'selected' : ''}>${esc(catName(k))}</option>`).join('')}</select></label>
           <div class="actions"><button class="btn" id="qSave">Salvar</button><button class="btn ghost" data-close>Cancelar</button></div></div>`, () => {
-          $('#qSave').onclick = () => run(async () => { const body = { text: $('#qText').value, era: $('#qEra').value }; if (id) await api('PUT', `/api/admin/questions/${id}`, body); else await api('POST', '/api/admin/questions', body); closeDialog(); }, 'Pergunta salva');
+          $('#qSave').onclick = () => run(async () => { const body = { text: $('#qText').value, cat: $('#qCat').value }; if (id) await api('PUT', `/api/admin/questions/${id}`, body); else await api('POST', '/api/admin/questions', body); closeDialog(); }, 'Pergunta salva');
         });
       }
       case 'toggleQuestion': return run(() => api('PUT', `/api/admin/questions/${id}`, { active: el.dataset.v === '1' }));
       case 'deleteQuestion': return confirmRun('Excluir esta pergunta?', () => api('DELETE', `/api/admin/questions/${id}`), 'Excluída');
       case 'resetQuestions': return confirmRun('Restaurar o banco de perguntas padrão? As edições atuais serão perdidas.', () => api('POST', '/api/admin/questions/reset'), 'Banco restaurado');
-      case 'bulkQuestions': return dialog(`<h3>Substituir perguntas em massa</h3><p class="small">Uma pergunta por linha. Use um prefixo para a era: <span class="mono">[passado]</span>, <span class="mono">[presente]</span> ou <span class="mono">[futuro]</span>. Sem prefixo, a linha herda a última era usada (começa em presente). <span class="mono">[off]</span> marca uma pergunta desativada. Perguntas cujo texto não mudou mantêm o histórico (quem já viu não vê de novo).</p>
-        <textarea class="input" id="bulkText" style="min-height:220px;margin:10px 0">${esc(O.questions.map(q => `[${q.era}]${q.active ? '' : '[off]'} ${q.text}`).join('\n'))}</textarea>
+      case 'bulkQuestions': return dialog(`<h3>Substituir perguntas em massa</h3><p class="small">Uma pergunta por linha. Use um prefixo para a categoria: <span class="mono">[quebra-gelo]</span>, <span class="mono">[conexão]</span> ou <span class="mono">[além do óbvio]</span>. Sem prefixo, a linha herda a última categoria usada (começa em quebra-gelo). <span class="mono">[off]</span> marca uma pergunta desativada. Perguntas cujo texto não mudou mantêm o histórico (quem já viu não vê de novo).</p>
+        <textarea class="input" id="bulkText" style="min-height:220px;margin:10px 0">${esc(O.questions.map(q => `[${{ quebragelo: 'quebra-gelo', conexao: 'conexão', alem: 'além do óbvio' }[q.cat] || q.cat}]${q.active ? '' : '[off]'} ${q.text}`).join('\n'))}</textarea>
         <div class="actions"><button class="btn red" id="bulkGo">Substituir todas</button><button class="btn ghost" data-close>Cancelar</button></div>`, () => {
         $('#bulkGo').onclick = () => confirmRun('Substituir TODO o banco de perguntas?', async () => {
-          let era = 'presente'; const list = [];
+          let cat = 'quebra-gelo'; const list = [];
           for (const line of $('#bulkText').value.split('\n')) {
             let t = line.trim(); if (!t) continue;
             let active = true;
-            const m = t.match(/^\[(passado|presente|futuro)\]\s*(.*)$/i); if (m) { era = m[1].toLowerCase(); t = m[2]; }
+            const m = t.match(/^\[(?!off\])([^\]]{3,20})\]\s*(.*)$/i); if (m) { cat = m[1]; t = m[2]; } // o servidor entende o nome da categoria (e as eras do banco antigo)
             const off = t.match(/^\[off\]\s*(.*)$/i); if (off) { active = false; t = off[1]; }
-            if (t) list.push({ era, text: t, active });
+            if (t) list.push({ cat, text: t, active });
           }
           await api('POST', '/api/admin/questions/replace', { questions: list }); closeDialog();
         }, 'Banco substituído');
@@ -947,7 +1161,7 @@
     const close = e.target.closest('[data-close]'); if (close) { closeDialog(); return; }
     const tab = e.target.closest('#tabs [data-tab]'); if (tab) { A.tab = tab.dataset.tab; render(true); window.scrollTo(0, 0); return; }
     const prep = e.target.closest('[data-prep]'); if (prep) { A.prep = prep.dataset.prep; render(true); return; }
-    const go = e.target.closest('[data-go]'); if (go) { e.preventDefault(); if (go.dataset.go === 'live') A.tab = 'live'; else { A.tab = 'prep'; A.prep = go.dataset.go; } render(true); window.scrollTo(0, 0); return; }
+    const go = e.target.closest('[data-go]'); if (go) { e.preventDefault(); if (go.dataset.go === 'live') A.tab = 'live'; else { A.tab = 'prep'; A.prep = go.dataset.go; if (go.dataset.sec) A.cenaSec = go.dataset.sec; } render(true); window.scrollTo(0, 0); return; }
     const rt = e.target.closest('[data-roundtab]'); if (rt) { A.round = +rt.dataset.roundtab; render(true); return; }
     const el = e.target.closest('[data-act]'); if (el && el.tagName !== 'INPUT' && el.tagName !== 'SELECT') { if (el.tagName === 'A') e.preventDefault(); onAction(el); }
   });

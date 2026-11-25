@@ -60,6 +60,7 @@
     S.socket.on('connect', () => S.socket.emit('hello', {}, res => { if (res && res.state) { S.state = res.state; S.offset = res.now - Date.now(); render(); } }));
     S.socket.on('state', st => { S.state = st; S.offset = st.now - Date.now(); render(); });
     S.socket.on('sucesso:pulse', () => pollScreen());
+    S.socket.on('cena:pulse', p => { if (window.Cenas) Cenas.pulse(p); }); // Reconhecimento: a carga do Flux Capacitor subindo com os toques dos celulares
     S.socket.on('doc:test', () => { if (window.DocCena) { DocCena.testVoice(S.state); setTimeout(report, 300); } }); // Painel do Doc: "Testar a voz no telão"
     S.socket.on('connect', () => { pollScreen(); checkAuth(); });
   }
@@ -88,7 +89,9 @@
   async function loadPeople() { try { S.people = await (await fetch('/api/people')).json(); } catch { S.people = []; } }
 
   /* ---------- peças ---------- */
-  const logo = () => `<div class="logo"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div><div class="l3">TOWNHALL · HILL VALLEY</div></div>`;
+  // o nome do evento vem do conteúdo das cenas (Preparar → Agenda e cenas): "CDIO HC + BPC · TOWNHALL 2026"
+  const eventLine = () => { const ev = (S.state && S.state.evento) || {}; return [ev.titulo, ev.sub].filter(Boolean).join(' · ').toUpperCase() || 'TOWNHALL · HILL VALLEY'; };
+  const logo = () => `<div class="logo"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div><div class="l3">${esc(eventLine())}</div></div>`;
   const flux = () => `<div class="flux"><i></i><i></i><i></i><b></b></div>`;
   const quoteBlock = i => { const q = QUOTES[i % QUOTES.length]; return `<div class="quote" id="quote">“${esc(q[0])}”<small>${esc(q[1])}</small></div>`; };
   const eras = () => `<div class="eras" id="eras">${ERAS_FILM.map((e, i) => `<div class="era ${i === S.eraIdx ? 'on' : ''}"><div class="y">${esc(e.y)}</div><div class="f">${esc(e.f)}</div><div class="d">${esc(e.d)}</div></div>`).join('')}</div>`;
@@ -370,6 +373,7 @@
     standby: { kind: 'circuits', ms: 2400, quote: ['Isso é pesado, Doc.', 'Marty McFly · 1985'] },
     closing: { kind: 'end', ms: 4400, quote: ['O futuro ainda não está escrito. Ele é o que você fizer dele.', 'Doc Brown · 1990'] },
     doc: { kind: 'fuel', ms: 3800, quote: ['Você não está pensando em quatro dimensões!', 'Doc Brown · 1990'] },
+    cena: { kind: 'speed', ms: 3600, quote: ['Para onde vamos, não precisamos de estradas.', 'Doc Brown · 1985'] }, // cada cena do deck traz a sua frase (Cenas.info)
   };
   // o bloco que está no ar: identidade (para saber quando mudou) e nome (para os circuitos de tempo)
   function blockInfo(st) {
@@ -377,6 +381,7 @@
     if (pr) { const d = DYN[pr.activityId] || DYN.d1; return { id: 'sucesso:' + pr.activityId, type: 'sucesso', name: `SUCESSO ${d.n} · ${pr.title}` }; }
     if (st.reflexao || st.block === 'reflexao') return { id: 'reflexao', type: 'reflexao', name: 'REFLEXÃO' };
     if (st.block === 'doc') return { id: 'doc', type: 'doc', name: 'VISÃO 2027' };
+    if (st.block === 'cena' && st.cena && window.Cenas) return Cenas.info(st);
     switch (st.block) {
       case 'stage': return { id: 'stage:' + i, type: 'stage', name: (st.stage && st.stage.title) || 'BLOCO' };
       case 'connections': return { id: 'connections', type: 'connections', name: 'CONEXÕES' };
@@ -387,7 +392,7 @@
     }
   }
   function playTransition(from, to) {
-    const el = $('#tr'), cfg = TR[to.type] || TR.checkin, led = v => String(v).toUpperCase().slice(0, 26);
+    const el = $('#tr'), cfg = to.tr || TR[to.type] || TR.checkin, led = v => String(v).toUpperCase().slice(0, 26);
     const secs = Number(S.state.settings.transitionSeconds) || 15, quick = to.type === 'message' || to.type === 'standby';
     stopTransition();
     $('#trLast').textContent = led(from.name); $('#trNow').textContent = ledNow(true);
@@ -460,9 +465,13 @@
     if (sc === 'logo') return ['logo', `${logo()}${flux()}`];
     if (st.reflexao) return ['reflexao', reflexaoScene(st.reflexao)];
     if (st.block === 'doc' && window.DocCena) return ['doc', DocCena.html(st)]; // Visão 2027: o Doc chega de 2027
+    if (st.block === 'cena' && st.cena && window.Cenas) return ['cena', Cenas.html(st)]; // cenas do deck do townhall (plano de voo, almanaque, prêmios, estratégia…)
 
     const b = st.block;
-    if (b === 'welcome') return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox()}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div></div></div>`];
+    if (b === 'welcome') { // chegada: QR do app, o carro carregando a cada check-in e os circuitos de tempo do evento
+      const ev = st.evento || {}, circ = ev.destino ? `<div class="sf-circ ev-circ"><span class="r"><small>DESTINO</small><b>${esc(ev.destino)}</b></span><span class="g"><small>PRESENTE</small><b>${esc(ev.presente)}</b></span><span class="a"><small>ÚLTIMA PARTIDA</small><b>${esc(ev.partida)}</b></span></div>` : '';
+      return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox()}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div></div></div>${circ}`];
+    }
     if (b === 'standby') return ['logo', `${logo()}${flux()}`]; // olhos no telão: só o logo
     if (b === 'stage') { // bloco de fala: tela calma, com o título no estilo do logo do filme
       const g = st.stage || {}, theme = (g.theme || '').trim(), title = (g.title || 'Bloco').trim();
@@ -476,7 +485,7 @@
         </div>`];
     }
     if (b === 'message') { const m = st.message; return ['message', `<div class="msg"><div class="e">${esc(m.emoji || '📣')}</div></div><div class="title">${esc(m.title)}</div><div class="msg"><p>${linkify(m.body)}</p></div>`]; }
-    if (b === 'closing') return ['closing', `<div class="title">FIM DA VIAGEM</div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
+    if (b === 'closing') return ['closing', `<div class="fin" id="fin"><div class="a"><span class="bttf" id="finA">FIM DA VIAGEM</span></div><div class="b" id="finB"></div></div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
     // conexões
     const r = c.round, era = roundEra(r), t = c.timer;
     if (c.phase === 'idle' || c.phase === 'ready') return ['prep', `<div class="kicker">BLOCO CONEXÕES</div><div class="title">ROTAS TEMPORAIS</div>${flux()}`];
@@ -487,11 +496,22 @@
     if (c.phase === 'results') return ['results', `<div class="kicker">CONEXÕES CALCULADAS</div><div class="title">OLHE O CELULAR</div><div class="sub"><b>${c.mutualCount}</b> conexões mútuas</div>${c.mutualPairs && c.mutualPairs.length ? `<div class="mutual">${c.mutualPairs.map(p => `<span>${esc(p[0].split(' ')[0])} ⚡ ${esc(p[1].split(' ')[0])}</span>`).join('')}</div>` : ''}`];
     return ['logo', `${logo()}${flux()}`];
   }
+  // Créditos: os blocos do deck (produtores, frentes, local, agradecimentos) e, em seguida, o elenco: todos os nomes do check-in
   function credits() {
     if (!S.people) { loadPeople().then(render); return ''; }
-    const names = S.people.map(p => p.name);
-    const dur = Math.max(40, names.length * 2.2);
-    return `<div class="credits"><div class="roll" style="--dur:${dur}s"><div class="h">ELENCO · VIAJANTES DO TEMPO</div>${names.map(n => `<div>${esc(n)}</div>`).join('')}<div class="h">DIREÇÃO · DOC BROWN</div><div>Hill Valley, 1985</div></div></div>`;
+    const c = S.state.creditos || {}, blocos = c.blocos || [], names = S.people.map(p => p.name);
+    const dur = Math.max(40, (names.length + blocos.reduce((n, x) => n + 1 + x.l.length, 0)) * 2.2);
+    return `<div class="credits"><div class="roll" style="--dur:${dur}s">${c.titulo ? `<div class="t">${esc(c.titulo)}</div><div class="s">${esc(c.sub || '')}</div>` : ''}
+      ${blocos.map(x => `<div class="h">${esc(x.h)}</div>${x.l.map(n => `<div>${esc(n)}</div>`).join('')}`).join('')}
+      <div class="h">ELENCO · VIAJANTES DO TEMPO</div>${names.map(n => `<div>${esc(n)}</div>`).join('')}<div class="h">DIREÇÃO · DOC BROWN</div><div>Hill Valley, 1985</div>
+      ${c.fim ? `<div class="end">${esc(c.fim)}</div><div class="s">${esc(c.fimSub || '')}</div>` : ''}</div></div>`;
+  }
+  // O final do deck: as frases passam uma a uma por cima dos créditos e param no agradecimento
+  function startFinale() {
+    clearInterval(S.finT);
+    const c = (S.state && S.state.creditos) || {}, lines = [...(c.final || []), [c.fim || 'FIM DA VIAGEM', c.fimSub || '']];
+    let i = 0; const show = () => { const f = $('#fin'); if (!f) return clearInterval(S.finT); $('#finA').textContent = lines[i][0]; $('#finB').textContent = lines[i][1]; f.classList.remove('sw'); void f.offsetWidth; f.classList.add('sw'); };
+    show(); if (lines.length > 1) S.finT = setInterval(() => { if (++i >= lines.length - 1) clearInterval(S.finT); show(); }, 5000);
   }
 
   /* ---------- render / tick ---------- */
@@ -505,24 +525,31 @@
     const [key, html] = sceneFor();
     const pr = S.state.presentation, rf = key === 'reflexao' ? S.state.reflexao : null;
     const dk = key === 'doc' && S.state.doc ? `${S.state.doc.rev}:${S.state.doc.message ? 1 : 0}` : ''; // nova mensagem (ou a cena começou): monta de novo
-    const k = `${key}|${dk}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
+    const ck = key === 'cena' ? S.state.cena.kind : key === 'closing' ? JSON.stringify(S.state.creditos || '').length : key === 'welcome' || key === 'logo' ? JSON.stringify(S.state.evento || '') : ''; // cena do deck no ar / conteúdo do evento
+    const k = `${key}|${dk}|${ck}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}`;
     if (k !== S.key) {
       if (window.DocCena) DocCena.unmount();
+      if (window.Cenas) Cenas.unmount();
+      clearInterval(S.finT);
       S.key = k; $('#scene').innerHTML = html;
-      $('#scene').classList.toggle('projection-scene', key === 'projection' || key === 'reflexao');
+      $('#scene').classList.toggle('projection-scene', key === 'projection' || key === 'reflexao' || key === 'cena');
       $('#scene').dataset.key = key;
       mountCar(key);
       mountReflexao();
       if (key === 'doc') DocCena.mount($('#scene'), S.state);
+      if (key === 'cena') Cenas.mount($('#scene'), S.state, { car: () => S.car, flash, duck: on => { S.duck = !!on; applyAudio(); } });
+      if (key === 'closing' && S.people) startFinale();
       if (key === 'roundEnd' || key === 'results') flash();
       if (key === 'projection') pollScreen(); else { clearTimeout(S.pollT); S.responses = null; }
       // telas calmas (bloco de fala): fundo parado e escurecido, sem raios
-      S.calm = key === 'stage'; document.body.classList.toggle('calm', S.calm); if (window.Delorean3D) Delorean3D.pause(S.calm);
+      S.calm = key === 'stage' || (key === 'cena' && Cenas.calm(S.state)); document.body.classList.toggle('calm', S.calm);
+      if (key !== 'cena') S.duck = false; if (window.Delorean3D) Delorean3D.pause(S.calm);
     } else {
       const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), S.checked !== null && S.state.counts.checkedIn > S.checked); }
       if (key === 'projection') patchProjection();
       if (key === 'reflexao') patchReflexao();
       if (key === 'doc') DocCena.update(S.state);
+      if (key === 'cena') Cenas.update(S.state);
       const rd = $('#rankDone'); if (rd) { rd.textContent = S.state.conn.rankingDone; const b = $('#rankBar'); if (b) b.style.width = Math.round(100 * S.state.conn.rankingDone / Math.max(1, S.state.conn.rankingTotal)) + '%'; }
     }
     S.checked = S.state.counts.checkedIn;
@@ -534,6 +561,7 @@
     if (!S.state) return;
     tickProjection();
     tickReflexao();
+    if (window.Cenas) Cenas.tick();
     const t = S.state.conn.timer, wrap = $('#cdwrap');
     if (!t || !wrap || wrap.dataset.kind !== t.kind) return;
     const left = t.paused ? t.remaining : Math.max(0, Math.round((t.endsAt - serverNow()) / 1000));
@@ -557,12 +585,14 @@
     Trilha.countdown('suc', l && l.phase === 'run' && l.endsAt ? sec(l.endsAt) : null);
     Trilha.countdown('talk', talk && talk.endsAt ? sec(talk.endsAt) : null);
     Trilha.countdown('rfx', c && c.phase === 'run' && c.endsAt ? sec(c.endsAt) : null, { end: false }); // o fim da votação já tem o seu som
+    const iv = st.cena && st.cena.kind === 'intervalo' ? st.cena.live : null;                            // cronômetro do intervalo
+    Trilha.countdown('brk', iv && iv.phase === 'run' && iv.endsAt ? sec(iv.endsAt) : null);
   }, 100);
   setInterval(() => { if (!S.calm && Math.random() < .2) flash(); }, 9000);
   // som do telão (música, trilha de fundo ou silêncio, escolhido no Painel do Doc)
   function applyAudio() {
     if (!window.Trilha || !S.state || !S.state.audio) return;
-    const a = S.state.audio, duck = window.DocCena && DocCena.speaking ? .22 : 1; // a música abaixa enquanto o Doc fala
+    const a = S.state.audio, duck = (window.DocCena && DocCena.speaking) || S.duck ? .22 : 1; // a música abaixa enquanto o Doc fala (e durante o vídeo-tributo)
     Trilha.apply({ mode: a.out === 'painel' ? 'off' : a.mode, beeps: a.out !== 'painel' && a.beeps !== false, volume: a.volume * duck, musicUrl: a.musicUrl, ambientUrl: a.ambientUrl });
   }
   // a cena do Doc avisa quando começa/para de falar e em que parte está: abaixa a música e conta para o Painel do Doc
