@@ -257,6 +257,8 @@ const STYLE = 'cinematic shot, 35mm anamorphic lens, 16:9, night, synthwave colo
 const DOC_LOOK = 'Doc, an original eccentric elderly scientist: wild, voluminous white hair swept back and falling to the shoulders, wide startled eyes under raised bushy white eyebrows, dark green round welding goggles pushed up on his forehead, white zip-up radiation-style coat with a stand-up collar and a colorful patterned scarf, a big silver wristwatch, a small remote control on a black cord; amazed, energetic expression; original design, not resembling any real actor';
 const DOC_SHORT = 'Doc (wild swept-back white hair, dark green welding goggles on his forehead, white zip-up coat)';
 const CAR = 'a stainless-steel 1980s sports car with gull-wing doors, retrofitted with glowing cyan conduits and gadgets on the rear, time-machine look';
+// direção de arte dos clipes do Google (Nano Banana Pro + Veo 3.1): animação 3D de cinema, não o desenho do telão
+const ART = 'Pixar-style 3D animated feature film look, appealing stylized proportions, soft subsurface skin, expressive eyes, cinematic lighting with a warm orange key light from the right (sunset) and a cyan rim light from the left (time portal glow), night, light haze, shallow depth of field, subtle anamorphic lens flares, 1980s synthwave palette of magenta, orange and cyan';
 const SCENE = {
   d1: ['Medium close-up', `${DOC_SHORT} stands in front of the car holding a glowing tablet with floating words, looks up to the camera with a proud smile and speaks`, 'gentle orbit to the right'],
   d2: ['Medium shot', `${DOC_SHORT} looks back over his shoulder at the road behind him, glowing with warm golden light from the past, then turns to the camera and speaks`, 'slow pan following his turn'],
@@ -290,7 +292,23 @@ function videoKit(message, { eventName } = {}) {
     'Se não der tempo, o telão faz a cena ao vivo com o Doc animado e a voz do navegador.',
     '',
     'IMPORTANTE: o Doc é um personagem original. Não use o rosto, a voz ou cenas do filme nem do ator.',
-    '', '=== O JEITO MAIS RÁPIDO: DOIS VÍDEOS CURTOS DO DOC (PARADO E FALANDO) ===', '',
+    '', '=== COM A SUA ASSINATURA DO GOOGLE (Nano Banana Pro + Veo 3.1 no Flow) — O CAMINHO RECOMENDADO ===', '',
+    'Direção de arte: animação 3D de cinema (estilo Pixar), noite, luz quente do pôr do sol de um lado e luz azul-turquesa do portal do outro, névoa leve, cores synthwave. Personagem original (não pode lembrar nenhum ator).',
+    'Passo 1 · Nano Banana Pro (no Gemini ou no Flow): gere a FICHA do Doc com o prompt [G1]. Gere algumas e escolha a melhor.',
+    'Passo 2 · Nano Banana Pro: com a ficha anexada como referência, gere o QUADRO DE CENA [G2] (16:9). Ele é o primeiro e o último quadro dos vídeos que se repetem.',
+    'Passo 3 · Veo 3.1 no Flow, em "Frames to Video" (primeiro quadro = G2, último quadro = G2, para emendar sem pulo): gere [G3] parado e [G4] falando, de 8 s cada.',
+    'Passo 4 · Veo 3.1 no Flow, em "Ingredients to Video" (com a ficha G1): gere [G5], a chegada com a fala, para tocar no começo da cena.',
+    'Passo 5 · Baixe os vídeos (.mp4) e me mande aqui na conversa, ou coloque num link público. Eu ligo no app: G3 e G4 em "Vídeo do Doc parado/falando", G5 em "Vídeo do Doc". O som de G3 e G4 fica desligado; a voz da cena vem do telão.',
+    'Opcional · Se houver tempo no dia, gere uma frase por clipe com os prompts [G6] (as falas do dia estão nos SEGMENTOS PRONTOS, mais abaixo), junte as cenas no Flow e use como "o vídeo já traz a fala completa".',
+    'Os limites do plano (quantos vídeos por dia) mudam; se acabar, continue no dia seguinte ou use o MiniMax H3 do tutorial.',
+    '',
+    `[G1 · ficha] Character turnaround sheet of ${DOC_LOOK}. ${ART}. Front view full body, three-quarter view and side view, plus close-ups of the face with three expressions (amazed, laughing, explaining). Plain light gray background, consistent design, clean layout, no text.`,
+    `[G2 · quadro de cena] Cinematic 16:9 still frame, medium shot of the same Doc from the reference sheet standing in front of ${CAR} on a wet neon grid road at night under a striped synthwave sunset, looking at the camera with amazement. ${ART}.`,
+    `[G3 · parado, 8 s] ${ART}. The same shot as the reference frame: Doc stands still, breathing, blinks, glances around in amazement, tiny head movements, mouth closed. Locked-off camera. No dialogue, only soft night wind and an electric hum.`,
+    `[G4 · falando, 8 s] ${ART}. The same shot as the reference frame: Doc talks excitedly to the camera with expressive hand gestures and raised eyebrows, as if explaining something amazing, natural mouth movement. Locked-off camera. No subtitles, no on-screen text.`,
+    `[G5 · chegada com fala, 8 s] ${ART}. Wide shot at night: three lightning bolts strike the neon road, ${CAR} appears in a white flash leaving two trails of fire; the gull-wing door opens with white smoke and Doc steps out, raises both arms and says in Brazilian Portuguese, with an excited elderly male voice: "Pelo grande raio! Acabei de voltar de 2027!" The camera slowly pushes in.`,
+    `[G6 · uma frase, 8 s] ${ART}. The same shot as the reference frame: Doc looks into the camera and says in Brazilian Portuguese, with an excited elderly male voice: "<cole aqui a fala do segmento>". Locked-off camera, natural lip sync, no subtitles.`,
+    '', '=== SEM O GOOGLE: DOIS VÍDEOS CURTOS DO DOC (PARADO E FALANDO) COM OUTRAS FERRAMENTAS ===', '',
     'O telão alterna sozinho entre os dois no ritmo da voz ao vivo, com as legendas. Assim o Doc parece um vídeo de verdade e a fala pode mudar no dia, com as respostas do evento.',
     '1. Gere o retrato do Doc (prompt [retrato_doc.png] abaixo) e escolha o melhor.',
     '2. Com o retrato como imagem de referência, gere os dois vídeos com os prompts [loop_parado.mp4] e [loop_falando.mp4] abaixo: mesmo enquadramento, câmera parada, 16:9, 1080p, 6 a 8 segundos, o último quadro igual ao primeiro (para emendar sem pulo).',
