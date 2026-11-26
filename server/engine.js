@@ -78,11 +78,11 @@ const DEFAULT_SETTINGS = {
   docVoice: true,         // o telão fala o texto (voz em português do navegador)
   docVoiceName: '',       // parte do nome da voz preferida (ex.: "Antonio"); vazio = escolhe a melhor voz masculina em pt-BR
   docRate: 1,             // velocidade da fala (0,7 a 1,4)
-  docVideoUrl: '',        // opcional: vídeo do Doc (ex.: feito com IA), tocado na chegada
+  docVideoUrl: '/videos/doc-chegada.mp4', // vídeo da chegada do Doc (feito com IA no Gemini/Veo; vazio = chegada animada no código)
   docVideoFull: false,    // o vídeo já traz a fala completa: depois dele o telão vai direto para o jornal e o 2027
   docImageUrl: '',        // opcional: retrato do Doc feito com IA (fundo escuro), no lugar do desenho
-  docIdleVideoUrl: '',    // opcional: vídeo curto do Doc parado (feito com IA), repetido quando ele não está falando
-  docTalkVideoUrl: '',    // opcional: vídeo curto do Doc falando (feito com IA), repetido enquanto a voz fala
+  docIdleVideoUrl: '/videos/doc-parado.mp4',  // vídeo curto do Doc parado, repetido quando ele não está falando (vazio = desenho)
+  docTalkVideoUrl: '/videos/doc-falando.mp4', // vídeo curto do Doc falando, repetido enquanto a voz fala
   agenda: [
     { time: '', title: 'Boas-vindas e check-in' },
     { time: '', title: 'Conexões · 3 viagens no tempo' },

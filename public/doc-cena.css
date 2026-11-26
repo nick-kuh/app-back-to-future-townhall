@@ -16,6 +16,7 @@ body.doc-cine .crt{display:none}
 .cx-fog.f2{bottom:-8vh;animation-duration:34s;animation-direction:alternate-reverse;opacity:.55}
 @keyframes cxfog{to{transform:translateX(8vw)}}
 .dx-cloud{position:absolute;inset:14vh 0 14vh 34vw;opacity:.42;filter:blur(1.6px);pointer-events:none;transition:opacity .8s}
+.docx[data-part=espera] .dx-cloud,.docx[data-part=chegada] .dx-cloud{opacity:0}
 .dx-cloud canvas{width:100%;height:100%;display:block}
 
 /* ---- o Doc e os planos ---- */
@@ -181,6 +182,9 @@ body.doc-cine .crt{display:none}
 .doc-vid video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .35s ease,transform 16s cubic-bezier(.2,.6,.3,1)}
 .doc-vid .v-talk{opacity:0}
 .docx.talking .doc-vid .v-talk{opacity:1}
-.docx[data-shot=mcu-r] .doc-vid video{transform:scale(1.12);transform-origin:70% 40%}
-.docx[data-shot=cu] .doc-vid video{transform:scale(1.32);transform-origin:45% 32%}
-.docx[data-shot=ecu] .doc-vid video{transform:scale(1.6);transform-origin:50% 30%}
+.docx[data-shot=mcu-r] .doc-vid video{transform:scale(1.08);transform-origin:62% 40%}
+.docx[data-shot=cu] .doc-vid video{transform:scale(1.18);transform-origin:50% 30%}
+.docx[data-shot=ecu] .doc-vid video{transform:scale(1.3);transform-origin:50% 28%}
+/* com o Doc em vídeo (no centro do quadro), o título de filme fica menor e encostado à direita */
+.docx:has(.dx-doc.is-video) .cx-title{width:28vw;right:3vw;top:17vh}
+.docx:has(.dx-doc.is-video) .cx-title b{font-size:clamp(18px,2vw,38px)}

@@ -192,6 +192,12 @@
 
   /* ---------- partes ---------- */
   function next() { const list = partsOf(C.m); if (C.part < list.length - 1) play(C.part + 1); }
+  // Com o vídeo da chegada, o Doc já disse "Pelo grande raio, acabei de voltar de 2027": a abertura segue dali, sem repetir.
+  function skipArrival(text) {
+    let t = String(text || '').trim();
+    for (let i = 0; i < 2; i++) { const m = t.match(/^[^.!?…]*[.!?…]+\s*/); if (!m || !/grande raio|(voltar|voltei|cheguei|chegar|chegando) de 2027/i.test(m[0])) break; t = t.slice(m[0].length); }
+    return t || text;
+  }
   function play(idx) {
     clearAll();
     const list = partsOf(C.m); if (!list.length) return;
@@ -207,7 +213,8 @@
     if (id === 'abertura') {
       shot('mcu'); pose('wave');
       title(`<small>DE VOLTA PARA O SUCESSO APRESENTA</small><b>${esc(m.titulo)}</b>`, 5200);
-      return later(1400, () => speak(m.abertura, () => later(1100, next)));
+      const set = (C.st && C.st.settings) || {};
+      return later(1400, () => speak(set.docVideoUrl ? skipArrival(m.abertura) : m.abertura, () => later(1100, next)));
     }
     if (id === 'jornal') return newspaper();
     if (id === 'final') return finale();
@@ -231,7 +238,9 @@
       video.hidden = false; video.src = set.docVideoUrl; video.currentTime = 0; video.volume = 1;
       // vídeo com a fala completa (ex.: o curta feito com IA): depois dele, direto para o jornal e o 2027
       const full = !!set.docVideoFull, jornal = partsOf(C.m).indexOf('jornal');
-      const go = () => { video.onended = video.onerror = null; video.pause(); video.hidden = true; el.classList.add('arrived'); flash(true); later(1200, () => (full && jornal > 0 ? play(jornal) : next())); };
+      // o vídeo termina no plano médio do Doc: a cena continua direto nele (sem clarão nem tela vazia)
+      const go = () => { video.onended = video.onerror = null; el.classList.add('arrived'); if (full) flash(true); else shot('mcu', { cut: false });
+        later(full ? 1200 : 60, () => { video.pause(); video.hidden = true; (full && jornal > 0 ? play(jornal) : next()); }); };
       video.onended = go; video.onerror = () => { video.hidden = true; video.onended = video.onerror = null; arrivalShow(); };
       video.play().catch(() => { video.muted = true; video.play().catch(() => { video.hidden = true; arrivalShow(); }); });
       return;
