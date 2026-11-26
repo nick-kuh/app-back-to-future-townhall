@@ -199,6 +199,22 @@ async function serverFlow() {
     await call('POST', '/api/admin/action', { type: 'settings', settings: { docImageUrl: 'data:image/png;base64,xx' } });
     st = (await call('GET', '/api/state')).json; assert.equal(st.settings.docImageUrl, '', 'só endereços http(s) ou do próprio site');
 
+    // abertura e encerramento fixos (vídeo com a boca sincronizada): validação e a mensagem segue o texto fixo
+    const OPEN = 'Vocês não vão acreditar no que eu vi! Prestem atenção!', CLOSE = 'O futuro não está escrito. Construam 2027!';
+    await call('POST', '/api/admin/action', { type: 'settings', settings: { docOpenText: `  ${OPEN}\n `, docOpenVideo: '/videos/doc-abertura.mp4', docCloseText: CLOSE + ' '.repeat(3), docCloseVideo: 'javascript:alert(1)' } });
+    st = (await call('GET', '/api/state')).json;
+    assert.equal(st.settings.docOpenText, OPEN); assert.equal(st.settings.docOpenVideo, '/videos/doc-abertura.mp4'); assert.equal(st.settings.docCloseText, CLOSE); assert.equal(st.settings.docCloseVideo, '', 'endereço inválido descartado');
+    await call('POST', '/api/admin/action', { type: 'settings', settings: { docCloseText: 'x'.repeat(900) } });
+    st = (await call('GET', '/api/state')).json; assert.equal(st.settings.docCloseText.length, 600, 'texto fixo com no máximo 600 caracteres');
+    await call('POST', '/api/admin/action', { type: 'settings', settings: { docCloseText: CLOSE } });
+    r = await call('POST', '/api/admin/doc', { action: 'generate', ai: false }); assert.equal(r.status, 200);
+    ov = (await call('GET', '/api/admin/overview')).json; assert.equal(ov.state.doc.message.abertura, OPEN); assert.equal(ov.state.doc.message.encerramento, CLOSE);
+    await call('POST', '/api/admin/doc', { action: 'edit', message: { abertura: 'Outra abertura', encerramento: 'Outro fim' } });
+    ov = (await call('GET', '/api/admin/overview')).json; assert.equal(ov.state.doc.message.abertura, OPEN, 'o texto fixo continua depois de editar'); assert.equal(ov.state.doc.message.encerramento, CLOSE);
+    r = await call('GET', '/api/admin/doc.txt'); assert.match(r.text, /Construam 2027!/);
+    await call('POST', '/api/admin/action', { type: 'settings', settings: { docOpenText: '', docOpenVideo: '', docCloseText: '' } });
+    await call('POST', '/api/admin/doc', { action: 'generate', ai: false }); ov = (await call('GET', '/api/admin/overview')).json; assert.notEqual(ov.state.doc.message.abertura, OPEN, 'sem texto fixo, volta a ser gerado');
+
     // apagar a mensagem e resetar o evento
     r = await call('POST', '/api/admin/doc', { action: 'clear' }); st = (await call('GET', '/api/state')).json; assert.equal(st.doc.ready, false); assert.equal(st.doc.phones, false);
     await call('POST', '/api/admin/doc', { action: 'generate', ai: false }); ov = (await call('GET', '/api/admin/overview')).json; assert.equal(ov.state.doc.message.fonte, 'auto');

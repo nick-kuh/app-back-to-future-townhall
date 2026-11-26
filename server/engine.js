@@ -87,6 +87,9 @@ const DEFAULT_SETTINGS = {
   docImageUrl: '',        // opcional: retrato do Doc feito com IA (fundo escuro), no lugar do desenho
   docIdleVideoUrl: DOC_IDLE,  // trechos do Doc parado/sorrindo, quando ele não está falando (vazio = desenho)
   docTalkVideoUrl: DOC_TALK,  // trechos do Doc falando (um ou mais), editados ao vivo enquanto a voz fala
+  // fala fixa com a boca sincronizada (ex.: feita no Higgsfield/MAGI-2): o texto é exatamente o que o Doc diz no vídeo
+  docOpenText: '', docOpenVideo: '',    // abertura fixa (vazio = a IA escreve e o telão usa a voz)
+  docCloseText: '', docCloseVideo: '',  // encerramento fixo
   agenda: [
     { time: '', title: 'Boas-vindas e check-in' },
     { time: '', title: 'Conexões · 3 viagens no tempo' },
@@ -667,7 +670,8 @@ class Engine {
     // áudio próprio: só endereços http(s) ou caminhos do próprio site
     // vídeos do Doc parado/falando: um ou mais endereços (separados por espaço, vírgula ou linha)
     for (const k of ['docIdleVideoUrl', 'docTalkVideoUrl']) if (partial[k] !== undefined) s[k] = String(partial[k]).split(/[\s,]+/).filter(u => /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u)).slice(0, 12).join(' ').slice(0, 3000);
-    for (const k of ['musicUrl', 'ambientUrl', 'docVideoUrl', 'docImageUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
+    for (const k of ['musicUrl', 'ambientUrl', 'docVideoUrl', 'docImageUrl', 'docOpenVideo', 'docCloseVideo']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
+    for (const k of ['docOpenText', 'docCloseText']) if (partial[k] !== undefined) s[k] = String(partial[k]).replace(/\s+/g, ' ').trim().slice(0, 600);
     if (partial.docVoice !== undefined) s.docVoice = !!partial.docVoice;
     if (partial.docVideoFull !== undefined) s.docVideoFull = !!partial.docVideoFull;
     if (partial.docVoiceName !== undefined) s.docVoiceName = clip(partial.docVoiceName, 80);
@@ -945,7 +949,8 @@ class Engine {
       step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length },
       audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', beeps: this.state.audio.beeps !== false, musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
       settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 15,
-        docVoice: this.settings.docVoice !== false, docVoiceName: this.settings.docVoiceName || '', docRate: this.settings.docRate || 1, docVideoUrl: this.settings.docVideoUrl || '', docVideoFull: !!this.settings.docVideoFull, docImageUrl: this.settings.docImageUrl || '', docIdleVideoUrl: this.settings.docIdleVideoUrl || '', docTalkVideoUrl: this.settings.docTalkVideoUrl || '' },
+        docVoice: this.settings.docVoice !== false, docVoiceName: this.settings.docVoiceName || '', docRate: this.settings.docRate || 1, docVideoUrl: this.settings.docVideoUrl || '', docVideoFull: !!this.settings.docVideoFull, docImageUrl: this.settings.docImageUrl || '', docIdleVideoUrl: this.settings.docIdleVideoUrl || '', docTalkVideoUrl: this.settings.docTalkVideoUrl || '',
+        docOpenText: this.settings.docOpenText || '', docOpenVideo: this.settings.docOpenVideo || '', docCloseText: this.settings.docCloseText || '', docCloseVideo: this.settings.docCloseVideo || '' },
       now: now(),
     };
   }

@@ -222,6 +222,9 @@
   // do Gemini), um atrás do outro, com o som do próprio clipe e a frase atual como legenda. Sem clipes para
   // esta parte, ou se um deles não carregar, o resto da fala segue com a voz do navegador e os trechos gerais.
   function lipFor(id) {
+    // abertura/encerramento fixos com a boca sincronizada (ex.: Higgsfield/MAGI-2) valem antes dos clipes da API
+    const set = (C.st && C.st.settings) || {}, fixed = id === 'abertura' ? [set.docOpenVideo, set.docOpenText, C.m && C.m.abertura] : id === 'final' ? [set.docCloseVideo, set.docCloseText, C.m && C.m.encerramento] : null;
+    if (fixed && fixed[0] && VP.box) return [{ url: fixed[0], text: fixed[1] || fixed[2] || '', seconds: 30 }];
     const l = C.st && C.st.doc && C.st.doc.lip, list = l && l.clips && l.clips[id];
     return VP.box && C.m && l && l.rev === (C.st.doc.rev || 0) && Array.isArray(list) && list.length ? list : null;
   }

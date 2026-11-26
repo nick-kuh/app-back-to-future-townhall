@@ -110,6 +110,15 @@ mesmo quadro do vídeo da chegada (`public/videos/doc-quadro.jpg`), com a mesma 
 - Modelo: `gemini-omni-1.2-flash` (o Veo 3.1 saiu da API do Gemini em outubro de 2026). Para trocar, use
   `GEMINI_VIDEO_MODEL`. O formato do pedido fica todo em `requestClip()`, em `server/lipsync.js`.
 
+### 🎙 Abertura e encerramento fixos com a boca sincronizada (Higgsfield / MAGI-2)
+
+Sem pagar a API, dá para ter a boca sincronizada nas duas falas que não dependem das respostas: a abertura e o
+encerramento. Gere no site do Higgsfield (modelo MAGI-2, a partir de `public/videos/doc-quadro.jpg`) um vídeo do Doc
+dizendo cada texto e, em Mais opções do passo Visão 2027, preencha **Abertura fixa** e **Encerramento fixo**: o texto
+(exatamente o que o Doc fala no vídeo) e o endereço do .mp4. A mensagem do dia passa a usar esses textos (telão,
+celulares e .txt) e o telão toca o vídeo com o som e a legenda. O meio (as dinâmicas e o jornal) continua gerado no dia,
+narrado pela voz do telão com o Doc em vídeo. Vídeo vazio ou que não carregar = voz do telão.
+
 ### 🎬 Vídeo do Doc feito com IA (opcional)
 
 Para quem quiser um curta "de cinema" do Doc, gerado no próprio computador com o método do tutorial

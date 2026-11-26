@@ -280,6 +280,14 @@ app.get('/api/admin/export', wrap(() => {
 }));
 // Visão 2027: o Doc escreve a mensagem (IA ou roteiro automático), o Doc do painel revisa e conduz a cena no telão.
 const sucessoExport = () => (sucesso.ready() ? sucesso.exportData(engine.state.sucessoRoom) : { roomId: null, acts: [] });
+// Abertura e encerramento fixos (vídeos com a boca sincronizada): o texto da mensagem fica igual ao que o Doc diz no vídeo
+const withFixed = m => {
+  if (!m) return m;
+  const st = engine.settings, out = { ...m };
+  if (st.docOpenText) out.abertura = st.docOpenText;
+  if (st.docCloseText) out.encerramento = st.docCloseText;
+  return out;
+};
 app.post('/api/admin/doc', wrapAsync(async req => {
   const a = req.body || {};
   switch (a.action) {
@@ -287,7 +295,7 @@ app.post('/api/admin/doc', wrapAsync(async req => {
       if (!sucesso.ready()) throw Object.assign(new Error('As dinâmicas do Sucesso ainda estão carregando. Tente de novo em instantes.'), { status: 503 });
       engine.setDocGenerating();
       try {
-        const message = await doc.generate(sucessoExport(), { useAI: a.ai !== false });
+        const message = withFixed(await doc.generate(sucessoExport(), { useAI: a.ai !== false }));
         engine.setDocMessage(message);
         return { ok: true, fonte: message.fonte, aviso: message.aviso || '' };
       } catch (e) { engine.setDocError(e.message); throw e; }
@@ -295,7 +303,7 @@ app.post('/api/admin/doc', wrapAsync(async req => {
     case 'edit': {
       const cur = engine.state.doc.message;
       if (!cur) throw Object.assign(new Error('Gere a mensagem do Doc antes.'), { status: 409 });
-      engine.setDocMessage(doc.edit(cur, a.message || {}, sucessoExport()));
+      engine.setDocMessage(withFixed(doc.edit(cur, a.message || {}, sucessoExport())));
       return { ok: true };
     }
     case 'clear': lipStop(); engine.setDocMessage(null); engine.lipClear(); return { ok: true };

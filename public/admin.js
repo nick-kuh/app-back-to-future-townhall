@@ -420,6 +420,10 @@
         <label class="f">Vídeos do Doc parado (um ou mais .mp4 feitos com IA, separados por espaço ou vírgula; tocam quando ele não fala)<input class="input" id="docIdleVideoUrl" value="${esc(S2.docIdleVideoUrl || '')}" placeholder="https://… ou /videos/doc-parado.mp4"></label>
         <label class="f">Vídeos enquanto a voz fala (o Doc falando, ou em ação de boca fechada, como narração; um ou mais .mp4 separados por espaço ou vírgula; o telão corta entre eles — quanto mais, menos repetição)<input class="input" id="docTalkVideoUrl" value="${esc(S2.docTalkVideoUrl || '')}" placeholder="https://… ou /videos/doc-falando.mp4"></label>
         <label class="f">Imagem do Doc (opcional: retrato feito com IA, fundo escuro, no lugar do desenho; o prompt está no kit do vídeo)<input class="input" id="docImageUrl" value="${esc(S2.docImageUrl || '')}" placeholder="https://… ou /imagens/doc.png"></label>
+        <label class="f">Abertura fixa: texto (precisa ser exatamente o que o Doc fala no vídeo; vazio = a IA escreve)<textarea class="input" id="docOpenText" rows="2">${esc(S2.docOpenText || '')}</textarea></label>
+        <label class="f">Abertura fixa: vídeo do Doc com a boca sincronizada (.mp4, ex.: feito no Higgsfield; vazio = voz do telão)<input class="input" id="docOpenVideo" value="${esc(S2.docOpenVideo || '')}" placeholder="https://… ou /videos/doc-abertura.mp4"></label>
+        <label class="f">Encerramento fixo: texto (precisa ser exatamente o que o Doc fala no vídeo; vazio = a IA escreve)<textarea class="input" id="docCloseText" rows="2">${esc(S2.docCloseText || '')}</textarea></label>
+        <label class="f">Encerramento fixo: vídeo do Doc com a boca sincronizada (.mp4; vazio = voz do telão)<input class="input" id="docCloseVideo" value="${esc(S2.docCloseVideo || '')}" placeholder="https://… ou /videos/doc-encerramento.mp4"></label>
         <label class="sw"><input type="checkbox" id="docVideoFull" ${S2.docVideoFull ? 'checked' : ''}> O vídeo já traz a fala completa do Doc (depois dele, o telão vai direto para o jornal de 2027 e o "2027" final, sem repetir a fala)</label>
         <div class="actions">${btn('Salvar', 'docSaveCfg', { cls: 'sm' })}${btn('🔈 Testar a voz no telão', 'docTestVoice', { cls: 'ghost sm' })}</div>
         <p class="small">${tp && tp.voice ? `Voz em uso no telão: <b>${esc(tp.voice)}</b>.` : 'O telão escolhe a voz quando abre. No Windows, o Microsoft Edge tem as vozes mais naturais (ex.: "Antonio").'}</p>
@@ -429,7 +433,8 @@
   function docEditDialog() {
     const m = A.O.state.doc && A.O.state.doc.message; if (!m) return toast('Gere a mensagem antes.', true);
     const ta = (id, label, v, rows = 3) => `<label class="f">${label}<textarea class="input" id="${id}" rows="${rows}">${esc(v)}</textarea></label>`;
-    dialog(`<h3>✎ Texto do Doc</h3><p class="small">O telão lê exatamente este texto. As palavras de cada dinâmica (os destaques coloridos) vêm das respostas e não mudam.</p>
+    const S2 = A.O.settings || {}, fixedNote = S2.docOpenText || S2.docCloseText ? `<p class="small warn">${[S2.docOpenText && 'A abertura', S2.docCloseText && 'o encerramento'].filter(Boolean).join(' e ')} ${S2.docOpenText && S2.docCloseText ? 'estão fixos' : 'está fixo'} (Mais opções → fala fixa, com o vídeo da boca sincronizada): mudar aqui não vale, o texto fixo continua.</p>` : '';
+    dialog(`<h3>✎ Texto do Doc</h3><p class="small">O telão lê exatamente este texto. As palavras de cada dinâmica (os destaques coloridos) vêm das respostas e não mudam.</p>${fixedNote}
       <div class="form" style="margin-top:10px"><label class="f">Título<input class="input" id="deTitulo" value="${esc(m.titulo)}"></label>
       ${ta('deAbertura', 'Abertura', m.abertura)}
       ${m.blocos.map(b => ta('deB_' + b.id, `${b.id.slice(1).padStart(2, '0')} · ${esc(b.titulo)}`, b.fala)).join('')}
@@ -930,7 +935,7 @@
       case 'docTxt': return run(() => docTxt(), 'Download iniciado');
       case 'docKit': return run(() => docTxt('/api/admin/doc-video.txt', 'Kit_Video_do_Doc.txt'), 'Kit do vídeo baixado 🎬');
       case 'docTestVoice': return run(() => api('POST', '/api/admin/doc', { action: 'testVoice' }), 'O telão vai falar uma frase de teste');
-      case 'docSaveCfg': return run(() => act('settings', { settings: { docVoice: $('#docVoice').checked, docVoiceName: $('#docVoiceName').value, docRate: +$('#docRate').value, docVideoUrl: $('#docVideoUrl').value, docVideoFull: $('#docVideoFull').checked, docImageUrl: $('#docImageUrl').value, docIdleVideoUrl: $('#docIdleVideoUrl').value, docTalkVideoUrl: $('#docTalkVideoUrl').value } }), 'Ajustes do Doc salvos');
+      case 'docSaveCfg': return run(() => act('settings', { settings: { docVoice: $('#docVoice').checked, docVoiceName: $('#docVoiceName').value, docRate: +$('#docRate').value, docVideoUrl: $('#docVideoUrl').value, docVideoFull: $('#docVideoFull').checked, docImageUrl: $('#docImageUrl').value, docIdleVideoUrl: $('#docIdleVideoUrl').value, docTalkVideoUrl: $('#docTalkVideoUrl').value, docOpenText: $('#docOpenText').value, docOpenVideo: $('#docOpenVideo').value, docCloseText: $('#docCloseText').value, docCloseVideo: $('#docCloseVideo').value } }), 'Ajustes do Doc salvos');
       case 'sucAnswers': return run(() => sucAnswersDialog(el.dataset.k));
       case 'sucDownload': return sucDownload(el.dataset.type);
       case 'sucCmd': {
