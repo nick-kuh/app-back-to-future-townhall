@@ -414,3 +414,8 @@ dialog a{color:var(--cyan)}
 ol.steps{margin:0 0 0 18px;display:flex;flex-direction:column;gap:6px;line-height:1.5}
 .copy{cursor:pointer;color:var(--cyan);border-bottom:1px dashed var(--cyan)}
 @media (max-width:720px){.spcols{grid-template-columns:1fr}}
+
+/* botão do microfone no topo do painel */
+button.pill{cursor:pointer;color:var(--txt);font-family:Inter}
+button.pill.hot{color:var(--orange)}button.pill.off{color:var(--red)}
+button.pill:hover{border-color:var(--cyan);color:var(--cyan)}

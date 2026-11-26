@@ -165,12 +165,15 @@ const DEFAULT_CONFIG = () => ({
     reconhecimento: ['Felipe Resck'],
     visao: ['Claudia Meira', 'Fermín Grandas'],
     sucesso: ['Lucas Barbosa', 'Giovana Romão', 'Maria Eduarda'],
+    // participação especial nas Conexões: quem ajudou a organizar e merece o crédito, mesmo sem estar na sala
+    especial: ['Vinicius Santos'], especialNota: 'Ajudou em toda a organização.',
   },
   creditos: {
     // "TÍTULO: nome, nome" por linha; o elenco (todos os nomes do check-in) entra sozinho no fim
     blocos: [
       { h: 'PRODUTORES EXECUTIVOS', l: ['Claudia Meira', 'Luciano Barbosa'] },
-      { h: 'FRENTE 1 · CONEXÃO', l: ['Vinicius', 'Nicolas Kuhnast'] },
+      { h: 'FRENTE 1 · CONEXÃO', l: ['Nicolas Kuhnast', 'Douglas Hamasaki'] },
+      { h: 'PARTICIPAÇÃO ESPECIAL · ORGANIZAÇÃO', l: ['Vinicius Santos'] },
       { h: 'FRENTE 2 · IA EM 2026', l: ['Giovana', 'Pedro', 'Felipe'] },
       { h: 'FRENTE 3 · MANIFESTO 2027', l: ['Lucas', 'Giovana'] },
       { h: 'ESTRATÉGIA E NARRATIVA', l: ['Monserrat Diaz', 'William Manganeli'] },
@@ -247,7 +250,8 @@ function cleanSection(key, cur, p) {
     case 'manifesto': txt('kicker', 80); txt('mes', 6); txt('dia', 4); txt('ano', 6); txt('titulo', 120); txt('pergunta', 120); txt('faixa', 120); txt('quem', 80); min(); break;
     case 'mph': txt('kicker', 80); txt('antes', 160); txt('chegada', 60); txt('depois', 160); txt('quem', 80); min(); break;
     case 'anfitrioes':
-      for (const k of HOST_KEYS) if (Array.isArray(p[k])) out[k] = p[k].slice(0, 6).map(x => clip(x, 60)).filter(Boolean);
+      for (const k of [...HOST_KEYS, 'especial']) if (Array.isArray(p[k])) out[k] = p[k].slice(0, 6).map(x => clip(x, 60)).filter(Boolean);
+      txt('especialNota', 120);
       break;
     case 'creditos':
       txt('fim', 40); txt('fimSub', 80);
@@ -347,6 +351,7 @@ function createCenas() {
   }
   // quem conduz um bloco (nomes): o servidor junta a foto de perfil de cada um
   const hosts = key => (HOST_KEYS.includes(key) ? (config.anfitrioes[key] || []).slice() : []);
+  const especial = () => ({ nomes: (config.anfitrioes.especial || []).slice(), nota: config.anfitrioes.especialNota || '' }); // participação especial (Conexões)
   const names = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} e ${list[list.length - 1]}` : list[0] || '');
   const evento = () => ({ ...config.evento });
   const creditos = () => ({ ...config.creditos, titulo: config.evento.titulo, sub: config.evento.sub });
@@ -536,7 +541,7 @@ function createCenas() {
   }
 
   armBreak();
-  return { publicState, adminState, evento, creditos, hosts, command, tap, mic, enter, sync, setConfig, resetConfig, resetState, resetKind,
+  return { publicState, adminState, evento, creditos, hosts, especial, command, tap, mic, enter, sync, setConfig, resetConfig, resetState, resetKind,
     onChange: fn => listeners.push(fn), onPulse: fn => pulses.push(fn), agendaView, config: () => config };
 }
 

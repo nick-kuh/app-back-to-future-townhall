@@ -135,7 +135,8 @@
       ${A.connected ? '' : '<span class="pill off">sem conexão</span>'}
       <span class="nowchip" title="No ar agora: ${esc(nowText())}"><small>NO AR</small><span>${esc(nowText())}</span></span>
       <span class="pill" title="Pessoas que já fizeram check-in">👥 ${O.counts.checkedIn}/${O.counts.total}</span>
-      ${Mic.on ? '<span class="pill on" title="O microfone deste aparelho está ouvindo a sala (aplausos do Reconhecimento). O som não é gravado.">🎤 ouvindo</span>' : ''}
+      ${micMode() === 'toques' ? '' : Mic.on ? '<a class="pill on" href="#" data-go="tests" title="O microfone deste aparelho está ouvindo a sala (aplausos do Reconhecimento). O som não é gravado. Clique para ver a barra do som.">🎤 ouvindo</a>'
+        : `<button type="button" class="pill ${Mic.perm === 'denied' ? 'off' : 'hot'}" data-act="micTop" title="Microfone dos aplausos (Reconhecimento): clique para liberar e testar">🎤 ${Mic.starting ? 'aguardando…' : Mic.perm === 'granted' ? 'microfone liberado ✓' : Mic.perm === 'denied' ? 'microfone bloqueado' : 'liberar microfone'}</button>`}
       <a class="pill ${tl.count ? (tl.auth ? 'on' : 'hot') : 'off'}" href="/telao.html" target="_blank" title="${tl.count ? (tl.auth ? 'Telão aberto e logado' : 'Telão aberto sem login: não mostra as respostas do Sucesso') : 'Nenhum telão aberto. Clique para abrir.'}">📽 Telão ${tl.count ? (tl.auth ? '✓' : 'sem login') : 'fechado'}</a>`;
     if (html !== A.statusHtml) { A.statusHtml = html; $('#status').innerHTML = html; }
   }
@@ -357,8 +358,23 @@
       Mic.err = n === 'NoApi' ? 'Este navegador não libera o microfone aqui. Abra o painel pelo endereço https, no Chrome ou no Edge.'
         : n === 'NotAllowedError' || n === 'SecurityError' ? 'O navegador está bloqueando o microfone para este site. Clique no cadeado (ou no ícone de câmera/microfone) ao lado do endereço, escolha "Permitir" no microfone e clique de novo em "Liberar o microfone".'
         : n === 'NotFoundError' ? 'Nenhum microfone encontrado neste aparelho.' : `Não deu para ligar o microfone (${(e && e.message) || e}).`;
-      if (!auto) toast(Mic.err, true);
+      if (!auto) micHelp();
     } finally { Mic.starting = false; render(true); }
+  }
+  // Não deu para ligar: explica o motivo e o que fazer, com o caminho no navegador
+  function micHelp() {
+    const blocked = Mic.perm === 'denied';
+    dialog(`<h3>🎤 Não consegui ligar o microfone</h3><div class="sb-warn" style="margin-bottom:12px">${esc(Mic.err || 'O navegador não liberou o microfone.')}</div>
+      ${blocked ? `<p><b>Como liberar (Chrome ou Edge, no computador):</b></p>
+        <ol class="small steps" style="margin-top:8px">
+          <li>Olhe a barra de endereço, lá em cima: à <b>esquerda</b> do endereço do site há um ícone pequeno (um cadeado 🔒 ou dois risquinhos com bolinhas). Clique nele.</li>
+          <li>Na janelinha que abre, procure <b>Microfone</b> e mude para <b>Permitir</b> (ou ligue a chave). Se não aparecer, clique em "Configurações do site" e mude Microfone para Permitir.</li>
+          <li>Recarregue a página (F5) e clique de novo em <b>🎤 liberar microfone</b>, no topo do painel.</li>
+        </ol>
+        <p class="small" style="margin-top:10px">Se a opção Microfone estiver cinza ou não deixar mudar, é o computador da empresa que bloqueia. Nesse caso: abra o painel em outro navegador, em outro computador ou no celular (o microfone que vale é o do aparelho em que o painel está aberto).</p>`
+        : '<p class="small">Confira se este aparelho tem microfone e se o sistema (Windows: Configurações → Privacidade → Microfone; Mac: Ajustes do Sistema → Privacidade → Microfone) deixa o navegador usá-lo. Depois clique de novo em <b>🎤 liberar microfone</b>, no topo do painel.</p>'}
+      <p class="small" style="margin-top:10px"><b>Plano B, sem microfone:</b> a cerimônia funciona do mesmo jeito com o botão <b>"+15% de carga"</b> do painel, ou trocando para "toques nos celulares" em Agenda e cenas → Reconhecimento.</p>
+      <div class="actions" style="margin-top:14px"><button class="btn ghost" data-close>Entendi</button></div>`);
   }
   function micStop(byUser) {
     clearInterval(Mic.timer); if (Mic.stream) Mic.stream.getTracks().forEach(t => t.stop()); if (Mic.ctx) Mic.ctx.close().catch(() => {});
@@ -492,7 +508,7 @@
     if (k === 'agenda') {
       const v = C.config.agenda; let t = v.inicio.split(':').reduce((h, m) => +h * 60 + +m);
       const hm = x => `${pad(Math.floor(x / 60) % 24)}:${pad(x % 60)}`;
-      out.body = `<p class="lead">O plano de voo de hoje, em 4 atos. O item em que o evento está aparece marcado como NO AR.</p>
+      out.body = `<p class="lead">O plano de voo de hoje, em 4 atos. No telão, um destaque suave passeia por todos os itens, um de cada vez.</p>
         <div class="tblwrap"><table class="tbl">${v.itens.map(x => { const h = hm(t); t += x.min; return `<tr><td class="mono">${h}</td><td><b>${esc(x.t)}</b><div class="small">${esc(x.d)}</div></td><td class="small">ATO ${['I', 'II', 'III', 'IV'][x.ato - 1]}</td><td class="r mono">${x.min}′</td></tr>`; }).join('')}</table></div>${note}`;
     } else if (k === 'boasvindas') {
       out.body = `<div class="theme">${esc(cfg.frase.replace(/\*/g, ''))}</div><div class="speaker">com ${esc(cfg.pessoas.map(p => p.nome).join(', '))} · ${cfg.min} min</div>${note}`;
@@ -946,10 +962,11 @@
   const TIPO_MAP = { out: v => v, in: v => { const u = String(v).trim().toUpperCase()[0]; return 'EMRC'.includes(u) ? u : 'M'; } };
   const BLOCO_MAP = { out: v => (Array.isArray(v) ? v.join(' | ') : v), in: v => String(v).split('|').map(x => x.trim()).filter(Boolean) };
   const CENA_FORM = {
-    evento: ['Evento · check-in e créditos', 'O nome do evento aparece no telão do check-in e nos créditos; os três circuitos de tempo aparecem no check-in.',
-      [T('titulo', 'Título'), T('sub', 'Subtítulo'), T('data', 'Data'), T('local', 'Local'), T('destino', 'Circuito de tempo · destino'), T('presente', 'Circuito de tempo · presente'), T('partida', 'Circuito de tempo · última partida')]],
+    evento: ['Evento · check-in e créditos', 'O nome do evento aparece no telão do check-in e nos créditos.',
+      [T('titulo', 'Título'), T('sub', 'Subtítulo'), T('data', 'Data'), T('local', 'Local')]],
     anfitrioes: ['🎙️ Quem conduz cada bloco', 'Aparecem no telão com a foto de perfil e o nome (como nas boas-vindas), e nos celulares. Um nome por linha, escrito como na lista de pessoas (é assim que a foto é encontrada). Deixe em branco para não mostrar ninguém.',
-      [LIST('connections', '⚡ Conexões'), LIST('almanaque', '📅 Jornada 2026 · almanaque'), LIST('reflexao', '💭 Reflexão'), LIST('reconhecimento', '🏆 Reconhecimento 2026'), LIST('visao', '🔭 Visão 2027'), LIST('sucesso', '🚀 Sucesso')]],
+      [LIST('connections', '⚡ Conexões'), LIST('almanaque', '📅 Jornada 2026 · almanaque'), LIST('reflexao', '💭 Reflexão'), LIST('reconhecimento', '🏆 Reconhecimento 2026'), LIST('visao', '🔭 Visão 2027'), LIST('sucesso', '🚀 Sucesso'),
+        LIST('especial', '★ Conexões · participação especial (aparece em uma placa dourada, abaixo de quem conduz)'), T('especialNota', '★ Participação especial · frase que aparece embaixo do nome')]],
     agenda: ['🗺️ Plano de voo (agenda)', 'Os horários são calculados a partir do início e dos minutos de cada item.',
       [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('inicio', 'Início (HH:MM)'), LINES('itens', 'Itens, um por linha: ato (1 a 4) | título | detalhe | minutos', ['ato', 't', 'd', 'min'])]],
     boasvindas: ['👋 Boas-vindas e jornada', '', [T('kicker', 'Linha de cima'), AREA('frase', 'Frase de abertura'), LINES('pessoas', 'Quem fala, um por linha: nome | papel', ['nome', 'papel']), NUM('min', 'Minutos'), T('faixa', 'Faixa de baixo')]],
@@ -1358,6 +1375,7 @@
       case 'copy': return run(async () => { await navigator.clipboard.writeText(el.dataset.text); }, 'Endereço copiado');
       // --- microfone dos aplausos (Reconhecimento) ---
       case 'micOn': Mic.userOff = false; return micStart(false);
+      case 'micTop': Mic.userOff = false; await micStart(false); if (Mic.on && !recOnAir()) { A.tab = 'prep'; A.prep = 'tests'; render(true); toast('🎤 Microfone liberado ✔ Bata palmas: a barra tem de subir.'); } return; // botão do topo: libera e mostra a barra do som
       case 'micOff': return micStop(true);
       case 'micCal': return micCal();
       case 'micSens': Mic.span = 44 - (Math.max(1, Math.min(10, +el.value)) - 1) * 4; localStorage.setItem('bttf.micSpan', String(Mic.span)); return;

@@ -457,7 +457,7 @@
     if (c.kind === 'agenda') {
       return `${vHeader()}${cenaCard(c, c.kicker, plain(c.titulo), `<p class="small center">${esc(c.data)} · ${esc(c.inicio)} – ${esc(c.fim)} · ${c.total} min</p>`, 'var(--cyan)')}
         ${c.atos.map((a, k) => `<div class="panel ag" style="--c:${ACT_C[k]}"><div class="ag-h"><b>${esc(a.n)} · ${esc(a.nome)}</b><span>${esc(a.de)} – ${esc(a.ate)}</span></div>
-          ${c.itens.filter(x => x.ato === k + 1).map(x => `<div class="ag-it ${x.estado}"><b>${esc(x.hora)}</b><span>${esc(x.t)}<small>${esc(x.d)}</small></span><i>${x.estado === 'agora' ? 'NO AR' : x.estado === 'feito' ? '✓' : x.min + '′'}</i></div>`).join('')}</div>`).join('')}`;
+          ${c.itens.filter(x => x.ato === k + 1).map(x => `<div class="ag-it"><b>${esc(x.hora)}</b><span>${esc(x.t)}<small>${esc(x.d)}</small></span><i>${x.min}′</i></div>`).join('')}</div>`).join('')}`;
     }
     if (c.kind === 'intervalo') {
       const ph = ivPhase(c), msg = { idle: 'O intervalo já vai começar.', run: 'Volte antes de o relógio zerar.', paused: '❚❚ Cronômetro pausado pelo Doc.', done: '⚡ A DeLorean está abastecida. Volte ao seu lugar!' }[ph];

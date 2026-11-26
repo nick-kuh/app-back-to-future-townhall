@@ -372,8 +372,7 @@ textarea.input{resize:none;line-height:1.4;font-size:16px;font-weight:500;min-he
 .ag-it>span{font:800 15px/1.25 Inter;min-width:0;overflow-wrap:anywhere}
 .ag-it small{display:block;font:500 12.5px/1.35 Inter;color:var(--muted);margin-top:3px}
 .ag-it>i{font:800 11px Inter;font-style:normal;color:#0b0618;background:var(--c);border-radius:99px;padding:2px 9px;white-space:nowrap}
-.ag-it.feito{opacity:.45}
-.ag-it.agora{background:color-mix(in srgb,var(--c) 14%,transparent);box-shadow:inset 3px 0 0 var(--c);border-radius:6px}
+
 .btn.charge{margin-top:14px;padding:26px 14px;font-size:22px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
 .btn.charge.hit{animation:chargehit .18s}
 @keyframes chargehit{40%{transform:scale(.96);filter:brightness(1.35)}}

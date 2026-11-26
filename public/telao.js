@@ -152,6 +152,9 @@
   // faíscas contínuas no carro (mais energia, mais faíscas)
   setInterval(() => { if (S.car && !document.hidden && S.energy > 0 && Math.random() < S.energy * .7) S.car.spark(); }, 700);
 
+  // Participação especial (Conexões): quem ajudou a organizar e merece o crédito, mesmo sem estar na sala
+  const guests = () => { const e = (S.state && S.state.especial) || {}, p = e.pessoas || []; return p.length ? `<div class="guest"><small>PARTICIPAÇÃO ESPECIAL</small><div class="hosts">${p.map(x => `<div class="host star"><div class="av ${x.foto ? 'foto' : ''}">${esc(hostIni(x.nome))}${x.foto ? `<img src="${esc(x.foto)}" alt="">` : ''}</div><b>${esc(x.nome)}</b></div>`).join('')}</div>${e.nota ? `<p>${esc(e.nota)}</p>` : ''}</div>` : ''; };
+
   /* ---------- De Volta para o Sucesso ----------
    * Enquanto recebe, o telão mostra só o carro carregando a cada resposta (nenhum texto aparece).
    * Ao encerrar, o carro entra no portal. A nuvem de palavras só aparece quando o Doc clica em
@@ -472,7 +475,7 @@
 
     const b = st.block;
     if (b === 'welcome') { // chegada: QR do app, o carro carregando a cada check-in e os circuitos de tempo do evento
-      const ev = st.evento || {}, circ = ev.destino ? `<div class="sf-circ ev-circ"><span class="r"><small>DESTINO</small><b>${esc(ev.destino)}</b></span><span class="g"><small>PRESENTE</small><b>${esc(ev.presente)}</b></span><span class="a"><small>ÚLTIMA PARTIDA</small><b>${esc(ev.partida)}</b></span></div>` : '';
+      const circ = ''; // (os três circuitos de tempo do evento saíram desta tela, a pedido da organização)
       return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox()}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div></div></div>${circ}`];
     }
     if (b === 'standby') return ['logo', `${logo()}${flux()}`]; // olhos no telão: só o logo
@@ -491,7 +494,7 @@
     if (b === 'closing') return ['closing', `<div class="fin" id="fin"><div class="a"><span class="bttf" id="finA">FIM DA VIAGEM</span></div><div class="b" id="finB"></div></div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
     // conexões
     const r = c.round, era = roundEra(r), t = c.timer;
-    if (c.phase === 'idle' || c.phase === 'ready') return ['prep', `<div class="kicker">BLOCO CONEXÕES</div><div class="title">ROTAS TEMPORAIS</div>${flux()}${hosts()}`];
+    if (c.phase === 'idle' || c.phase === 'ready') return ['prep', `<div class="kicker">BLOCO CONEXÕES</div><div class="title">ROTAS TEMPORAIS</div>${flux()}${hosts()}${guests()}`];
     if (c.phase === 'matching') return ['matching', `<div class="kicker">VIAGEM ${r}/3 · ${esc(era.label)} · ${esc(era.year)}</div><div class="title">ENCONTRE SUA DUPLA</div>${t && t.kind === 'matching' ? huge('matching', 'amber') : ''}<div class="sub">Encontre quem tem a mesma placa no celular.</div>`];
     if (c.phase === 'talk') return ['talk', `<div class="kicker">VIAGEM ${r}/3 · ${esc(era.label)} · ${esc(era.year)}</div><div class="rowx">${gauge()}${huge('talk')}</div>`];
     if (c.phase === 'roundEnd') return ['roundEnd', `<div class="title">88 MPH!</div>${carBox('warp')}${t && t.kind === 'break' ? huge('break', 'amber') : ''}`];
@@ -531,7 +534,7 @@
     const pr = S.state.presentation, rf = key === 'reflexao' ? S.state.reflexao : null;
     const dk = key === 'doc' && S.state.doc ? `${S.state.doc.rev}:${S.state.doc.message ? 1 : 0}` : ''; // nova mensagem (ou a cena começou): monta de novo
     const ck = key === 'cena' ? S.state.cena.kind : key === 'closing' ? JSON.stringify(S.state.creditos || '').length : key === 'welcome' || key === 'logo' ? JSON.stringify(S.state.evento || '') : ''; // cena do deck no ar / conteúdo do evento
-    const k = `${key}|${dk}|${ck}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}|${key === 'cena' ? '' : (S.state.hosts || []).map(h => h.nome + (h.foto || '')).join()}`;
+    const k = `${key}|${dk}|${ck}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}|${key === 'cena' ? '' : (S.state.hosts || []).map(h => h.nome + (h.foto || '')).join() + JSON.stringify(S.state.especial || '')}`;
     if (k !== S.key) {
       if (window.DocCena) DocCena.unmount();
       if (window.Cenas) Cenas.unmount();
