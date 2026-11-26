@@ -53,6 +53,10 @@ function cleanSteps(list) {
 }
 const PHASES = ['idle', 'ready', 'matching', 'talk', 'roundEnd', 'ranking', 'results'];
 
+// Vídeos do Doc feitos no Gemini (public/videos): falando e parado/sorrindo. O telão corta entre eles ao vivo.
+const DOC_TALK = ['/videos/doc-falando-4.mp4', '/videos/doc-falando-5.mp4', '/videos/doc-falando-6.mp4', '/videos/doc-falando-7.mp4', '/videos/doc-falando-1.mp4', '/videos/doc-falando-2.mp4', '/videos/doc-falando-3.mp4'].join(' ');
+const DOC_IDLE = ['/videos/doc-sorrindo-1.mp4', '/videos/doc-sorrindo-2.mp4', '/videos/doc-parado.mp4'].join(' ');
+const DOC_OLD = { docTalkVideoUrl: '/videos/doc-falando-1.mp4 /videos/doc-falando-2.mp4 /videos/doc-falando-3.mp4', docIdleVideoUrl: '/videos/doc-parado.mp4' }; // padrão anterior
 const DEFAULT_SETTINGS = {
   eventName: 'Townhall · De Volta ao Futuro',
   roundSeconds: 240,      // conversa
@@ -81,8 +85,8 @@ const DEFAULT_SETTINGS = {
   docVideoUrl: '/videos/doc-chegada.mp4', // vídeo da chegada do Doc (feito com IA no Gemini/Veo; vazio = chegada animada no código)
   docVideoFull: false,    // o vídeo já traz a fala completa: depois dele o telão vai direto para o jornal e o 2027
   docImageUrl: '',        // opcional: retrato do Doc feito com IA (fundo escuro), no lugar do desenho
-  docIdleVideoUrl: '/videos/doc-parado.mp4',  // vídeo curto do Doc parado, repetido quando ele não está falando (vazio = desenho)
-  docTalkVideoUrl: '/videos/doc-falando-1.mp4 /videos/doc-falando-2.mp4 /videos/doc-falando-3.mp4', // trechos do Doc falando (um ou mais), editados ao vivo enquanto a voz fala
+  docIdleVideoUrl: DOC_IDLE,  // trechos do Doc parado/sorrindo, quando ele não está falando (vazio = desenho)
+  docTalkVideoUrl: DOC_TALK,  // trechos do Doc falando (um ou mais), editados ao vivo enquanto a voz fala
   agenda: [
     { time: '', title: 'Boas-vindas e check-in' },
     { time: '', title: 'Conexões · 3 viagens no tempo' },
@@ -149,6 +153,7 @@ class Engine {
       this.settings.reflexaoStep = true;
     }
     // roteiros salvos antes de existir a Visão 2027 ganham o passo uma vez (depois da última dinâmica do Sucesso)
+    for (const [k, v] of Object.entries(DOC_OLD)) if (this.settings[k] === v) this.settings[k] = DEFAULT_SETTINGS[k]; // vídeos novos no lugar do padrão antigo
     if (!this.settings.docStep) {
       const list = this.settings.steps;
       if (!list.some(x => x.type === 'doc')) {
