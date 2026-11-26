@@ -38,6 +38,7 @@ function units() {
   const est = L.estimate(plan);
   assert.equal(est.clips, plan.length); assert.equal(est.seconds, plan.reduce((n, c) => n + c.seconds, 0)); assert.equal(est.usd, Math.round(est.seconds * L.PRICE_PER_SECOND * 100) / 100);
   assert.deepEqual(L.plan(null), []);
+  assert.deepEqual([...new Set(L.plan(MSG, { skip: ['abertura', 'final'] }).map(c => c.part))], ['d1', 'd4', 'jornal'], 'partes com vídeo fixo não pedem clipe');
   const p = L.promptFor('Olá, 2027!');
   assert.match(p, /saying exactly: "Olá, 2027!"/); assert.match(p, /Brazilian Portuguese/); assert.match(p, /Continue from this exact frame/); assert.match(p, /No music, no subtitles/);
   console.log('OK · divisão da fala em clipes, abertura sem repetir a chegada, estimativa e prompt');

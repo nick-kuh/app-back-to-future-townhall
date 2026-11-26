@@ -41,14 +41,15 @@ function chunks(text) {
 const secondsFor = text => Math.max(MIN_SECONDS, Math.min(15, Math.ceil(words(text) / WORDS_PER_SECOND) + 1));
 
 // Os clipes da fala, parte por parte (as mesmas partes da cena no telão)
-function plan(message, { arrival = true } = {}) {
+// skip: partes que já têm vídeo fixo (ex.: abertura e encerramento feitos no Higgsfield) não pedem clipe
+function plan(message, { arrival = true, skip = [] } = {}) {
   if (!message) return [];
   const parts = [['abertura', arrival ? skipArrival(message.abertura) : message.abertura],
     ...(message.blocos || []).map(b => [b.id, b.fala]),
     ['jornal', `Vejam só o jornal de 2027! ${(message.manchetes || []).map(h => clean(h).replace(/[.!?]*$/, '.')).join(' ')}`],
     ['final', message.encerramento]];
   const out = [];
-  for (const [part, text] of parts) chunks(text).forEach((t, i) => out.push({ part, i, text: t, seconds: secondsFor(t) }));
+  for (const [part, text] of parts.filter(([p]) => !skip.includes(p))) chunks(text).forEach((t, i) => out.push({ part, i, text: t, seconds: secondsFor(t) }));
   return out;
 }
 const estimate = clips => { const s = clips.reduce((n, c) => n + c.seconds, 0); return { clips: clips.length, seconds: s, usd: Math.round(s * PRICE_PER_SECOND * 100) / 100 }; };
@@ -104,10 +105,10 @@ async function withRetry(fn, signal) {
 }
 
 // Gera todos os clipes (3 de cada vez). onProgress recebe o estado a cada clipe pronto ou com falha.
-async function generate(message, { rev, dataDir, image, arrival = true, onProgress = () => {}, signal }) {
+async function generate(message, { rev, dataDir, image, arrival = true, skip = [], onProgress = () => {}, signal }) {
   const key = process.env.GEMINI_API_KEY, base = (process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
   if (!key) throw Object.assign(new Error('Falta a chave da API do Gemini (GEMINI_API_KEY) no servidor.'), { status: 409 });
-  const list = plan(message, { arrival }), dir = path.join(dataDir, 'doc-clips', String(rev));
+  const list = plan(message, { arrival, skip }), dir = path.join(dataDir, 'doc-clips', String(rev));
   fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
   const clips = {}, errors = [];
   let done = 0, next = 0, fatal = null;
