@@ -166,7 +166,7 @@ const DEFAULT_CONFIG = () => ({
     visao: ['Claudia Meira', 'Fermín Grandas'],
     sucesso: ['Lucas Barbosa', 'Giovana Romão', 'Maria Eduarda'],
     // participação especial nas Conexões: quem ajudou a organizar e merece o crédito, mesmo sem estar na sala
-    especial: ['Vinicius Santos'], especialNota: 'Ajudou em toda a organização. Obrigado!',
+    especial: ['Vinicius Santos'], especialNota: 'Ajudou em toda a organização.',
   },
   creditos: {
     // "TÍTULO: nome, nome" por linha; o elenco (todos os nomes do check-in) entra sozinho no fim

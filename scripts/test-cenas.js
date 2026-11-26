@@ -106,7 +106,7 @@ const STRATEGY_SHA256 = '07d7a467caaec2b26381eab3be2d32ff5b8054262768b371868aafc
   assert.deepEqual(c.hosts('connections'), ['Nicolas Kuhnast', 'Douglas Hamasaki'], 'os outros blocos não mudam'); c.resetConfig('anfitrioes'); assert.deepEqual(c.hosts('sucesso'), ['Lucas Barbosa', 'Giovana Romão', 'Maria Eduarda']);
 
   // participação especial nas Conexões (quem ajudou a organizar): nomes e a frase, editáveis
-  assert.deepEqual(c.especial(), { nomes: ['Vinicius Santos'], nota: 'Ajudou em toda a organização. Obrigado!' });
+  assert.deepEqual(c.especial(), { nomes: ['Vinicius Santos'], nota: 'Ajudou em toda a organização.' });
   c.setConfig({ anfitrioes: { especial: ['Ana', ''], especialNota: 'Valeu!' } }); assert.deepEqual(c.especial(), { nomes: ['Ana'], nota: 'Valeu!' }); assert.deepEqual(c.hosts('connections'), ['Nicolas Kuhnast', 'Douglas Hamasaki']);
   c.resetConfig('anfitrioes'); assert.deepEqual(c.especial().nomes, ['Vinicius Santos']);
 
