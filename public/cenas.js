@@ -76,10 +76,17 @@ window.Cenas = (() => {
     for (let t = 0; t <= c.total; t += 30) ticks.push(t);
     return `<div class="cn-top"><div>${head(c)}<h1 class="cn-h1">${fire(c.titulo)}</h1></div>
         <div class="cn-meta">${[['DATA', c.data], ['INÍCIO', c.inicio], ['DURAÇÃO', c.total + '′'], ['ATOS', c.atos.length]].map(([l, v]) => `<div class="tcbox"><b>${esc(v)}</b><span>${l}</span></div>`).join('')}</div></div>
-      <div class="ag-bar">${c.itens.map(x => `<i class="${x.estado}" style="flex:${x.min};--c:${ACT_C[x.ato - 1]}"></i>`).join('')}</div>
+      <div class="ag-bar">${c.itens.map(x => `<i style="flex:${x.min};--c:${ACT_C[x.ato - 1]}"></i>`).join('')}</div>
       <div class="ag-scale">${ticks.map(t => `<span style="left:${t / c.total * 100}%">${f(start + t)}</span>`).join('')}</div>
       <div class="ag-acts">${c.atos.map((a, k) => `<div class="ag-act" style="--c:${ACT_C[k]}"><div class="n">${esc(a.n)}</div><h3>${esc(a.nome)}</h3><div class="r">${a.de} – ${a.ate} · ${a.min}′</div>
-        ${c.itens.filter(x => x.ato === k + 1).map(x => `<div class="ag-it ${x.estado}"><span class="tm">${x.hora}<i class="du">${x.estado === 'agora' ? 'NO AR' : x.estado === 'feito' ? '✓ ' + x.min + '′' : x.min + '′'}</i></span><span class="tx"><b>${esc(x.t)}</b><small>${esc(x.d)}</small></span></div>`).join('')}</div>`).join('')}</div>`;
+        ${c.itens.map((x, i) => (x.ato === k + 1 ? `<div class="ag-it" data-i="${i}"><span class="tm">${x.hora}<i class="du">${x.min}′</i></span><span class="tx"><b>${esc(x.t)}</b><small>${esc(x.d)}</small></span></div>` : '')).join('')}</div>`).join('')}</div>`;
+  }
+  // Nenhum item fica marcado como "no ar": um destaque suave passeia por todos, um de cada vez, do começo ao fim do dia
+  function mAgenda(c, first) {
+    if (!first) return;
+    const its = $$('.cn-agenda .ag-it'), bar = $$('.cn-agenda .ag-bar i'); if (!its.length) return;
+    let i = -1; const step = () => { i = (i + 1) % its.length; its.forEach((el, k) => el.classList.toggle('sp', +el.dataset.i === i)); bar.forEach((el, k) => el.classList.toggle('sp', k === i)); };
+    later(900, step); every(2600, step);
   }
 
   /* ================= BOAS-VINDAS ================= */
@@ -105,7 +112,7 @@ window.Cenas = (() => {
         <div class="car" id="alCar"><i class="trail"></i><canvas aria-hidden="true"></canvas></div></div>
       <div class="al-focus"><div class="al-month"><div class="q" id="alQ"></div><div class="mn"><span class="bttf" id="alMn"></span></div><div class="stt" id="alSt"></div>${hostsRow(c, 'col')}</div>
         <div class="al-cards" id="alCards"></div>
-        <div class="al-hero"><div class="al-side"><div class="al-wait"><b>REBOBINANDO 2026…</b><small>12 meses de entregas, mês a mês</small></div>${hostsRow(c, 'stack')}</div>
+        <div class="al-hero"><div class="al-side">${head(c, c.ato ? c.ato.nome : c.kicker)}<div class="al-cover"><span class="bttf">${esc(c.name)}</span></div><p class="al-coversub">${fire(c.titulo)} · ${esc(c.sub)}</p>${hostsRow(c, 'stack')}</div>
           <div class="carbox"><canvas class="car3d" data-car></canvas></div></div></div>
       <div class="al-foot"><div class="al-leg" id="alLeg"></div><span class="src">${esc(c.fonte)}</span></div>
       <div class="al-page" id="alPage"></div>`;
@@ -176,7 +183,7 @@ window.Cenas = (() => {
       every(1300, () => { const h = hero(); if (h && h.spark && root && root.classList.contains('blank') && !document.hidden) h.spark(); });
     }
     else {
-      if (p.mes !== l.mes) alMonth(c, l.mes, true);
+      if (p.mes !== l.mes) { alMonth(c, l.mes, true); if (p.mes < 0 && l.mes >= 0) kpiCount(); } // saiu da capa: os números sobem contando
       else if (p.off !== (l.off || []).join()) { alMonth(c, l.mes, false); alLegend(c); }
       if (l.fim && l.fim !== p.fim && now() - l.fim < 4000) { sfx('reveal'); flash(); confetti(220, .5, .46); } // dezembro: o ano fechou
     }
@@ -367,7 +374,7 @@ window.Cenas = (() => {
 
   /* ---------- montagem ---------- */
   const VIEW = { agenda: vAgenda, boasvindas: vBoasvindas, almanaque: vAlmanaque, ia: vIa, reconhecimento: vReconhecimento, intervalo: vIntervalo, visao: vVisao, manifesto: vManifesto, mph: vMph };
-  const LIVE = { almanaque: mAlmanaque, reconhecimento: mReconhecimento, visao: mVisao, mph: mMph, intervalo: tIntervalo };
+  const LIVE = { agenda: mAgenda, almanaque: mAlmanaque, reconhecimento: mReconhecimento, visao: mVisao, mph: mMph, intervalo: tIntervalo };
   // o que obriga a desenhar a cena de novo (o conteúdo, ou a fase do reconhecimento); o resto é atualização por cima
   function signature(c) {
     const { live, ...content } = c;

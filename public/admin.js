@@ -492,7 +492,7 @@
     if (k === 'agenda') {
       const v = C.config.agenda; let t = v.inicio.split(':').reduce((h, m) => +h * 60 + +m);
       const hm = x => `${pad(Math.floor(x / 60) % 24)}:${pad(x % 60)}`;
-      out.body = `<p class="lead">O plano de voo de hoje, em 4 atos. O item em que o evento está aparece marcado como NO AR.</p>
+      out.body = `<p class="lead">O plano de voo de hoje, em 4 atos. No telão, um destaque suave passeia por todos os itens, um de cada vez.</p>
         <div class="tblwrap"><table class="tbl">${v.itens.map(x => { const h = hm(t); t += x.min; return `<tr><td class="mono">${h}</td><td><b>${esc(x.t)}</b><div class="small">${esc(x.d)}</div></td><td class="small">ATO ${['I', 'II', 'III', 'IV'][x.ato - 1]}</td><td class="r mono">${x.min}′</td></tr>`; }).join('')}</table></div>${note}`;
     } else if (k === 'boasvindas') {
       out.body = `<div class="theme">${esc(cfg.frase.replace(/\*/g, ''))}</div><div class="speaker">com ${esc(cfg.pessoas.map(p => p.nome).join(', '))} · ${cfg.min} min</div>${note}`;
@@ -946,10 +946,11 @@
   const TIPO_MAP = { out: v => v, in: v => { const u = String(v).trim().toUpperCase()[0]; return 'EMRC'.includes(u) ? u : 'M'; } };
   const BLOCO_MAP = { out: v => (Array.isArray(v) ? v.join(' | ') : v), in: v => String(v).split('|').map(x => x.trim()).filter(Boolean) };
   const CENA_FORM = {
-    evento: ['Evento · check-in e créditos', 'O nome do evento aparece no telão do check-in e nos créditos; os três circuitos de tempo aparecem no check-in.',
-      [T('titulo', 'Título'), T('sub', 'Subtítulo'), T('data', 'Data'), T('local', 'Local'), T('destino', 'Circuito de tempo · destino'), T('presente', 'Circuito de tempo · presente'), T('partida', 'Circuito de tempo · última partida')]],
+    evento: ['Evento · check-in e créditos', 'O nome do evento aparece no telão do check-in e nos créditos.',
+      [T('titulo', 'Título'), T('sub', 'Subtítulo'), T('data', 'Data'), T('local', 'Local')]],
     anfitrioes: ['🎙️ Quem conduz cada bloco', 'Aparecem no telão com a foto de perfil e o nome (como nas boas-vindas), e nos celulares. Um nome por linha, escrito como na lista de pessoas (é assim que a foto é encontrada). Deixe em branco para não mostrar ninguém.',
-      [LIST('connections', '⚡ Conexões'), LIST('almanaque', '📅 Jornada 2026 · almanaque'), LIST('reflexao', '💭 Reflexão'), LIST('reconhecimento', '🏆 Reconhecimento 2026'), LIST('visao', '🔭 Visão 2027'), LIST('sucesso', '🚀 Sucesso')]],
+      [LIST('connections', '⚡ Conexões'), LIST('almanaque', '📅 Jornada 2026 · almanaque'), LIST('reflexao', '💭 Reflexão'), LIST('reconhecimento', '🏆 Reconhecimento 2026'), LIST('visao', '🔭 Visão 2027'), LIST('sucesso', '🚀 Sucesso'),
+        LIST('especial', '★ Conexões · participação especial (aparece em uma placa dourada, abaixo de quem conduz)'), T('especialNota', '★ Participação especial · frase que aparece embaixo do nome')]],
     agenda: ['🗺️ Plano de voo (agenda)', 'Os horários são calculados a partir do início e dos minutos de cada item.',
       [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('inicio', 'Início (HH:MM)'), LINES('itens', 'Itens, um por linha: ato (1 a 4) | título | detalhe | minutos', ['ato', 't', 'd', 'min'])]],
     boasvindas: ['👋 Boas-vindas e jornada', '', [T('kicker', 'Linha de cima'), AREA('frase', 'Frase de abertura'), LINES('pessoas', 'Quem fala, um por linha: nome | papel', ['nome', 'papel']), NUM('min', 'Minutos'), T('faixa', 'Faixa de baixo')]],

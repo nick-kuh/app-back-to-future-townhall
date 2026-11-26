@@ -19,8 +19,8 @@ bloco **Sucesso**: cada um é um passo só no roteiro e um item só na agenda.
 
 | Ato | Passo do roteiro | O que é |
 |---|---|---|
-| I · Reconectar | 🚪 Chegada · Check-in | QR do app, o carro carregando e os circuitos de tempo do evento (destino DEZ 11 2027) |
-| | 🗺️ Plano de voo | a agenda do dia em 4 atos, com horários; marca o item que está NO AR (no celular também) |
+| I · Reconectar | 🚪 Chegada · Check-in | QR do app e o carro carregando a cada check-in |
+| | 🗺️ Plano de voo | a agenda do dia em 4 atos, com horários; no telão, um destaque suave passeia por todos os itens (nenhum fica fixo) |
 | | 👋 Boas-vindas e jornada | "Fechar 2026 com orgulho. Sair com um destino claro para 2027." e quem fala |
 | | ⚡ Conexões | bloco interativo (sem mudanças de tela, só os ajustes abaixo) |
 | II · Rebobinar 2026 | 📅 Jornada 2026 | o **almanaque**: 12 meses, 51 itens, 41 entregas, €51,3M; "tocar o ano" e o ano em uma página |
@@ -39,13 +39,15 @@ As telas avulsas "🦋 Como a IA nos ajudou em 2026" e "📜 Manifesto 2027" con
 Conexões (tela de preparação), Jornada 2026, Reflexão (menu das paradas), Reconhecimento (abertura), Visão 2027 e
 Sucesso (linha de cima). Nos celulares, as fotos aparecem nas telas de "olhe para o telão". Os nomes ficam em
 **Preparar → Agenda e cenas → 🎙️ Quem conduz cada bloco**, um por linha, escritos como na lista de pessoas (é pelo
-nome que a foto é encontrada).
+nome que a foto é encontrada). Nas Conexões há também a **participação especial**: uma placa dourada, abaixo de quem
+conduz, para quem ajudou a organizar e merece o crédito mesmo sem estar na sala (nome e frase editáveis no mesmo lugar).
 
 Como conduzir cada cena (no **Ao vivo**, um botão principal por vez):
 
 - **Jornada 2026:** `▶ Tocar o ano` avança um mês a cada 3 s e, em dezembro, abre o ano em uma página. Dá para clicar
-  direto em um mês, ir mês a mês e esconder/mostrar BUs e tipos (Mais opções). Antes de começar, o telão mostra a
-  DeLorean 3D na estrada ("Rebobinando 2026…"); na linha do tempo, quem anda de mês em mês é o **modelo 3D de verdade**
+  direto em um mês, ir mês a mês e esconder/mostrar BUs e tipos (Mais opções). Antes de começar, o telão mostra só a
+  **capa do bloco** (o nome, quem conduz e a DeLorean 3D na estrada); os indicadores e a linha do tempo entram quando
+  o ano começa. Na linha do tempo, quem anda de mês em mês é o **modelo 3D de verdade**
   (rodas girando e rastro de fogo a cada mês). O céu e a estrada continuam rodando no fundo em todas as cenas.
 - **Reconhecimento 2026:** `▶ Tributo` → `Abrir os Prêmios` → para cada prêmio: `Conhecer os indicados` →
   `⚡ Carregar o Flux Capacitor` → o raio cai e o vencedor aparece. Na carga, **os aplausos da sala carregam o Flux

@@ -105,6 +105,11 @@ const STRATEGY_SHA256 = '07d7a467caaec2b26381eab3be2d32ff5b8054262768b371868aafc
   c.setConfig({ anfitrioes: { visao: ['Ana', '  ', 'Bia', 'Caio'], sucesso: [] } }); assert.deepEqual(c.hosts('visao'), ['Ana', 'Bia', 'Caio']); assert.equal(c.publicState('visao').quem, 'Ana, Bia e Caio'); assert.deepEqual(c.hosts('sucesso'), []);
   assert.deepEqual(c.hosts('connections'), ['Nicolas Kuhnast', 'Douglas Hamasaki'], 'os outros blocos não mudam'); c.resetConfig('anfitrioes'); assert.deepEqual(c.hosts('sucesso'), ['Lucas Barbosa', 'Giovana Romão', 'Maria Eduarda']);
 
+  // participação especial nas Conexões (quem ajudou a organizar): nomes e a frase, editáveis
+  assert.deepEqual(c.especial(), { nomes: ['Vinicius Santos'], nota: 'Ajudou em toda a organização. Obrigado!' });
+  c.setConfig({ anfitrioes: { especial: ['Ana', ''], especialNota: 'Valeu!' } }); assert.deepEqual(c.especial(), { nomes: ['Ana'], nota: 'Valeu!' }); assert.deepEqual(c.hosts('connections'), ['Nicolas Kuhnast', 'Douglas Hamasaki']);
+  c.resetConfig('anfitrioes'); assert.deepEqual(c.especial().nomes, ['Vinicius Santos']);
+
   // intervalo: 15 minutos, pausar, somar tempo
   let iv = c.publicState('intervalo'); assert.equal(iv.min, 15); assert.equal(iv.live.phase, 'idle'); assert.equal(iv.live.remaining, 900);
   c.command('intervalo', { action: 'start' }); iv = c.publicState('intervalo'); assert.equal(iv.live.phase, 'run'); assert.ok(Math.abs(iv.live.endsAt - Date.now() - 900000) < 2000);
@@ -186,7 +191,8 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await go('boasvindas'); st = await state(); assert.equal(st.step.transition, false);
     // quem conduz: nomes e fotos no estado público (Conexões, e a cena leva os seus)
     r = await go('connections'); st = await state(); assert.deepEqual(st.hosts.map(h => h.nome), ['Nicolas Kuhnast', 'Douglas Hamasaki']); assert.ok(st.hosts.every(h => 'foto' in h)); assert.equal(st.step.transition, true);
-    r = await go('reflexao'); st = await state(); assert.deepEqual(st.hosts.map(h => h.nome), ['Felipe Zompero', 'Mayara Gomes', 'Pedro Teixeira', 'Geovanna Moreira']);
+    assert.deepEqual(st.especial.pessoas.map(p => p.nome), ['Vinicius Santos']); assert.match(st.especial.nota, /organização/); // participação especial, só nas Conexões
+    r = await go('reflexao'); st = await state(); assert.deepEqual(st.hosts.map(h => h.nome), ['Felipe Zompero', 'Mayara Gomes', 'Pedro Teixeira', 'Geovanna Moreira']); assert.equal(st.especial, undefined);
     r = await go('almanaque'); st = await state(); assert.equal(st.cena.kind, 'almanaque'); assert.equal(st.cena.ato.n, 'ATO II'); assert.equal(st.cena.live.mes, -1);
     assert.deepEqual(st.cena.hosts.map(h => h.nome), ['Claudia Meira', 'Fermín Grandas']); assert.equal(st.cena.quem, 'Claudia Meira e Fermín Grandas');
     r = await cena('almanaque', { action: 'mes', mes: 8 }); assert.equal(r.status, 200); assert.equal((await state()).cena.live.mes, 8);

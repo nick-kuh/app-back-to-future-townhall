@@ -247,6 +247,14 @@ body.dim .sky{filter:brightness(.56) saturate(.85);transition:filter 1.2s}
 /* empilhadas, alinhadas à esquerda (almanaque antes de começar) */
 .hosts.stack{flex-direction:column;align-items:flex-start;gap:1.2vh}
 .scene[data-key=prep] .hosts{margin-top:3vh}
+/* participação especial (Conexões): placa dourada, abaixo de quem conduz */
+.guest{display:flex;flex-direction:column;align-items:center;gap:1vh;margin-top:3vh}
+.guest>small{font:400 clamp(8px,.85vw,13px) var(--pixel);letter-spacing:3px;color:var(--yellow);text-shadow:0 0 10px rgba(255,210,31,.6)}
+.scene[data-key=prep] .guest .hosts{margin-top:0}
+.host.star{background:linear-gradient(180deg,#ffd84a,#ff9a12);border-color:#fff3c4;box-shadow:0 6px 0 #8a4a00,0 0 30px rgba(255,170,30,.55)}
+.host.star b{color:#2a1200;text-shadow:none}
+.host.star .av{box-shadow:0 0 0 3px #fff3c4,0 0 22px rgba(255,210,31,.6)}
+.guest p{font:600 clamp(13px,1.35vw,22px) Inter;color:var(--txt);text-shadow:0 2px 8px #000}
 .lp-head{display:flex;align-items:center;justify-content:center;gap:1.6vw;flex-wrap:wrap}
 .rfx-menu .hosts{margin-top:.4vh}
 

@@ -74,6 +74,8 @@ function publicState() {
   // quem conduz o bloco que está no ar, com a foto de perfil (Conexões, Reflexão, Sucesso e as cenas que têm anfitrião)
   const hk = s.presentation || s.block === 'doc' ? 'sucesso' : kind || s.block, names = cenas.hosts(hk);
   if (names.length) { const people = engine.listPeople(); s.hosts = names.map(nome => ({ nome, foto: engine.photoByName(nome, people) })); } else s.hosts = [];
+  // Conexões: participação especial (quem ajudou a organizar), com a foto, abaixo de quem conduz
+  if (hk === 'connections') { const e = cenas.especial(), people = engine.listPeople(); s.especial = { nota: e.nota, pessoas: e.nomes.map(nome => ({ nome, foto: engine.photoByName(nome, people) })) }; }
   if (s.cena) s.cena.hosts = s.hosts;                                // a cena leva os seus anfitriões (muda o nome → o telão redesenha)
   s.creditos = engine.state.block === 'closing' ? cenas.creditos() : null;
   return s;

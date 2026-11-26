@@ -37,8 +37,8 @@
 .cn-agenda .cn-h1{font-size:clamp(26px,3.7vw,64px);white-space:nowrap}
 .ag-bar{display:flex;gap:3px;height:1.8vh;margin-top:1vh}
 .ag-bar i{background:color-mix(in srgb,var(--c) 55%,#0b0618);border-radius:3px;opacity:.8}
-.ag-bar i.agora{background:var(--c);opacity:1;box-shadow:0 0 16px var(--c)}
-.ag-bar i.feito{opacity:.35}
+.ag-bar i{transition:background .6s,box-shadow .6s,opacity .6s}
+.ag-bar i.sp{background:var(--c);opacity:1;box-shadow:0 0 16px var(--c)}
 .ag-scale{position:relative;height:2.6vh;font:400 clamp(10px,1vw,15px) var(--led);color:var(--muted);letter-spacing:1px}
 .ag-scale span{position:absolute;transform:translateX(-50%)}
 .ag-scale span:first-child{transform:none}.ag-scale span:last-child{transform:translateX(-100%)}
@@ -52,9 +52,10 @@
 .ag-it b{display:block;font:800 clamp(13px,1.5vw,25px)/1.2 Inter;color:var(--txt)}
 .ag-it small{display:block;font:500 clamp(10px,1.12vw,18px)/1.3 Inter;color:var(--muted);margin-top:.6vh}
 .ag-it .du{font:800 clamp(9px,.85vw,13px) Inter;font-style:normal;color:#050409;background:var(--c);border-radius:99px;padding:.3vh .6vw;white-space:nowrap;letter-spacing:0}
-.ag-it.feito{opacity:.42}
-.ag-it.agora{background:color-mix(in srgb,var(--c) 14%,transparent);box-shadow:inset 4px 0 0 var(--c)}
-.ag-it.agora .du{animation:blink 1.1s steps(2) infinite}
+/* o destaque passeia por todos os itens (nenhum fica fixo como "no ar") */
+.ag-it{transition:background .7s,box-shadow .7s}
+.ag-it.sp{background:color-mix(in srgb,var(--c) 13%,transparent);box-shadow:inset 4px 0 0 var(--c)}
+.ag-it.sp b{text-shadow:0 0 14px color-mix(in srgb,var(--c) 60%,transparent)}
 
 /* ---------- boas-vindas ---------- */
 .cn-boasvindas{justify-content:center;gap:4vh}
@@ -96,14 +97,18 @@
 .al-rib .car.mv .trail{width:120%;opacity:1}
 .al-focus{display:grid;grid-template-columns:21% 1fr;gap:1.2vw;flex:1;min-height:0;position:relative}
 /* antes de o ano começar: a DeLorean 3D na estrada, pronta para partir (no lugar do painel do mês e dos cartões) */
-.al-hero{position:absolute;inset:0;z-index:3;display:none;align-items:center;gap:2.6vw}
+/* CAPA do bloco (antes de o ano começar): só o nome do bloco, quem conduz e a DeLorean na estrada.
+   Os indicadores, a linha do tempo e o rodapé só entram quando o ano começa a tocar. */
+.al-hero{position:absolute;inset:0;z-index:3;display:none;align-items:center;gap:3vw}
 .cn-almanaque.blank .al-hero{display:flex;animation:cn-up .6s both}
 .cn-almanaque.blank .al-month,.cn-almanaque.blank .al-cards{visibility:hidden}
-.al-hero .carbox{flex:none;height:100%;width:auto;aspect-ratio:2/1;max-width:66%}
-.al-side{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:3.2vh}
-.al-hero .al-wait{padding:0;text-align:left;line-height:1.5}
-.al-hero .al-wait b{display:block;font:400 clamp(18px,2.5vw,44px)/1.5 var(--pixel)}
-.al-hero .al-wait small{margin-top:1.4vh;font-size:clamp(14px,1.6vw,26px);color:var(--txt)}
+.cn-almanaque.blank .al-top,.cn-almanaque.blank .al-rib,.cn-almanaque.blank .al-foot{display:none}
+.al-hero .carbox{flex:none;width:54%;height:auto;aspect-ratio:16/10;max-height:100%}
+.al-side{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2.6vh}
+.al-cover{font-size:clamp(44px,6.4vw,118px);line-height:1.04}
+.al-cover .bttf{display:inline-block;padding:.04em .1em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.al-coversub{font:600 clamp(15px,1.7vw,29px)/1.35 Inter;color:var(--txt)}
+.al-hero .hosts{margin-top:1vh}
 .al-month{background:linear-gradient(160deg,rgba(29,24,64,.95),rgba(11,10,31,.95));border:2px solid #3a3560;padding:2vh 1.4vw;display:flex;flex-direction:column;justify-content:center;gap:1.6vh;min-height:0}
 .al-month .q{font:400 clamp(9px,.9vw,14px) var(--pixel);color:var(--cyan);letter-spacing:3px}
 .al-month .mn{font-size:clamp(44px,6.6vw,116px);line-height:1}
