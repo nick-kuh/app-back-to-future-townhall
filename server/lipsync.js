@@ -71,7 +71,13 @@ async function requestClip({ image, text, seconds }, { key, base, signal }) {
     }),
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error((body.error && body.error.message) || `a API respondeu ${res.status}`), { status: res.status });
+  if (!res.ok) {
+    const msg = (body.error && body.error.message) || `a API respondeu ${res.status}`;
+    // chave no plano gratuito: o modelo de vídeo tem limite zero (não adianta tentar de novo)
+    if (res.status === 429 && /free tier|limit: 0/i.test(msg)) throw Object.assign(new Error('A chave da API do Gemini está no plano gratuito, que não gera vídeo. Ative o faturamento no Google AI Studio e gere de novo.'), { status: 402, final: true });
+    if (res.status === 401 || res.status === 403) throw Object.assign(new Error(`A chave da API do Gemini foi recusada (${msg}).`), { status: res.status, final: true });
+    throw Object.assign(new Error(msg), { status: res.status });
+  }
   const items = (body.steps || []).flatMap(s => s.content || []).concat(body.content || [], body.outputs || []);
   const video = items.find(c => c && (c.type === 'video' || /^video\//.test(c.mime_type || '')));
   if (!video) throw new Error('a resposta da API não trouxe vídeo');
@@ -89,7 +95,7 @@ async function withRetry(fn, signal) {
   const wait = Number(process.env.GEMINI_RETRY_MS) || 4000;
   for (let k = 0; ; k++) {
     try { return await fn(); } catch (e) {
-      const again = k < 2 && !(signal && signal.aborted) && e.name !== 'TimeoutError' && (!e.status || e.status === 429 || e.status >= 500);
+      const again = k < 2 && !e.final && !(signal && signal.aborted) && e.name !== 'TimeoutError' && (!e.status || e.status === 429 || e.status >= 500);
       if (!again) throw e;
       console.warn('[lipsync] tentando de novo:', e.message);
       await new Promise(r => setTimeout(r, wait * (k + 1)));
@@ -104,7 +110,7 @@ async function generate(message, { rev, dataDir, image, arrival = true, onProgre
   const list = plan(message, { arrival }), dir = path.join(dataDir, 'doc-clips', String(rev));
   fs.rmSync(dir, { recursive: true, force: true }); fs.mkdirSync(dir, { recursive: true });
   const clips = {}, errors = [];
-  let done = 0, next = 0;
+  let done = 0, next = 0, fatal = null;
   const worker = async () => {
     while (next < list.length && !(signal && signal.aborted)) {
       const c = list[next++];
@@ -116,14 +122,18 @@ async function generate(message, { rev, dataDir, image, arrival = true, onProgre
         if (signal && signal.aborted) break;
         const file = `${c.part}-${c.i}.mp4`; fs.writeFileSync(path.join(dir, file), mp4);
         (clips[c.part] = clips[c.part] || [])[c.i] = { url: `/doc-clips/${rev}/${file}`, text: c.text, seconds: c.seconds };
-      } catch (e) { if (signal && signal.aborted) break; errors.push(`${c.part} ${c.i + 1}: ${e.message}`); console.error('[lipsync]', c.part, c.i, e.message); }
+      } catch (e) {
+        if (signal && signal.aborted) break;
+        errors.push(`${c.part} ${c.i + 1}: ${e.message}`); console.error('[lipsync]', c.part, c.i, e.message);
+        if (e.final) { fatal = e; done += list.length - next; next = list.length; } // chave recusada ou plano gratuito: os outros clipes também falhariam
+      }
       done++; onProgress({ total: list.length, done, failed: errors.length, clips, errors });
     }
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, list.length) }, worker));
   // parte com algum clipe faltando não entra: o telão usa a voz do navegador nela
   for (const k of Object.keys(clips)) { const want = list.filter(c => c.part === k).length; if (clips[k].filter(Boolean).length !== want) delete clips[k]; }
-  return { total: list.length, failed: errors.length, clips, errors };
+  return { total: list.length, failed: fatal ? list.length - Object.values(clips).reduce((n, l) => n + l.length, 0) : errors.length, clips, errors: fatal ? [fatal.message, ...errors.filter(x => !x.endsWith(fatal.message))] : errors };
 }
 
 module.exports = { plan, estimate, generate, hasKey, skipArrival, chunks, promptFor, MODEL, PRICE_PER_SECOND };

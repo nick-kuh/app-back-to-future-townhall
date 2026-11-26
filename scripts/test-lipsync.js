@@ -107,11 +107,17 @@ async function apiCalls() {
     // vídeo entregue por endereço: baixado com a chave no cabeçalho
     assert.deepEqual(fs.readFileSync(path.join(dir, 'doc-clips', '7', 'jornal-0.mp4')), fakeMp4('baixado'));
     assert.equal(fake.seen.find(x => x.method === 'GET').headers['x-goog-api-key'], 'chave-teste');
+    // chave no plano gratuito (429 com limite zero): não repete, para os outros clipes e explica em português
+    const free = await fakeGemini(async (req, res) => { await wait(5); res.writeHead(429, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'Rate limit exceeded for model gemini-omni-1.2-flash (limit: 0 input tokens per minute on Free Tier). Please upgrade your tier at https://ai.dev/rate-limit.', code: 'too_many_requests' } })); });
+    process.env.GEMINI_BASE_URL = free.url;
+    const rf = await L.generate(MSG, { rev: 10, dataDir: dir, image });
+    assert.equal(rf.failed, rf.total); assert.ok(free.seen.length <= 3, `parou de pedir (${free.seen.length})`); assert.match(rf.errors[0], /plano gratuito.*faturamento/);
+    free.server.close();
     // chave recusada (4xx): não repete
     const denied = await fakeGemini(async (req, res) => { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { code: 403, message: 'API key not valid' } })); });
     process.env.GEMINI_BASE_URL = denied.url;
     const rd = await L.generate({ abertura: 'Olá.', blocos: [], manchetes: [], encerramento: 'Tchau.' }, { rev: 9, dataDir: dir, image, arrival: false });
-    assert.equal(rd.failed, rd.total); assert.equal(denied.seen.length, rd.total, 'sem nova tentativa'); assert.match(rd.errors[0], /API key not valid/);
+    assert.equal(rd.failed, rd.total); assert.ok(denied.seen.length <= rd.total, 'sem nova tentativa'); assert.match(rd.errors[0], /recusada \(API key not valid\)/);
     denied.server.close(); process.env.GEMINI_BASE_URL = fake.url;
     // cancelar no meio: para de pedir clipes
     const before = fake.seen.length, ac = new AbortController();
