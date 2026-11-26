@@ -26,11 +26,48 @@
 
   /* ---------- a cena ---------- */
   const ledDate = d => `${MONTHS[d.getMonth()]} ${pad(d.getDate())} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const urls = s => String(s || '').split(/[\s,]+/).filter(Boolean); // um ou mais endereços de vídeo
+
+  /* ---------- o Doc em vídeo: um "editor" ao vivo ----------
+   * Vários trechos curtos do Doc (feitos com IA): parado e falando. A cada fim de trecho o editor corta para
+   * outro (nunca o mesmo seguido), sempre tocando para a frente, e muda o enquadramento, como numa montagem
+   * com várias câmeras. Quando a voz começa ou termina, corta na hora para um trecho falando ou parado. */
+  const VP = { box: null, a: null, b: null, front: null, lists: { idle: [], talk: [] }, last: '', kind: 'idle', zoom: 0, tok: 0 };
+  function vpMount(el, set) {
+    VP.box = $('.doc-vid', el); VP.tok++;
+    if (!VP.box) return;
+    VP.a = $('.va', VP.box); VP.b = $('.vb', VP.box); VP.front = null; VP.last = ''; VP.zoom = 0;
+    VP.lists.talk = urls(set.docTalkVideoUrl); VP.lists.idle = urls(set.docIdleVideoUrl);
+    if (!VP.lists.talk.length) VP.lists.talk = VP.lists.idle; if (!VP.lists.idle.length) VP.lists.idle = VP.lists.talk;
+    for (const v of [VP.a, VP.b]) v.addEventListener('ended', () => { if (v === VP.front) vpCut(VP.kind); });
+    vpCut('idle', true);
+  }
+  function vpPick(kind) {
+    const l = VP.lists[kind]; if (l.length <= 1) return l[0];
+    let u; do { u = l[Math.floor(Math.random() * l.length)]; } while (u === VP.last);
+    return u;
+  }
+  function vpCut(kind, first) {
+    if (!VP.box) return;
+    VP.kind = kind; const url = vpPick(kind); if (!url) return; VP.last = url;
+    const back = VP.front === VP.a ? VP.b : VP.a, tok = VP.tok;
+    const show = () => {
+      back.removeEventListener('canplay', show); if (tok !== VP.tok) return;
+      back.play().catch(() => {});
+      back.classList.add('on'); const old = VP.front; if (old) { old.classList.remove('on'); setTimeout(() => old.pause(), 150); }
+      VP.front = back;
+      if (!first) { VP.zoom = (VP.zoom + 1 + Math.floor(Math.random() * 2)) % 3; VP.box.dataset.zoom = String(VP.zoom); } // corte de câmera
+    };
+    back.src = url;
+    if (back.readyState >= 3) show(); else back.addEventListener('canplay', show);
+  }
+  function vpStop() { VP.tok++; if (VP.a) { VP.a.pause(); VP.b.pause(); } VP.box = null; }
+
   function partsOf(m) { return m ? ['chegada', 'abertura', ...(m.blocos || []).map(b => b.id), 'jornal', 'final'] : []; }
   function html(st) {
-    const set = st.settings || {}, img = set.docImageUrl, idle = set.docIdleVideoUrl || set.docTalkVideoUrl, talk = set.docTalkVideoUrl || set.docIdleVideoUrl;
-    // o Doc: vídeos feitos com IA (parado / falando, alternando no ritmo da voz), um retrato feito com IA ou o desenho
-    const doc = idle ? `<div class="doc-vid"><video class="v-idle" src="${esc(idle)}" muted loop playsinline autoplay preload="auto"></video><video class="v-talk" src="${esc(talk)}" muted loop playsinline autoplay preload="auto"></video></div>`
+    const set = st.settings || {}, img = set.docImageUrl, idle = urls(set.docIdleVideoUrl).length || urls(set.docTalkVideoUrl).length;
+    // o Doc: vídeos feitos com IA (trechos parado / falando, editados ao vivo no ritmo da voz), um retrato feito com IA ou o desenho
+    const doc = idle ? `<div class="doc-vid" data-zoom="0"><video class="va" muted playsinline preload="auto"></video><video class="vb" muted playsinline preload="auto"></video></div>`
       : img ? `<img class="doc-img" src="${esc(img)}" alt="">` : portrait();
     return `<section class="docx" id="docx" data-part="espera" data-shot="none">
       <div class="cx-world" id="cxWorld">
@@ -101,7 +138,7 @@
     if (C.speaking === on) return; C.speaking = on;
     if (C.el) {
       C.el.classList.toggle('talking', on);
-      const v = C.el.querySelector(on ? '.v-talk' : '.v-idle'); if (v && v.paused) v.play().catch(() => {}); // vídeos do Doc: o certo na frente
+      if (VP.box) vpCut(on ? 'talk' : 'idle'); // vídeos do Doc: corta para um trecho falando ou parado
     }
     notify();
   }
@@ -305,6 +342,7 @@
     C.cloud = cl && window.NuvemDePalavras ? new NuvemDePalavras(cl, { scale: 1.1, wide: true }) : null;
     if (C.cloud) C.cloud.dim = true;
     C.dust = du ? dust(du) : null;
+    vpMount(C.el, st.settings || {});
     const vb = $('#dxVoice', C.el); if (vb) vb.onclick = () => { vb.hidden = true; if (C.part >= 0) play(C.part); };
     C.el.addEventListener('pointerdown', e => { if (vb && e.target !== vb) vb.hidden = true; }); // qualquer clique na tela já libera a voz
     C.clock = setInterval(() => { const n = C.el && $('#dxNow', C.el); if (n) n.textContent = ledDate(new Date()); }, 1000);
@@ -336,7 +374,7 @@
   function unmount() {
     document.body.classList.remove('doc-cine');
     if (!C.el) return;
-    clearAll(); clearInterval(C.clock); C.clock = null; if (C.dust) C.dust.stop();
+    clearAll(); clearInterval(C.clock); C.clock = null; if (C.dust) C.dust.stop(); vpStop();
     C.el = null; C.car = null; C.cloud = null; C.dust = null; C.part = -1; C.seq = null; notify();
   }
   // fala a frase de teste no telão (o Doc testa a voz antes do evento)

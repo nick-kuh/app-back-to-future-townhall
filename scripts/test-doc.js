@@ -194,6 +194,8 @@ async function serverFlow() {
     st = (await call('GET', '/api/state')).json; assert.equal(st.settings.docVideoUrl, '/videos/doc.mp4'); assert.equal(st.settings.docVideoFull, true); assert.equal(st.settings.docImageUrl, 'https://exemplo.com/doc.png');
     await call('POST', '/api/admin/action', { type: 'settings', settings: { docIdleVideoUrl: '/videos/parado.mp4', docTalkVideoUrl: 'https://exemplo.com/falando.mp4' } });
     st = (await call('GET', '/api/state')).json; assert.equal(st.settings.docIdleVideoUrl, '/videos/parado.mp4'); assert.equal(st.settings.docTalkVideoUrl, 'https://exemplo.com/falando.mp4');
+    await call('POST', '/api/admin/action', { type: 'settings', settings: { docTalkVideoUrl: '/videos/a.mp4, /videos/b.mp4\njavascript:alert(1) https://x.com/c.mp4' } });
+    st = (await call('GET', '/api/state')).json; assert.equal(st.settings.docTalkVideoUrl, '/videos/a.mp4 /videos/b.mp4 https://x.com/c.mp4', 'vários vídeos, sem endereços inválidos');
     await call('POST', '/api/admin/action', { type: 'settings', settings: { docImageUrl: 'data:image/png;base64,xx' } });
     st = (await call('GET', '/api/state')).json; assert.equal(st.settings.docImageUrl, '', 'só endereços http(s) ou do próprio site');
 

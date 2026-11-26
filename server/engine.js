@@ -82,7 +82,7 @@ const DEFAULT_SETTINGS = {
   docVideoFull: false,    // o vídeo já traz a fala completa: depois dele o telão vai direto para o jornal e o 2027
   docImageUrl: '',        // opcional: retrato do Doc feito com IA (fundo escuro), no lugar do desenho
   docIdleVideoUrl: '/videos/doc-parado.mp4',  // vídeo curto do Doc parado, repetido quando ele não está falando (vazio = desenho)
-  docTalkVideoUrl: '/videos/doc-falando.mp4', // vídeo curto do Doc falando, repetido enquanto a voz fala
+  docTalkVideoUrl: '/videos/doc-falando-1.mp4 /videos/doc-falando-2.mp4 /videos/doc-falando-3.mp4', // trechos do Doc falando (um ou mais), editados ao vivo enquanto a voz fala
   agenda: [
     { time: '', title: 'Boas-vindas e check-in' },
     { time: '', title: 'Conexões · 3 viagens no tempo' },
@@ -657,7 +657,9 @@ class Engine {
     if (partial.transitionSeconds !== undefined) s.transitionSeconds = Math.max(3, Math.min(30, Math.round(Number(partial.transitionSeconds) || 15)));
     if (partial.skip !== undefined) s.skip = this.cleanSkip({ ...s.skip, ...(partial.skip && typeof partial.skip === 'object' ? partial.skip : {}) });
     // áudio próprio: só endereços http(s) ou caminhos do próprio site
-    for (const k of ['musicUrl', 'ambientUrl', 'docVideoUrl', 'docImageUrl', 'docIdleVideoUrl', 'docTalkVideoUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
+    // vídeos do Doc parado/falando: um ou mais endereços (separados por espaço, vírgula ou linha)
+    for (const k of ['docIdleVideoUrl', 'docTalkVideoUrl']) if (partial[k] !== undefined) s[k] = String(partial[k]).split(/[\s,]+/).filter(u => /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u)).slice(0, 12).join(' ').slice(0, 3000);
+    for (const k of ['musicUrl', 'ambientUrl', 'docVideoUrl', 'docImageUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
     if (partial.docVoice !== undefined) s.docVoice = !!partial.docVoice;
     if (partial.docVideoFull !== undefined) s.docVideoFull = !!partial.docVideoFull;
     if (partial.docVoiceName !== undefined) s.docVoiceName = clip(partial.docVoiceName, 80);
