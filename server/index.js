@@ -10,6 +10,7 @@ const { DB_PATH, DATA_DIR } = require('./db');
 const { createSucesso } = require('./sucesso');
 const { createReflexao } = require('./reflexao');
 const doc = require('./doc');
+const lipsync = require('./lipsync');
 
 const PORT = Number(process.env.PORT) || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'doc1985';
@@ -297,7 +298,11 @@ app.post('/api/admin/doc', wrapAsync(async req => {
       engine.setDocMessage(doc.edit(cur, a.message || {}, sucessoExport()));
       return { ok: true };
     }
-    case 'clear': engine.setDocMessage(null); return { ok: true };
+    case 'clear': lipStop(); engine.setDocMessage(null); engine.lipClear(); return { ok: true };
+    // Clipes com a boca sincronizada (API do Gemini): a geração roda em segundo plano e o painel acompanha
+    case 'lipsync': return lipStartGen();
+    case 'lipUse': engine.lipUse(!!a.on); return { ok: true };
+    case 'lipClear': lipStop(); engine.lipClear(); fs.rmSync(path.join(DATA_DIR, 'doc-clips'), { recursive: true, force: true }); return { ok: true };
     case 'testVoice': io.emit('doc:test'); return { ok: true }; // o telão fala uma frase de teste (ensaio)
     case 'phones': engine.setDocPhones(!!a.on); return { ok: true };
     case 'start': case 'stop': case 'pause': case 'resume': case 'next': case 'prev': case 'goto':
@@ -306,6 +311,27 @@ app.post('/api/admin/doc', wrapAsync(async req => {
     default: throw Object.assign(new Error('Comando inválido.'), { status: 400 });
   }
 }));
+// O Doc com a boca sincronizada: um clipe da API do Gemini por trecho da fala, a partir do quadro do Doc
+const LIP_IMAGE = path.join(__dirname, '..', 'public', 'videos', 'doc-quadro.jpg');
+let lipAbort = null;
+function lipStop() { if (lipAbort) { lipAbort.abort(); lipAbort = null; } }
+function lipStartGen() {
+  const d = engine.state.doc, m = d.message;
+  if (!m) throw Object.assign(new Error('Gere a mensagem do Doc antes.'), { status: 409 });
+  if (!lipsync.hasKey()) throw Object.assign(new Error('Falta a chave da API do Gemini (GEMINI_API_KEY) no servidor. Configure no Render e tente de novo.'), { status: 409 });
+  const arrival = !!engine.settings.docVideoUrl, list = lipsync.plan(m, { arrival }), est = lipsync.estimate(list);
+  const want = list.reduce((o, c) => ((o[c.part] = (o[c.part] || 0) + 1), o), {});
+  const lip = engine.lipStart({ total: list.length, want, seconds: est.seconds, usd: est.usd });
+  fs.rmSync(path.join(DATA_DIR, 'doc-clips'), { recursive: true, force: true }); // só a versão atual fica no disco
+  lipAbort = new AbortController();
+  const signal = lipAbort.signal;
+  lipsync.generate(m, { rev: lip.rev, dataDir: DATA_DIR, image: fs.readFileSync(LIP_IMAGE), arrival, signal, onProgress: p => engine.lipProgress(lip, p) })
+    .then(r => { if (!signal.aborted) engine.lipEnd(lip, { ...r, error: r.failed === r.total ? (r.errors[0] || 'Nenhum clipe foi gerado.') : '' }); })
+    .catch(e => { if (!signal.aborted) engine.lipEnd(lip, { clips: lip.clips, failed: lip.failed, errors: lip.errors, error: e.message }); })
+    .finally(() => { if (lipAbort && lipAbort.signal === signal) lipAbort = null; });
+  return { ok: true, ...est };
+}
+app.use('/doc-clips', express.static(path.join(DATA_DIR, 'doc-clips'), { maxAge: '1h' }), (req, res) => res.status(404).end());
 // O arquivo .txt do encerramento: a mensagem do Doc, as palavras mais citadas e todas as respostas das 4 dinâmicas.
 app.get('/api/admin/doc.txt', (req, res) => res.type('text/plain; charset=utf-8').set('Content-Disposition', 'attachment; filename="Visao_2027_Doc.txt"')
   .send(doc.toTxt(engine.state.doc.message, sucessoExport(), engine.settings.eventName)));
@@ -382,7 +408,8 @@ function telaoStatus() {
   return { count: list.length, sound: list.some(t => !t.locked), auth: list.some(t => t.auth), doc };
 }
 const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null, reflexao: reflexao.adminState(),
-  doc: { ai: doc.hasAI(), model: doc.MODEL, parts: doc.parts(engine.state.doc.message) } });
+  doc: { ai: doc.hasAI(), model: doc.MODEL, parts: doc.parts(engine.state.doc.message),
+    lip: { key: lipsync.hasKey(), model: lipsync.MODEL, price: lipsync.PRICE_PER_SECOND, estimate: lipsync.estimate(lipsync.plan(engine.state.doc.message, { arrival: !!engine.settings.docVideoUrl })) } } });
 
 // Liga o socket à pessoa dona do token (do evento ou guardado no socket) e revalida sempre:
 // se o token foi trocado (outro aparelho assumiu o nome) ou o check-in foi desfeito, desliga.

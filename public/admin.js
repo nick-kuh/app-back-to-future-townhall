@@ -358,6 +358,31 @@
       <p><b>Encerramento.</b> ${esc(m.encerramento)}</p>
     </div>`;
   }
+  // O Doc com a boca sincronizada: clipes da API do Gemini com o Doc dizendo o texto do dia
+  function docLip(d, info, compact) {
+    const L = info.lip || {}, l = d.lip, est = L.estimate || { clips: 0, seconds: 0, usd: 0 }, usd = v => `US$ ${Number(v || 0).toFixed(2).replace('.', ',')}`;
+    const stale = l && l.rev !== d.rev, ready = l && !stale && Object.keys(l.clips || {}).length;
+    if (compact) return l && l.status === 'generating' ? `<p class="small">🎙 Clipes sincronizados: ${l.done} de ${l.total} prontos… (as partes prontas já entram no telão)</p>`
+      : ready && l.use ? '<p class="small">🎙 O telão usa os clipes com a boca sincronizada (as partes sem clipe usam a voz do navegador).</p>' : '';
+    let h = `<div class="doc-kit doc-lip"><b>🎙 Doc com a boca sincronizada (opcional, pago à parte)</b>
+      <p class="small">A API de vídeo do Gemini gera o Doc dizendo <i>este</i> texto, com a voz dele e a boca no tempo da fala, partindo do mesmo quadro do vídeo da chegada. Sem os clipes, o telão usa os trechos gerais + a voz do navegador.</p>`;
+    if (!L.key) return h + `<p class="small">⚙ Para ligar: crie uma chave da API do Gemini (no Google AI Studio, com faturamento ativado; o plano Google AI Plus não cobre a API) e coloque em <span class="mono">GEMINI_API_KEY</span> no Render.${est.clips ? ` Este texto daria ${est.clips} clipes, ${est.seconds} s de vídeo, ≈ ${usd(est.usd)}.` : ''}</p></div>`;
+    if (!l || stale) h += `${stale ? '<p class="warn">⚠ O texto mudou depois dos clipes: os antigos não entram mais. Gere de novo.</p>' : ''}
+      <p class="small">${est.clips} clipes · ${est.seconds} s de vídeo · ≈ <b>${usd(est.usd)}</b> (preço estimado de ${usd(L.price)}/s em 720p) · leva alguns minutos (3 clipes de cada vez). Gere depois de revisar o texto: editar depois pede clipes novos.</p>
+      <div class="actions">${btn('🎙 Gerar os clipes do Doc falando este texto', 'docLip', { cls: 'sm', data: { usd: est.usd, n: est.clips } })}</div>`;
+    else if (l.status === 'generating') h += `<div class="phase">🎙 Gerando os clipes: <b>${l.done} de ${l.total}</b>${l.failed ? ` · ${l.failed} com erro` : ''}… as partes prontas já entram no telão.</div>
+      <div class="lip-bar"><i style="width:${Math.round(100 * l.done / Math.max(1, l.total))}%"></i></div>
+      <div class="actions">${btn('✕ Cancelar e apagar', 'docLipClear', { cls: 'red sm' })}</div>`;
+    else {
+      const parts = Object.keys(l.clips || {}), names = Object.fromEntries((info.parts || []).map(x => [x.id, x.label]));
+      h += `<p class="small">${l.status === 'error' ? `⚠ ${esc(l.error || 'Não foi possível gerar os clipes.')}` : l.status === 'partial' ? `⚠ ${l.failed} de ${l.total} clipes com erro: as partes incompletas usam a voz do navegador.` : `✔ ${l.total} clipes prontos (${l.seconds} s, ≈ ${usd(l.usd)}).`}</p>
+        ${parts.length ? `<p class="small lip-list">Assistir: ${parts.map(k => l.clips[k].filter(Boolean).map((c, i) => `<a href="${esc(c.url)}" target="_blank">${esc(names[k] || k)}${l.clips[k].length > 1 ? ` ${i + 1}` : ''}</a>`).join(' · ')).join(' · ')}</p>
+        <label class="sw"><input type="checkbox" data-act="docLipUse" ${l.use ? 'checked' : ''}> Usar os clipes sincronizados no telão</label>` : ''}
+        <div class="actions">${btn('↻ Gerar os clipes de novo', 'docLip', { cls: 'ghost sm', data: { usd: est.usd, n: est.clips } })}${btn('🗑 Apagar os clipes', 'docLipClear', { cls: 'red sm' })}</div>`;
+    }
+    if (l && l.errors && l.errors.length && l.status !== 'ready') h += det('liperr', 'Ver os erros', `<pre class="small mono">${esc(l.errors.join('\n'))}</pre>`);
+    return h + '</div>';
+  }
   function pDoc() {
     const O = A.O, d = O.state.doc || {}, m = d.message, info = O.doc || { ai: false, parts: [] }, tl = O.telao || { count: 0 }, tp = tl.doc;
     const n = docTotal(), play = d.play, here = tp && play && tp.seq === play.seq ? tp : null, cur = play ? (here ? here.part : play.part) : -1, done = !!(here && here.done);
@@ -370,6 +395,7 @@
     if (m && play) body += `<div class="doc-parts">${info.parts.map((x, i) => `<button class="btn xs ${i === cur ? '' : 'ghost'} ${i < cur ? 'past' : ''}" data-act="docCmd" data-cmd="goto" data-part="${i}" title="Pular para esta parte">${i === cur ? (play.paused ? '❚❚ ' : here && here.speaking ? '🔊 ' : '▶ ') : ''}${esc(x.label)}</button>`).join('')}</div>
       <p class="small">${play.paused ? '❚❚ Cena pausada.' : done ? '✔ A cena terminou no telão.' : here ? `No telão agora: <b>${esc((info.parts[cur] || {}).label || '')}</b>${here.speaking ? ' · o Doc está falando' : ''}.` : tl.count ? 'Aguardando o telão…' : '⚠ Nenhum telão aberto.'} ${tp && tp.voice ? `Voz: ${esc(tp.voice)}.` : tl.count && O.settings.docVoice !== false ? 'O telão ainda não tem voz em português liberada: o texto aparece na tela, sem som.' : ''}</p>`;
     if (m) body += play ? det('docmsg', 'Ver o texto do Doc', docPreview(m)) : docPreview(m); // durante a cena, os controles ficam à mão
+    if (m) body += play ? docLip(d, info, true) : docLip(d, info);
     let primary = null, secondary = [], busy = '';
     const cmd = (label, c, cls, extra = {}) => btn(label, 'docCmd', { cls, data: { cmd: c, ...extra } });
     if (!m) primary = btn(d.status === 'generating' ? '🧪 Escrevendo…' : '✨ Gerar a mensagem do Doc', 'docGen', { cls: 'big', disabled: d.status === 'generating' });
@@ -887,6 +913,12 @@
         if (!docTotal() && !confirm('Ainda não há respostas nas dinâmicas. Gerar uma mensagem genérica mesmo assim?')) return;
         return run(async () => { const r = await api('POST', '/api/admin/doc', { action: 'generate', ai: el.dataset.ai !== '0' }); if (r.aviso) toast(r.aviso, true); else toast(r.fonte === 'ia' ? 'Mensagem escrita pela IA ✨' : 'Mensagem pronta'); });
       }
+      case 'docLip': {
+        if (!confirm(`Gerar ${el.dataset.n} clipes do Doc falando este texto com a API do Gemini?\n\nCusto estimado: US$ ${Number(el.dataset.usd || 0).toFixed(2).replace('.', ',')} (cobrado na conta do Google AI Studio). Leva alguns minutos.`)) return;
+        return run(() => api('POST', '/api/admin/doc', { action: 'lipsync' }), 'Gerando os clipes 🎙');
+      }
+      case 'docLipUse': return run(() => api('POST', '/api/admin/doc', { action: 'lipUse', on: el.checked }), el.checked ? 'O telão vai usar os clipes' : 'O telão vai usar a voz do navegador');
+      case 'docLipClear': return confirmRun('Apagar os clipes sincronizados? (A geração em andamento é cancelada.)', () => api('POST', '/api/admin/doc', { action: 'lipClear' }), 'Clipes apagados');
       case 'docEdit': return docEditDialog();
       case 'docCmd': {
         const c = el.dataset.cmd;

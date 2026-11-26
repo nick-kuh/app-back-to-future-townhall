@@ -18,6 +18,8 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY  # opcional: a IA (Claude) escreve a mensagem do Doc na Visão 2027
         sync: false
+      - key: GEMINI_API_KEY     # opcional: clipes do Doc com a boca sincronizada (API do Gemini, paga à parte)
+        sync: false
       - key: DATA_DIR
         value: /app/data
       - key: NODE_ENV

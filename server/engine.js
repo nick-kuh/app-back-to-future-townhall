@@ -93,7 +93,8 @@ const DEFAULT_MESSAGE = { title: 'Intervalo', body: 'Voltamos em 15 minutos.', e
 const defaultConn = () => ({ phase: 'idle', round: 0, played: 0, timer: null, generatedAt: null, worstLevel: null, levels: {}, resultsAt: null, repeats: false });
 const DEFAULT_SCREEN = { scene: 'auto' }; // telão: auto (segue o bloco) | clock | logo | quote
 // Visão 2027: a mensagem do Doc (gerada no servidor) e a cena no telão (play: qual parte, pausada ou não)
-const defaultDoc = () => ({ status: 'idle', message: null, error: '', rev: 0, play: null, phones: false });
+// lip: clipes do Doc com a boca sincronizada (server/lipsync.js), feitos para uma versão (rev) da mensagem
+const defaultDoc = () => ({ status: 'idle', message: null, error: '', rev: 0, play: null, phones: false, lip: null });
 
 const now = () => Date.now();
 const iso = () => new Date().toISOString();
@@ -132,6 +133,8 @@ class Engine {
       doc: Object.assign(defaultDoc(), saved.doc || {}),
     };
     if (this.state.doc.status === 'generating') this.state.doc.status = this.state.doc.message ? 'ready' : 'idle'; // o servidor reiniciou no meio da geração
+    const lip = this.state.doc.lip;
+    if (lip && lip.status === 'generating') Object.assign(lip, { status: 'error', error: 'O servidor reiniciou no meio da geração dos clipes. Gere de novo.' });
     delete this.state.conn.talk; // modelo antigo
     this.settings = Object.assign({}, DEFAULT_SETTINGS, kvGet('settings', {}));
     this.settings.skip = this.cleanSkip(this.settings.skip);
@@ -823,10 +826,41 @@ class Engine {
     if (on && !d.message) throw Object.assign(new Error('Gere a mensagem do Doc antes.'), { status: 409 });
     d.phones = !!on; this.commit(on ? { title: 'Mensagem do Doc', body: 'A visão de 2027 chegou no seu celular.' } : null);
   }
+  // Clipes com a boca sincronizada (gerados em server/lipsync.js): progresso, resultado e se o telão usa ou não
+  lipStart({ total, want, seconds, usd }) {
+    const d = this.state.doc;
+    if (!d.message) throw Object.assign(new Error('Gere a mensagem do Doc antes.'), { status: 409 });
+    if (d.lip && d.lip.status === 'generating') throw Object.assign(new Error('Os clipes já estão sendo gerados. Aguarde.'), { status: 409 });
+    d.lip = { status: 'generating', rev: d.rev, use: true, total, done: 0, failed: 0, want, clips: {}, errors: [], seconds, usd, startedAt: now(), endedAt: null, error: '' };
+    this.commit();
+    return d.lip;
+  }
+  lipProgress(lip, { done, failed, clips, errors }) {
+    if (this.state.doc.lip !== lip) return; // apagado ou gerado de novo no meio do caminho
+    Object.assign(lip, { done, failed, clips: JSON.parse(JSON.stringify(clips)), errors: errors.slice(-12) });
+    this.commit();
+  }
+  lipEnd(lip, { clips, failed, errors, error }) {
+    if (this.state.doc.lip !== lip) return;
+    const ok = Object.keys(clips || {}).length;
+    Object.assign(lip, { clips: clips || {}, failed: failed || 0, errors: (errors || []).slice(-12), endedAt: now(), error: error || '',
+      status: error && !ok ? 'error' : failed ? 'partial' : 'ready', done: error ? lip.done : lip.total });
+    this.commit();
+  }
+  lipUse(on) { const l = this.state.doc.lip; if (!l) throw Object.assign(new Error('Não há clipes gerados.'), { status: 409 }); l.use = !!on; this.commit(); }
+  lipClear() { this.state.doc.lip = null; this.commit(); }
+  // Só as partes com todos os clipes prontos, e só se forem da versão atual do texto
+  lipPublic() {
+    const d = this.state.doc, l = d.lip;
+    if (!l || !l.use || l.rev !== d.rev || !l.clips) return null;
+    const clips = {};
+    for (const [k, list] of Object.entries(l.clips)) if (Array.isArray(list) && list.length === (l.want || {})[k] && list.every(Boolean)) clips[k] = list.map(c => ({ url: c.url, text: c.text, seconds: c.seconds }));
+    return Object.keys(clips).length ? { rev: l.rev, clips } : null;
+  }
   // O que vai para todos (telão e celulares): a mensagem só depois que a cena começa ou é enviada aos celulares
   docPublic() {
     const d = this.state.doc, open = !!(d.play || d.phones);
-    return { status: d.status, rev: d.rev || 0, play: d.play, phones: !!d.phones, ready: !!d.message, message: open ? d.message : null };
+    return { status: d.status, rev: d.rev || 0, play: d.play, phones: !!d.phones, ready: !!d.message, message: open ? d.message : null, lip: open ? this.lipPublic() : null };
   }
 
   /* ---------------- roteiro do evento ---------------- */

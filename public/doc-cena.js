@@ -32,14 +32,14 @@
    * Vários trechos curtos do Doc (feitos com IA): parado e falando. A cada fim de trecho o editor corta para
    * outro (nunca o mesmo seguido), sempre tocando para a frente, e muda o enquadramento, como numa montagem
    * com várias câmeras. Quando a voz começa ou termina, corta na hora para um trecho falando ou parado. */
-  const VP = { box: null, a: null, b: null, front: null, lists: { idle: [], talk: [] }, last: '', kind: 'idle', zoom: 0, tok: 0 };
+  const VP = { box: null, a: null, b: null, front: null, lists: { idle: [], talk: [] }, last: '', kind: 'idle', zoom: 0, tok: 0, cut: 0, lip: false, onEnd: null };
   function vpMount(el, set) {
     VP.box = $('.doc-vid', el); VP.tok++;
     if (!VP.box) return;
-    VP.a = $('.va', VP.box); VP.b = $('.vb', VP.box); VP.front = null; VP.last = ''; VP.zoom = 0;
+    VP.a = $('.va', VP.box); VP.b = $('.vb', VP.box); VP.front = null; VP.last = ''; VP.zoom = 0; VP.lip = false; VP.onEnd = null;
     VP.lists.talk = urls(set.docTalkVideoUrl); VP.lists.idle = urls(set.docIdleVideoUrl);
     if (!VP.lists.talk.length) VP.lists.talk = VP.lists.idle; if (!VP.lists.idle.length) VP.lists.idle = VP.lists.talk;
-    for (const v of [VP.a, VP.b]) v.addEventListener('ended', () => { if (v === VP.front) vpCut(VP.kind); });
+    for (const v of [VP.a, VP.b]) v.addEventListener('ended', () => { if (v !== VP.front) return; const f = VP.onEnd; if (f) { VP.onEnd = null; f(); } else if (!VP.lip) vpCut(VP.kind); });
     vpCut('idle', true);
   }
   function vpPick(kind) {
@@ -47,21 +47,37 @@
     let u; do { u = l[Math.floor(Math.random() * l.length)]; } while (u === VP.last);
     return u;
   }
-  function vpCut(kind, first) {
-    if (!VP.box) return;
-    VP.kind = kind; const url = vpPick(kind); if (!url) return; VP.last = url;
-    const back = VP.front === VP.a ? VP.b : VP.a, tok = VP.tok;
+  // Mostra um vídeo no player de trás e troca (corte seco). sound: com o som do clipe (os clipes com a boca
+  // sincronizada); ended/error: o que fazer no fim ou se o arquivo não carregar.
+  function vpShow(url, { first = false, sound = false, ended = null, error = null } = {}) {
+    if (!VP.box || !url) return false;
+    const back = VP.front === VP.a ? VP.b : VP.a, tok = VP.tok, id = ++VP.cut;
+    const fail = () => { if (id !== VP.cut || tok !== VP.tok) return; back.onerror = null; if (error) error(); };
     const show = () => {
-      back.removeEventListener('canplay', show); if (tok !== VP.tok) return;
-      back.play().catch(() => {});
-      back.classList.add('on'); const old = VP.front; if (old) { old.classList.remove('on'); setTimeout(() => old.pause(), 150); }
+      back.removeEventListener('canplay', show); if (id !== VP.cut || tok !== VP.tok) return; // outro corte já foi pedido
+      back.onerror = null; back.muted = !sound; back.currentTime = 0; VP.onEnd = ended;
+      back.play().catch(() => { back.muted = true; back.play().catch(() => {}); }); // navegador sem o clique que libera o som: sem som
+      back.classList.add('on'); const old = VP.front; if (old && old !== back) { old.classList.remove('on'); old.muted = true; setTimeout(() => { if (old !== VP.front) old.pause(); }, 150); }
       VP.front = back;
       if (!first) { VP.zoom = (VP.zoom + 1 + Math.floor(Math.random() * 2)) % 3; VP.box.dataset.zoom = String(VP.zoom); } // corte de câmera
     };
-    back.src = url;
+    back.onerror = fail;
+    if (back.getAttribute('src') !== url) { back.muted = true; back.src = url; }
     if (back.readyState >= 3) show(); else back.addEventListener('canplay', show);
+    return true;
   }
-  function vpStop() { VP.tok++; if (VP.a) { VP.a.pause(); VP.b.pause(); } VP.box = null; }
+  function vpCut(kind, first) {
+    if (!VP.box || VP.lip) return;
+    VP.kind = kind; const url = vpPick(kind); if (!url) return; VP.last = url;
+    vpShow(url, { first });
+  }
+  // deixa o próximo clipe carregando no player que acabou de sair de cena (o corte seguinte fica instantâneo)
+  function vpPreload(url) {
+    const tok = VP.tok;
+    setTimeout(() => { if (tok !== VP.tok || !VP.lip || !VP.box) return; const back = VP.front === VP.a ? VP.b : VP.a; if (back.getAttribute('src') !== url) { back.muted = true; back.preload = 'auto'; back.src = url; } }, 400);
+  }
+  function vpLipEnd() { if (!VP.lip) return; VP.lip = false; VP.onEnd = null; if (VP.front) VP.front.muted = true; }
+  function vpStop() { VP.tok++; VP.lip = false; VP.onEnd = null; if (VP.a) { VP.a.pause(); VP.b.pause(); } VP.box = null; }
 
   function partsOf(m) { return m ? ['chegada', 'abertura', ...(m.blocos || []).map(b => b.id), 'jornal', 'final'] : []; }
   function html(st) {
@@ -130,7 +146,7 @@
   const every = (ms, fn) => { const t = setInterval(fn, ms); C.ivs.push(t); return t; };
   function clearAll() {
     C.timers.forEach(clearTimeout); C.ivs.forEach(clearInterval); C.timers = []; C.ivs = [];
-    C.tok++; if (synth) synth.cancel(); setSpeaking(false); mouth(0); sub('');
+    C.tok++; if (synth) synth.cancel(); vpLipEnd(); setSpeaking(false); mouth(0); sub('');
     const v = C.el && $('#dxVideo', C.el); if (v && !v.hidden) { v.pause(); v.hidden = true; }
   }
   function notify() { for (const fn of C.listeners) { try { fn(); } catch { /* segue */ } } }
@@ -138,7 +154,7 @@
     if (C.speaking === on) return; C.speaking = on;
     if (C.el) {
       C.el.classList.toggle('talking', on);
-      if (VP.box) vpCut(on ? 'talk' : 'idle'); // vídeos do Doc: corta para um trecho falando ou parado
+      if (VP.box && !VP.lip) vpCut(on ? 'talk' : 'idle'); // vídeos do Doc: corta para um trecho falando ou parado
     }
     notify();
   }
@@ -202,6 +218,42 @@
   }
   function showVoiceChip() { const b = C.el && $('#dxVoice', C.el); if (b) b.hidden = false; }
 
+  // A fala de uma parte: com os clipes do Doc dizendo o texto (boca sincronizada, gerados no painel com a API
+  // do Gemini), um atrás do outro, com o som do próprio clipe e a frase atual como legenda. Sem clipes para
+  // esta parte, ou se um deles não carregar, o resto da fala segue com a voz do navegador e os trechos gerais.
+  function lipFor(id) {
+    const l = C.st && C.st.doc && C.st.doc.lip, list = l && l.clips && l.clips[id];
+    return VP.box && C.m && l && l.rev === (C.st.doc.rev || 0) && Array.isArray(list) && list.length ? list : null;
+  }
+  function say(id, text, done) {
+    const list = lipFor(id);
+    if (!list) return speak(text, done);
+    const tok = C.tok, set = (C.st && C.st.settings) || {}, sound = set.docVoice !== false;
+    C.voice = 'clipes com a boca sincronizada'; VP.lip = true; setSpeaking(true); pose('talk');
+    let i = 0, sents = [], marks = [], shown = -1, live = true;
+    const finish = () => { if (tok !== C.tok || !live) return; live = false; vpLipEnd(); setSpeaking(false); pose('idle'); later(350, () => sub('')); done && done(); };
+    // um clipe não carregou ou travou: o resto da fala segue com a voz do navegador e os trechos gerais
+    const fallback = () => { if (tok !== C.tok || !live) return; live = false; const rest = list.slice(i - 1).map(x => x.text).join(' '); vpLipEnd(); vpCut('talk'); speak(rest, done); };
+    // legenda: a frase do clipe que está tocando, no ponto proporcional ao número de palavras
+    every(150, () => {
+      const v = VP.front; if (!live || !v || !v.duration || !sents.length) return;
+      const f = v.currentTime / v.duration; let k = marks.findIndex(x => f < x); if (k < 0) k = sents.length - 1;
+      if (k !== shown) { shown = k; sub(sents[k]); }
+    });
+    const next = () => {
+      if (tok !== C.tok || !live) return;
+      if (i >= list.length) return finish();
+      const c = list[i++], n = i;
+      sents = (String(c.text).match(/[^.!?…]+[.!?…]*\s*/g) || [c.text]).map(x => x.trim()).filter(Boolean);
+      const w = sents.map(x => x.split(/\s+/).length), tot = w.reduce((a, b) => a + b, 0) || 1; let acc = 0;
+      marks = w.map(x => (acc += x) / tot); shown = 0; sub(sents[0]);
+      if (!vpShow(c.url, { sound, ended: () => { if (i === n) later(120, next); }, error: fallback })) return fallback();
+      later(((c.seconds || 15) + 10) * 1000, () => { if (i === n && live) fallback(); }); // o "ended" não chegou
+      if (list[i]) vpPreload(list[i].url);
+    };
+    next();
+  }
+
   /* ---------- palavras ao fundo (fora de foco) e poeira na luz ---------- */
   function feedCloud(list, max = 14) {
     if (!C.cloud || !list) return;
@@ -251,7 +303,7 @@
       shot('mcu'); pose('wave');
       title(`<small>DE VOLTA PARA O SUCESSO APRESENTA</small><b>${esc(m.titulo)}</b>`, 5200);
       const set = (C.st && C.st.settings) || {};
-      return later(1400, () => speak(set.docVideoUrl ? skipArrival(m.abertura) : m.abertura, () => later(1100, next)));
+      return later(1400, () => say('abertura', set.docVideoUrl ? skipArrival(m.abertura) : m.abertura, () => later(1100, next)));
     }
     if (id === 'jornal') return newspaper();
     if (id === 'final') return finale();
@@ -262,7 +314,7 @@
     ch.innerHTML = `<small>CAPÍTULO ${a.n}</small><b>${esc(b.titulo)}</b><i></i><span>${(b.palavras || []).slice(0, 5).map(esc).join('  ·  ')}</span>`;
     void ch.offsetWidth; ch.classList.add('on'); sfx('blip');
     feedCloud((b.palavras || []).map(w => [w, 5]));
-    later(2800, () => { ch.classList.remove('on'); shot(ACT_SHOT[id] || 'cu'); later(500, () => speak(b.fala, () => later(1000, next))); });
+    later(2800, () => { ch.classList.remove('on'); shot(ACT_SHOT[id] || 'cu'); later(500, () => say(id, b.fala, () => later(1000, next))); });
   }
 
   // Chegada: os circuitos de tempo marcam 2027; o carro (plano aberto) carrega até 1,21 GW; três raios; e,
@@ -312,7 +364,7 @@
     paper.classList.remove('in'); void paper.offsetWidth; paper.classList.add('in');
     sfx('roll', 1.6);
     const text = `Vejam só o jornal de 2027! ${heads.map(h => h.replace(/[.!?]*$/, '.')).join(' ')}`;
-    later(2100, () => speak(text, () => later(1500, next)));
+    later(2100, () => say('jornal', text, () => later(1500, next)));
   }
   function finale() {
     const el = C.el, m = C.m, fin = $('#dxFinal', el);
@@ -328,7 +380,7 @@
     const set = (C.st && C.st.settings) || {}, inVideo = !!(set.docVideoFull && set.docVideoUrl); // o vídeo já disse o encerramento
     if (inVideo) return later(1000, landing);
     shot('cu'); pose('idle');
-    later(700, () => speak(m.encerramento, () => { pose('point'); later(900, landing); }));
+    later(700, () => say('final', m.encerramento, () => { pose('point'); later(900, landing); }));
   }
 
   /* ---------- ciclo de vida ---------- */

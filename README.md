@@ -91,6 +91,25 @@ Ferramentas: no computador, o MiniMax H3 do tutorial (ComfyUI) ou o InfiniteTalk
 Kling ou OmniHuman (confira preços e termos). Alternativa em 3D: Meshy, Tripo, Rodin ou Hunyuan3D geram
 um modelo com esqueleto e animações a partir do retrato (a boca não sincroniza com a fala).
 
+### 🎙 O Doc com a boca sincronizada: clipes da fala do dia (opcional, pago à parte)
+
+A fala do Doc só existe no dia (ela sai das respostas das dinâmicas). Para o Doc dizer **esse** texto com a
+boca no tempo certo, o servidor pede à API de vídeo do Gemini um clipe por trecho da fala, sempre a partir do
+mesmo quadro do vídeo da chegada (`public/videos/doc-quadro.jpg`), com a mesma voz e o mesmo lugar.
+
+- Ligar: crie uma chave da API do Gemini no **Google AI Studio**, com o faturamento ativado (o plano Google AI
+  Plus/Pro do app **não** cobre a API), e coloque em **`GEMINI_API_KEY`** no Render. Sem a chave, nada muda.
+- No dia: gere a mensagem, revise e, no passo Visão 2027, clique **🎙 Gerar os clipes do Doc falando este
+  texto**. O painel mostra antes quantos clipes, quantos segundos e o custo estimado (≈ US$ 0,07 por segundo
+  em 720p: uma fala de ~1 minuto e meio fica em torno de US$ 6 a 7; confira o preço atual na página da API).
+  São 3 clipes de cada vez; leva alguns minutos. As partes prontas já entram no telão, na ordem da cena.
+- O telão toca os clipes um atrás do outro, com o som do próprio clipe e as legendas, e corta o enquadramento
+  entre eles. Parte sem clipe (ou clipe que não carregar) usa a voz do navegador e os trechos gerais.
+- Editou o texto depois? Os clipes antigos deixam de entrar (a fala mudou): gere de novo. Dá para desligar
+  ("Usar os clipes sincronizados no telão"), assistir a cada clipe antes e apagar (cancela a geração).
+- Modelo: `gemini-omni-1.2-flash` (o Veo 3.1 saiu da API do Gemini em outubro de 2026). Para trocar, use
+  `GEMINI_VIDEO_MODEL`. O formato do pedido fica todo em `requestClip()`, em `server/lipsync.js`.
+
 ### 🎬 Vídeo do Doc feito com IA (opcional)
 
 Para quem quiser um curta "de cinema" do Doc, gerado no próprio computador com o método do tutorial
@@ -106,7 +125,8 @@ Para quem quiser um curta "de cinema" do Doc, gerado no próprio computador com 
   completa, marque **"O vídeo já traz a fala completa do Doc"**: depois dele o telão vai direto para o jornal
   de 2027 e o "2027" final, sem repetir a fala. Sem vídeo, a cena ao vivo (Doc animado + voz) faz tudo.
 
-O código está em `server/doc.js` (palavras, IA, roteiro automático, .txt e kit do vídeo), `public/doc-cena.js` e
+O código está em `server/doc.js` (palavras, IA, roteiro automático, .txt e kit do vídeo), `server/lipsync.js`
+(clipes com a boca sincronizada), `public/doc-cena.js` e
 `public/doc-cena.css` (a cena no telão) e `public/doc-retrato.js` (o personagem).
 
 ## 💭 Reflexão · Ato 1: O Combustível do Futuro

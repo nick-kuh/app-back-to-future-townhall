@@ -352,6 +352,6 @@ function videoKit(message, { eventName } = {}) {
 const autoFrom = exported => { const acts = collect(exported); return normalize(autoMessage(acts), acts); };
 
 module.exports = {
-  generate, edit, normalize, autoMessage, collect, countWords, parts, toTxt, videoKit, autoFrom, hasAI, MODEL, SCHEMA, SYSTEM, prompt,
+  generate, edit, normalize, autoMessage, collect, countWords, parts, toTxt, videoKit, autoFrom, hasAI, MODEL, SCHEMA, SYSTEM, prompt, ART, DOC_SHORT,
   _setClient: c => { clientOverride = c; },
 };
