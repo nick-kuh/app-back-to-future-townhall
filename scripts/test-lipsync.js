@@ -65,10 +65,12 @@ async function apiCalls() {
   const L = require('../server/lipsync');
   const image = fs.readFileSync(path.join(__dirname, '..', 'public', 'videos', 'doc-quadro.jpg'));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'th-lip-'));
+  let flaky = 0;
   const fake = await fakeGemini(async (req, res, json) => {
     if (req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'video/mp4' }); return res.end(fakeMp4('baixado')); }
     await wait(40);
     const text = textOf(json);
+    if (/^Vejam só/.test(text) === false && /Construam 2027/.test(text) && !flaky++) { res.writeHead(503, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: { code: 503, message: 'ocupado' } })); }
     if (/Inovação em tudo/.test(text)) { res.writeHead(500, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ error: { code: 500, message: 'falha de teste', status: 'INTERNAL' } })); }
     if (/^Vejam só/.test(text)) { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ outputs: [{ type: 'video', uri: `http://${req.headers.host}/v1beta/files/abc:download?alt=media` }] })); }
     ok(res, text);
@@ -77,13 +79,16 @@ async function apiCalls() {
   try {
     delete process.env.GEMINI_API_KEY;
     await assert.rejects(L.generate(MSG, { rev: 1, dataDir: dir, image }), /GEMINI_API_KEY/);
-    process.env.GEMINI_API_KEY = 'chave-teste'; process.env.GEMINI_BASE_URL = fake.url;
+    process.env.GEMINI_API_KEY = 'chave-teste'; process.env.GEMINI_BASE_URL = fake.url; process.env.GEMINI_RETRY_MS = '5';
     const progress = [];
     const r = await L.generate(MSG, { rev: 7, dataDir: dir, image, onProgress: p => progress.push({ done: p.done, failed: p.failed }) });
     const plan = L.plan(MSG);
     // o pedido: endpoint, chave no cabeçalho, modelo, quadro do Doc em base64, texto exato e duração
     const posts = fake.seen.filter(x => x.method === 'POST');
-    assert.equal(posts.length, plan.length);
+    // erro de servidor tenta de novo: o clipe instável (503 uma vez) sai na 2ª tentativa; o que sempre falha, 3 tentativas
+    const tries = re => posts.filter(q => re.test(textOf(q.body))).length;
+    assert.equal(tries(/Inovação em tudo/), 3); assert.equal(tries(/Construam 2027/), 2);
+    assert.equal(posts.length, plan.length + 3);
     for (const q of posts) {
       assert.equal(q.url, '/v1beta/interactions'); assert.equal(q.headers['x-goog-api-key'], 'chave-teste'); assert.ok(!q.url.includes('chave-teste'), 'a chave não vai na URL');
       assert.equal(q.body.model, 'gemini-omni-1.2-flash');
@@ -102,6 +107,12 @@ async function apiCalls() {
     // vídeo entregue por endereço: baixado com a chave no cabeçalho
     assert.deepEqual(fs.readFileSync(path.join(dir, 'doc-clips', '7', 'jornal-0.mp4')), fakeMp4('baixado'));
     assert.equal(fake.seen.find(x => x.method === 'GET').headers['x-goog-api-key'], 'chave-teste');
+    // chave recusada (4xx): não repete
+    const denied = await fakeGemini(async (req, res) => { res.writeHead(403, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { code: 403, message: 'API key not valid' } })); });
+    process.env.GEMINI_BASE_URL = denied.url;
+    const rd = await L.generate({ abertura: 'Olá.', blocos: [], manchetes: [], encerramento: 'Tchau.' }, { rev: 9, dataDir: dir, image, arrival: false });
+    assert.equal(rd.failed, rd.total); assert.equal(denied.seen.length, rd.total, 'sem nova tentativa'); assert.match(rd.errors[0], /API key not valid/);
+    denied.server.close(); process.env.GEMINI_BASE_URL = fake.url;
     // cancelar no meio: para de pedir clipes
     const before = fake.seen.length, ac = new AbortController();
     const pr = L.generate(MSG, { rev: 8, dataDir: dir, image, signal: ac.signal });
@@ -111,6 +122,7 @@ async function apiCalls() {
   } finally {
     if (old.key === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = old.key;
     if (old.base === undefined) delete process.env.GEMINI_BASE_URL; else process.env.GEMINI_BASE_URL = old.base;
+    delete process.env.GEMINI_RETRY_MS;
     fake.server.close(); fs.rmSync(dir, { recursive: true, force: true });
   }
 }

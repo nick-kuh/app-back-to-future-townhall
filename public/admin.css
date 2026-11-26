@@ -353,3 +353,5 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center}
 .doc-lip .lip-bar i{display:block;height:100%;background:var(--orange);transition:width .4s}
 .doc-lip .lip-list a{white-space:nowrap}
 .doc-lip pre{white-space:pre-wrap;max-height:160px;overflow:auto;margin:6px 0 0}
+.doc-lip .lip-prog{margin:4px 0 0;font-size:15px}
+.doc-lip .lip-prog b{color:var(--orange)}

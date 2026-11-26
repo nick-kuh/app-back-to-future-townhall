@@ -83,6 +83,20 @@ async function requestClip({ image, text, seconds }, { key, base, signal }) {
   return Buffer.from(await dl.arrayBuffer());
 }
 
+// Queda de conexão, servidor ocupado (5xx) ou limite de uso (429): tenta o mesmo clipe de novo, até 2 vezes.
+// Chave inválida, pedido recusado (4xx), tempo esgotado ou cancelamento não repetem.
+async function withRetry(fn, signal) {
+  const wait = Number(process.env.GEMINI_RETRY_MS) || 4000;
+  for (let k = 0; ; k++) {
+    try { return await fn(); } catch (e) {
+      const again = k < 2 && !(signal && signal.aborted) && e.name !== 'TimeoutError' && (!e.status || e.status === 429 || e.status >= 500);
+      if (!again) throw e;
+      console.warn('[lipsync] tentando de novo:', e.message);
+      await new Promise(r => setTimeout(r, wait * (k + 1)));
+    }
+  }
+}
+
 // Gera todos os clipes (3 de cada vez). onProgress recebe o estado a cada clipe pronto ou com falha.
 async function generate(message, { rev, dataDir, image, arrival = true, onProgress = () => {}, signal }) {
   const key = process.env.GEMINI_API_KEY, base = (process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/$/, '');
@@ -95,8 +109,10 @@ async function generate(message, { rev, dataDir, image, arrival = true, onProgre
     while (next < list.length && !(signal && signal.aborted)) {
       const c = list[next++];
       try {
-        const timeout = AbortSignal.timeout(6 * 60 * 1000);
-        const mp4 = await requestClip({ image, text: c.text, seconds: c.seconds }, { key, base, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+        const mp4 = await withRetry(() => {
+          const timeout = AbortSignal.timeout(6 * 60 * 1000);
+          return requestClip({ image, text: c.text, seconds: c.seconds }, { key, base, signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+        }, signal);
         if (signal && signal.aborted) break;
         const file = `${c.part}-${c.i}.mp4`; fs.writeFileSync(path.join(dir, file), mp4);
         (clips[c.part] = clips[c.part] || [])[c.i] = { url: `/doc-clips/${rev}/${file}`, text: c.text, seconds: c.seconds };

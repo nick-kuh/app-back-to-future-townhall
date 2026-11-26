@@ -73,7 +73,7 @@ function autoMessage(acts) {
   };
   const blocos = acts.filter(a => a.answers.length).map(a => ({ id: a.id, fala: say[a.id](top(a).length ? top(a) : ['muita energia']) }));
   const d4 = acts.find(a => a.id === 'd4'), future = nounsFirst(d4 && d4.words.length ? d4.words : acts.flatMap(a => a.words));
-  const heads = [w => `2027: O ANO DE ${upper(w)}`, w => `${upper(w)} SAI DO PAPEL`, w => `${upper(w)} EM ALTA NA EQUIPE`];
+  const heads = [w => `2027: O ANO DE ${upper(w)}`, w => `${upper(w)} SAI DO PAPEL`, w => (/^equipe/i.test(w) ? 'EQUIPE NAS ALTURAS EM 2027' : `${upper(w)} EM ALTA NA EQUIPE`)]; // sem "EQUIPE EM ALTA NA EQUIPE"
   const manchetes = [...new Set(future)].slice(0, 3).map((w, i) => heads[i](w));
   if (!manchetes.length) manchetes.push('2027: O FUTURO CHEGOU', 'EQUIPE BATE TODAS AS METAS', 'VIAGEM NO TEMPO É UM SUCESSO');
   return {

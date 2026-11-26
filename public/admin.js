@@ -370,7 +370,7 @@
     if (!l || stale) h += `${stale ? '<p class="warn">⚠ O texto mudou depois dos clipes: os antigos não entram mais. Gere de novo.</p>' : ''}
       <p class="small">${est.clips} clipes · ${est.seconds} s de vídeo · ≈ <b>${usd(est.usd)}</b> (preço estimado de ${usd(L.price)}/s em 720p) · leva alguns minutos (3 clipes de cada vez). Gere depois de revisar o texto: editar depois pede clipes novos.</p>
       <div class="actions">${btn('🎙 Gerar os clipes do Doc falando este texto', 'docLip', { cls: 'sm', data: { usd: est.usd, n: est.clips } })}</div>`;
-    else if (l.status === 'generating') h += `<div class="phase">🎙 Gerando os clipes: <b>${l.done} de ${l.total}</b>${l.failed ? ` · ${l.failed} com erro` : ''}… as partes prontas já entram no telão.</div>
+    else if (l.status === 'generating') h += `<p class="lip-prog">🎙 Gerando os clipes: <b>${l.done} de ${l.total}</b>${l.failed ? ` · ${l.failed} com erro` : ''}… as partes prontas já entram no telão.</p>
       <div class="lip-bar"><i style="width:${Math.round(100 * l.done / Math.max(1, l.total))}%"></i></div>
       <div class="actions">${btn('✕ Cancelar e apagar', 'docLipClear', { cls: 'red sm' })}</div>`;
     else {
