@@ -18,6 +18,30 @@ diferente, o telão corta entre eles sem repetir, no ritmo da fala.
 
 O som dos vídeos não importa: no telão eles ficam mudos, e a voz vem da fala gerada no dia.
 
+## Prioridade 0 · Doc em ação, de boca fechada (6 vídeos, sem custo extra)
+
+Estes são os mais importantes. Enquanto a voz do Doc fala, o telão mostra o Doc fazendo coisas, de boca fechada,
+como num documentário com narração. Assim ninguém espera a boca acompanhar as palavras, e não precisa pagar a API.
+No painel, eles vão no campo "Vídeos enquanto a voz fala".
+
+**A1 · mexendo no carro**
+> Animate this exact image. Keep the same character, outfit, background, lighting, colors and framing; Pixar-style 3D animated film look. Locked-off camera, no cuts. Action: Doc turns to the time machine behind him and adjusts a glowing cyan component with a small tool, a few sparks fly, then he looks back at the camera with a satisfied smile. His mouth stays closed the whole time; he does not speak. No subtitles, no on-screen text, no music.
+
+**A2 · holograma no controle remoto**
+> Animate this exact image. Keep the same character, outfit, background, lighting, colors and framing; Pixar-style 3D animated film look. Locked-off camera, no cuts. Action: Doc raises his small remote control, a soft cyan hologram of floating abstract shapes and sparkles appears above it, and he studies it with fascination, eyebrows raised. No letters or words in the hologram. His mouth stays closed the whole time; he does not speak. No subtitles, no on-screen text, no music.
+
+**A3 · olhando o horizonte**
+> Animate this exact image. Keep the same character, outfit, background, lighting, colors and framing; Pixar-style 3D animated film look. Locked-off camera, no cuts. Action: Doc slowly turns his head and looks into the distance off-screen with hope and wonder, a warm light grows on his face and a light breeze moves his hair. His mouth stays closed the whole time; he does not speak. No subtitles, no on-screen text, no music.
+
+**A4 · pensativo, tendo uma ideia**
+> Animate this exact image. Keep the same character, outfit, background, lighting, colors and framing; Pixar-style 3D animated film look. Locked-off camera, no cuts. Action: Doc strokes his chin, thinking, looks up, then his eyes light up and he raises one finger as if he just had a brilliant idea, smiling. His mouth stays closed the whole time; he does not speak. No subtitles, no on-screen text, no music.
+
+**A5 · anotando num caderninho**
+> Animate this exact image. Keep the same character, outfit, background, lighting, colors and framing; Pixar-style 3D animated film look. Locked-off camera, no cuts. Action: Doc takes a small notebook and a pencil from his coat pocket and scribbles notes quickly, nodding to himself, then glances up at the camera. The notebook pages never face the camera. His mouth stays closed the whole time; he does not speak. No subtitles, no on-screen text, no music.
+
+**A6 · rindo em silêncio**
+> Animate this exact image. Keep the same character, outfit, background, lighting, colors and framing; Pixar-style 3D animated film look. Locked-off camera, no cuts. Action: Doc chuckles silently with a closed-mouth grin, shoulders shaking, shakes his head in amused disbelief and wipes a happy tear from his eye. His mouth stays closed the whole time; he does not speak. No subtitles, no on-screen text, no music.
+
 ## Prioridade 1 · Doc falando (8 vídeos)
 
 Cole cada prompt inteiro. Todos começam igual de propósito.
@@ -74,6 +98,7 @@ Nestes não precisa usar a imagem como último quadro.
 
 - Corto cada vídeo nas partes boas, acerto a cor para ficarem iguais e tiro o som.
 - **Falando** (F) e **parado** (P) entram no editor ao vivo do telão. Com 8 e 3 vídeos de 8 s, ele corta entre
-  eles no ritmo da voz, sem repetir o mesmo trecho em seguida.
+  eles no ritmo da voz, sem repetir o mesmo trecho em seguida. Os de **ação** (A) tocam enquanto a voz fala,
+  no lugar dos de falando, para a narração não depender da boca.
 - **J1** toca no jornal, **R1** na abertura e **T1** no fim, antes do "2027".
 - Te mando o vídeo do telão de novo, para você aprovar antes de ir para a main.
