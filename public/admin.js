@@ -135,7 +135,8 @@
       ${A.connected ? '' : '<span class="pill off">sem conexão</span>'}
       <span class="nowchip" title="No ar agora: ${esc(nowText())}"><small>NO AR</small><span>${esc(nowText())}</span></span>
       <span class="pill" title="Pessoas que já fizeram check-in">👥 ${O.counts.checkedIn}/${O.counts.total}</span>
-      ${Mic.on ? '<span class="pill on" title="O microfone deste aparelho está ouvindo a sala (aplausos do Reconhecimento). O som não é gravado.">🎤 ouvindo</span>' : ''}
+      ${micMode() === 'toques' ? '' : Mic.on ? '<a class="pill on" href="#" data-go="tests" title="O microfone deste aparelho está ouvindo a sala (aplausos do Reconhecimento). O som não é gravado. Clique para ver a barra do som.">🎤 ouvindo</a>'
+        : `<button type="button" class="pill ${Mic.perm === 'denied' ? 'off' : 'hot'}" data-act="micTop" title="Microfone dos aplausos (Reconhecimento): clique para liberar e testar">🎤 ${Mic.starting ? 'aguardando…' : Mic.perm === 'granted' ? 'microfone liberado ✓' : Mic.perm === 'denied' ? 'microfone bloqueado' : 'liberar microfone'}</button>`}
       <a class="pill ${tl.count ? (tl.auth ? 'on' : 'hot') : 'off'}" href="/telao.html" target="_blank" title="${tl.count ? (tl.auth ? 'Telão aberto e logado' : 'Telão aberto sem login: não mostra as respostas do Sucesso') : 'Nenhum telão aberto. Clique para abrir.'}">📽 Telão ${tl.count ? (tl.auth ? '✓' : 'sem login') : 'fechado'}</a>`;
     if (html !== A.statusHtml) { A.statusHtml = html; $('#status').innerHTML = html; }
   }
@@ -357,8 +358,23 @@
       Mic.err = n === 'NoApi' ? 'Este navegador não libera o microfone aqui. Abra o painel pelo endereço https, no Chrome ou no Edge.'
         : n === 'NotAllowedError' || n === 'SecurityError' ? 'O navegador está bloqueando o microfone para este site. Clique no cadeado (ou no ícone de câmera/microfone) ao lado do endereço, escolha "Permitir" no microfone e clique de novo em "Liberar o microfone".'
         : n === 'NotFoundError' ? 'Nenhum microfone encontrado neste aparelho.' : `Não deu para ligar o microfone (${(e && e.message) || e}).`;
-      if (!auto) toast(Mic.err, true);
+      if (!auto) micHelp();
     } finally { Mic.starting = false; render(true); }
+  }
+  // Não deu para ligar: explica o motivo e o que fazer, com o caminho no navegador
+  function micHelp() {
+    const blocked = Mic.perm === 'denied';
+    dialog(`<h3>🎤 Não consegui ligar o microfone</h3><div class="sb-warn" style="margin-bottom:12px">${esc(Mic.err || 'O navegador não liberou o microfone.')}</div>
+      ${blocked ? `<p><b>Como liberar (Chrome ou Edge, no computador):</b></p>
+        <ol class="small steps" style="margin-top:8px">
+          <li>Olhe a barra de endereço, lá em cima: à <b>esquerda</b> do endereço do site há um ícone pequeno (um cadeado 🔒 ou dois risquinhos com bolinhas). Clique nele.</li>
+          <li>Na janelinha que abre, procure <b>Microfone</b> e mude para <b>Permitir</b> (ou ligue a chave). Se não aparecer, clique em "Configurações do site" e mude Microfone para Permitir.</li>
+          <li>Recarregue a página (F5) e clique de novo em <b>🎤 liberar microfone</b>, no topo do painel.</li>
+        </ol>
+        <p class="small" style="margin-top:10px">Se a opção Microfone estiver cinza ou não deixar mudar, é o computador da empresa que bloqueia. Nesse caso: abra o painel em outro navegador, em outro computador ou no celular (o microfone que vale é o do aparelho em que o painel está aberto).</p>`
+        : '<p class="small">Confira se este aparelho tem microfone e se o sistema (Windows: Configurações → Privacidade → Microfone; Mac: Ajustes do Sistema → Privacidade → Microfone) deixa o navegador usá-lo. Depois clique de novo em <b>🎤 liberar microfone</b>, no topo do painel.</p>'}
+      <p class="small" style="margin-top:10px"><b>Plano B, sem microfone:</b> a cerimônia funciona do mesmo jeito com o botão <b>"+15% de carga"</b> do painel, ou trocando para "toques nos celulares" em Agenda e cenas → Reconhecimento.</p>
+      <div class="actions" style="margin-top:14px"><button class="btn ghost" data-close>Entendi</button></div>`);
   }
   function micStop(byUser) {
     clearInterval(Mic.timer); if (Mic.stream) Mic.stream.getTracks().forEach(t => t.stop()); if (Mic.ctx) Mic.ctx.close().catch(() => {});
@@ -1359,6 +1375,7 @@
       case 'copy': return run(async () => { await navigator.clipboard.writeText(el.dataset.text); }, 'Endereço copiado');
       // --- microfone dos aplausos (Reconhecimento) ---
       case 'micOn': Mic.userOff = false; return micStart(false);
+      case 'micTop': Mic.userOff = false; await micStart(false); if (Mic.on && !recOnAir()) { A.tab = 'prep'; A.prep = 'tests'; render(true); toast('🎤 Microfone liberado ✔ Bata palmas: a barra tem de subir.'); } return; // botão do topo: libera e mostra a barra do som
       case 'micOff': return micStop(true);
       case 'micCal': return micCal();
       case 'micSens': Mic.span = 44 - (Math.max(1, Math.min(10, +el.value)) - 1) * 4; localStorage.setItem('bttf.micSpan', String(Mic.span)); return;

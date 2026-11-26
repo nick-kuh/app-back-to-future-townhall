@@ -70,8 +70,8 @@ do almanaque (`mês | tipo | BU | benefício | texto`), prêmios (indicados, ven
 Na cerimônia de cada prêmio, quem ouve a sala é o **microfone do aparelho em que o Painel do Doc está aberto**
 (computador ou celular). Para quem apresenta é **um clique só, uma única vez**:
 
-1. **Liberar o microfone.** Em Preparar → Testes (ou no próprio passo Reconhecimento) clique em `🎤 Liberar o
-   microfone`; o navegador pergunta se o site pode usar o microfone: clique em **Permitir**. Precisa de https
+1. **Liberar o microfone.** No topo do painel há sempre o botão `🎤 liberar microfone` (também em Preparar → Testes
+   e no próprio passo Reconhecimento). Clique nele; o navegador pergunta se o site pode usar o microfone: clique em **Permitir**. Precisa de https
    (o endereço do Render serve) e o Chrome/Edge guardam a resposta, então ele não pergunta de novo.
 2. **Depois é automático.** O microfone liga sozinho quando o Reconhecimento entra no ar e desliga quando ele sai;
    um aviso "🎤 ouvindo" aparece no topo do painel. Se ainda não tiver sido liberado, o botão principal vira
@@ -81,6 +81,9 @@ Na cerimônia de cada prêmio, quem ouve a sala é o **microfone do aparelho em 
    microfone for fraco ou estiver longe, depois de 5 segundos de carga a régua se ajusta ao barulho mais alto que a
    sala fez, para a cerimônia não empacar. Sensibilidade e "Calibrar com uma salva de palmas" ficam em
    "Ajuste fino (opcional)".
+
+Se o navegador bloquear, o painel abre uma explicação com o caminho para liberar (ícone à esquerda do endereço →
+Microfone → Permitir) e o plano B sem microfone (`+15% de carga` ou o modo "toques nos celulares").
 
 O som **não é gravado nem enviado**: só o volume é medido no próprio navegador. No telão, a faixa "FAÇAM BARULHO!"
 ganha um medidor de aplausos; nos celulares aparece "aplaudam!". O painel mantém `+15%` e `Raio agora` de reserva.
