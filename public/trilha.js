@@ -8,6 +8,7 @@
  *   Trilha.unlock()   chamar num clique/tecla: os navegadores só liberam som depois de um gesto
  *   Trilha.locked     true quando há som pedido mas o navegador ainda não liberou
  *   Trilha.sfx('blip' | 'reveal' | 'roll' | 'warp')   efeitos curtos (só tocam se a música ou a trilha estiver ligada)
+ *   Trilha.sfx('alarm')                               sirene do alerta de volta do intervalo (toca com o som do telão liberado)
  *   Trilha.countdown(id, ms)         bipes do cronômetro: um "pi" aos 30 s e um por segundo nos últimos 10 s
  *                                    (tocam com "beeps" ligado, mesmo no modo "sem áudio")
  */
@@ -208,8 +209,10 @@
       if (!ctx || ctx.state !== 'running') return;
       const clock = name === 'tick' || name === 'tick30' || name === 'timeup';   // sons do cronômetro: seguem o botão "Bipes"
       const trip = name === 'warp' || name === 'key' || name === 'thunder' || name === 'hum';                 // sons da transição entre blocos
-      if (clock ? !want.beeps : trip ? !(want.beeps || want.mode !== 'off') : want.mode === 'off') return;
+      // (a sirene do alerta de volta do intervalo toca sempre que o som do telão já foi liberado)
+      if (name !== 'alarm' && (clock ? !want.beeps : trip ? !(want.beeps || want.mode !== 'off') : want.mode === 'off')) return;
       const t = ctx.currentTime + .02 + (delay || 0);
+      if (name === 'alarm') { for (let i = 0; i < 4; i++) for (const f of [853, 960]) beep(f, t + i * 1.15, .82, .16, 'square'); return; } // as duas notas dos alertas de emergência, em 4 toques
       if (name === 'blip') { beep(880, t, .09, .05, 'sine'); beep(1320, t + .07, .12, .04, 'sine'); }
       else if (name === 'reveal') [523, 659, 784, 1047].forEach((f, i) => beep(f, t + i * .11, .22, .09));
       else if (name === 'timeup') { beep(440, t, .35, .12, 'square'); beep(440, t + .5, .35, .12, 'square'); beep(880, t + 1, .6, .12, 'square'); }

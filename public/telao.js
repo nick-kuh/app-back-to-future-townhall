@@ -16,7 +16,7 @@
     responses: null, auth: false, drawAnswer: null, seen: new Set(), roundId: null, liveCount: null, prevPhase: null, endStage: null, endTok: 0,
     cloud: null, drawAt: null, reelT: null, revealed: false, talkDone: null,
     blk: null, trT: [], trI: null, // transição entre blocos
-    master: false, sockMaster: false, wcloud: null, // senha mestra (modo confidencial) · nuvem das duas palavras no check-in
+    master: false, sockMaster: false, // senha mestra (modo confidencial)
     // Reflexão em exibição
     fx: null, rf: null, rfProjects: null, rfRev: null, rfTimers: [] };
   // De Volta para o Sucesso: as quatro dinâmicas (mesmas cores do painel do Lucas)
@@ -377,7 +377,7 @@
   }
   function playTransition(from, to) {
     const el = $('#tr'), cfg = to.tr || TR[to.type] || TR.checkin, led = v => String(v).toUpperCase().slice(0, 26);
-    const secs = Number(S.state.settings.transitionSeconds) || 15, quick = to.type === 'message' || to.type === 'standby';
+    const secs = Number(S.state.settings.transitionSeconds) || 8, quick = to.type === 'message' || to.type === 'standby';
     stopTransition();
     $('#trLast').textContent = led(from.name); $('#trNow').textContent = ledNow(true);
     $('#trQuote').innerHTML = `“${esc(cfg.quote[0])}”<small>${esc(cfg.quote[1])}</small>`;
@@ -443,31 +443,15 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#tr').classList.contains('on')) stopTransition(); });
 
   /* ---------- dinâmicas no celular ----------
-   * Conexões, Reflexão e Sucesso acontecem no app. Quando uma delas entra no ar, o telão avisa em tela cheia
-   * ("PEGUE O CELULAR", em português e espanhol) e, enquanto ela precisa do celular, uma etiqueta fica no canto. */
-  const PHONE_TYPES = ['connections', 'reflexao', 'sucesso'];
+   * Conexões, Reflexão e Sucesso acontecem no app. Enquanto o celular é necessário, um ícone discreto fica no canto do
+   * telão (nada em tela cheia). A nuvem de palavras e o feedback do encerramento têm o próprio chamado dentro da cena. */
   function phoneNeeded(st) {
     if (!st || ((st.screen && st.screen.scene) || 'auto') !== 'auto') return false;
     if (st.presentation) return sucPhase(st.presentation.live) !== 'done';               // depois de encerrar: nuvem e sorteio são no telão
     if (st.reflexao) { const c = st.reflexao.cur; return !c || rfPhase(c) !== 'done'; }  // votação encerrada: os mais votados são no telão
     return st.block === 'connections';
   }
-  function phoneCall(info, delay) {
-    const el = $('#phoneCall'); clearTimeout(S.pcT); el.classList.remove('on');
-    if (!PHONE_TYPES.includes(info.type) || !phoneNeeded(S.state)) return;
-    $('#pcUrl').textContent = location.host;
-    S.pcT = setTimeout(() => {
-      void el.offsetWidth; el.classList.add('on'); if (window.Trilha) Trilha.sfx('reveal');
-      S.pcT = setTimeout(() => el.classList.remove('on'), 6500);
-    }, delay);
-  }
   function phoneTag() { const el = $('#phoneTag'), on = !!S.state && phoneNeeded(S.state); if (el.hidden === on) el.hidden = !on; }
-  // quanto dura a transição que está começando (para o aviso do celular entrar logo depois dela)
-  function trMs(info) { const secs = Number(S.state.settings.transitionSeconds) || 15, quick = info.type === 'message' || info.type === 'standby'; return quick ? 3000 : secs < 7 ? Math.max(2400, secs * 1000) : secs * 1000; }
-
-  /* ---------- nuvem das "duas palavras" no check-in ---------- */
-  function mountWords() { const cv = $('#wCloud'); S.wcloud = cv && window.NuvemDePalavras ? new NuvemDePalavras(cv, { scale: 2.1, wide: true, empty: 'WAITING FOR THE FIRST WORDS…' }) : null; patchWords(); }
-  function patchWords() { const w = S.state && S.state.words; if (!S.wcloud || !w) return; S.wcloud.sync(w.top); const n = $('#wCount'); if (n) n.textContent = w.count; }
 
   /* ---------- cenas ---------- */
   function sceneFor() {
@@ -480,9 +464,7 @@
 
     const b = st.block;
     if (b === 'welcome') { // chegada: QR do app, o carro carregando a cada check-in e os circuitos de tempo do evento
-      // No meio, a nuvem das "duas palavras" que cada pessoa responde logo depois do login (ao vivo; o Doc pode desligar)
-      const w = st.words || {}, cloud = w.live ? `<div class="wbox"><div class="wb-k">TWO WORDS · HOW THE CREW IS ARRIVING</div><canvas id="wCloud"></canvas><div class="wb-n"><b id="wCount">${w.count || 0}</b> travelers answered</div></div>` : '';
-      return ['welcome', `${logo()}<div class="rowx welcome-row ${cloud ? 'has-cloud' : ''}">${qrBox('SCAN · CHECK IN · TELL US YOUR TWO WORDS')}${cloud}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} aboard</small></div></div></div>`];
+      return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox()}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} aboard</small></div></div></div>`];
     }
     if (b === 'standby') return ['logo', `${logo()}${flux()}`]; // olhos no telão: só o logo
     if (b === 'stage') { // bloco de fala: tela calma, com o título no estilo do logo do filme
@@ -497,7 +479,7 @@
         </div>`];
     }
     if (b === 'message') { const m = st.message; return ['message', `<div class="msg"><div class="e">${esc(m.emoji || '📣')}</div></div><div class="title">${esc(m.title)}</div><div class="msg"><p>${linkify(m.body)}</p></div>`]; }
-    if (b === 'closing') return ['closing', `<div class="fin" id="fin"><div class="a"><span class="bttf" id="finA">END OF THE JOURNEY</span></div><div class="b" id="finB"></div></div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
+    if (b === 'closing') return ['closing', `<div class="fin" id="fin"><div class="a"><span class="bttf" id="finA">END OF THE JOURNEY</span></div><div class="b" id="finB"></div></div><div class="sub">${esc(st.event.closingText)}</div><div class="fbcall"><span>📱</span><b>ONE LAST THING: HOW WAS THE TOWNHALL?</b><i>Answer on your phone · <em id="fbCount">${(st.feedback || {}).count || 0}</em> answers so far</i></div>${credits()}`];
     // conexões
     const r = c.round, era = roundEra(r), t = c.timer;
     if (c.phase === 'idle' || c.phase === 'ready') return ['prep', `<div class="kicker">BLOCO CONEXÕES</div><div class="title">ROTAS TEMPORAIS</div>${flux()}${hosts()}${guests()}`];
@@ -536,12 +518,11 @@
     const changed = !!S.blk && S.blk.id !== info.id, plays = changed && auto && stepTr && !!S.state.settings && S.state.settings.transitions !== false;
     if (plays) playTransition(S.blk, info);
     else if (changed) stopTransition(); // entrou direto: uma transição que ainda estivesse passando sai da frente
-    if (changed) phoneCall(info, plays ? trMs(info) + 250 : 500); // a dinâmica é no celular: o telão avisa (depois da transição)
     S.blk = info;
     const [key, html] = sceneFor();
     const pr = S.state.presentation, rf = key === 'reflexao' ? S.state.reflexao : null;
     const dk = key === 'doc' && S.state.doc ? `${S.state.doc.rev}:${S.state.doc.message ? 1 : 0}` : ''; // nova mensagem (ou a cena começou): monta de novo
-    const ck = key === 'cena' ? S.state.cena.kind : key === 'closing' ? JSON.stringify(S.state.creditos || '').length : key === 'welcome' || key === 'logo' ? JSON.stringify(S.state.evento || '') + (key === 'welcome' && S.state.words && S.state.words.live ? '|nuvem' : '') : ''; // cena do deck no ar / conteúdo do evento
+    const ck = key === 'cena' ? S.state.cena.kind : key === 'closing' ? JSON.stringify(S.state.creditos || '').length : key === 'welcome' || key === 'logo' ? JSON.stringify(S.state.evento || '') : ''; // cena do deck no ar / conteúdo do evento
     const k = `${key}|${dk}|${ck}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}|${key === 'cena' ? '' : (S.state.hosts || []).map(h => h.nome + (h.foto || '')).join() + JSON.stringify(S.state.especial || '')}`;
     if (k !== S.key) {
       if (window.DocCena) DocCena.unmount();
@@ -551,7 +532,6 @@
       $('#scene').classList.toggle('projection-scene', key === 'projection' || key === 'reflexao' || key === 'cena');
       $('#scene').dataset.key = key;
       mountCar(key);
-      mountWords();
       mountReflexao();
       if (key === 'doc') DocCena.mount($('#scene'), S.state);
       if (key === 'cena') Cenas.mount($('#scene'), S.state, { car: () => S.car, remount: () => mountCar('cena'), flash, duck: on => { S.duck = !!on; applyAudio(); }, emit: (ev, data) => { if (S.socket) S.socket.emit(ev, data); }, report: () => setTimeout(report, 300) });
@@ -566,7 +546,7 @@
       if (key !== 'cena') S.duck = false; if (window.Delorean3D) Delorean3D.pause(false);
     } else {
       const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), S.checked !== null && S.state.counts.checkedIn > S.checked); }
-      patchWords();
+      const fc = $('#fbCount'); if (fc && S.state.feedback) fc.textContent = S.state.feedback.count;
       if (key === 'projection') patchProjection();
       if (key === 'reflexao') patchReflexao();
       if (key === 'doc') DocCena.update(S.state);

@@ -21,7 +21,7 @@
 
   /* ---------------- o que fica guardado no aparelho ----------------
    * O login (token) fica no armazenamento do navegador e, de reserva, em um cookie de 30 dias: se um dos dois se
-   * perder, o outro traz a pessoa de volta. Também ficam o nome, o idioma das dinâmicas e as duas palavras. */
+   * perder, o outro traz a pessoa de volta. Também ficam o nome, o idioma das dinâmicas e as respostas da nuvem de palavras. */
   const store = {
     get: k => { try { return localStorage.getItem(k); } catch { return null; } },
     set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* sem armazenamento */ } },
@@ -48,7 +48,9 @@
     lang: startLang(),                                                                  // idioma das dinâmicas: pt | es
     answerDraft: '', anon: false, another: false, sending: false, pendingAnswer: null, // resposta das dinâmicas do Sucesso
     rfProjects: null, rfRev: null, rfPick: null, rfQ: '', rfSending: false,             // Reflexão: lista de projetos e o voto em andamento
-    wordsDraft: ['', ''], wordsSending: false, wordsSkip: false, wordsEdit: false,      // "duas palavras": como a pessoa está chegando
+    wordsDraft: ['', ''], wordsSending: false, wordsEdit: false,                        // nuvem de palavras: as respostas das duas perguntas
+    fbDraft: { rating: 0, liked: '', improve: '', anonymous: false }, fbSending: false, fbEdit: false, // feedback do encerramento
+    alertOn: 0,                                                                         // alerta de volta do intervalo que está na tela
     build: null, lastSync: 0, restoring: false, restored: false,
   };
   if (S.token && !store.get('bttf.token')) store.set('bttf.token', S.token); // voltou pelo cookie: guarda de novo no navegador
@@ -156,12 +158,43 @@
     } catch { /* ignora */ }
   }
   const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch { /* ignora */ } };
+  /* ---- Alerta de volta do intervalo ----
+   * Quando o cronômetro do intervalo zera (ou o Doc dispara na mão), o celular mostra um "alerta de emergência" como os da
+   * defesa civil: cartão por cima de tudo, o toque de duas notas e vibração. Sai com OK, quando o Doc silencia ou quando o
+   * evento segue. (Só aparece com o app aberto: uma página da web não consegue acordar um celular bloqueado.) */
+  function siren() {
+    try {
+      if (!S.audio) return; const c = S.audio; if (c.state === 'suspended') c.resume();
+      const t0 = c.currentTime + .05;
+      for (let i = 0; i < 4; i++) for (const f of [853, 960]) { // as duas notas dos alertas de emergência, em 4 toques
+        const o = c.createOscillator(), g = c.createGain(), at = t0 + i * 1.15; o.type = 'square'; o.frequency.value = f;
+        g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(.09, at + .02); g.gain.setValueAtTime(.09, at + .78); g.gain.linearRampToValueAtTime(0, at + .82);
+        o.connect(g).connect(c.destination); o.start(at); o.stop(at + .85);
+      }
+    } catch { /* sem áudio */ }
+  }
+  const alertAt = () => { const c = currentCena(); return c && c.kind === 'intervalo' && c.live && c.live.alerta ? c.live.alerta : 0; };
+  function checkAlert() {
+    const at = alertAt(), el = $('#ealert'); if (!el) return;
+    if (at && String(at) !== store.get('bttf.alert')) {
+      if (S.alertOn === at) return;
+      const c = currentCena(); S.alertOn = at;
+      $('#eaTitle').textContent = c.alertaTitulo || 'Emergency alert'; $('#eaBody').textContent = c.alertaTexto || 'The break is over. Return to your seat now.'; $('#eaFrom').textContent = c.alertaOrigem || '';
+      el.classList.add('on'); el.setAttribute('aria-hidden', 'false');
+      siren(); buzz([700, 250, 700, 250, 700, 250, 1200]); flashSky();
+      clearInterval(checkAlert._t); let n = 0; checkAlert._t = setInterval(() => { if (!S.alertOn || ++n > 2) return clearInterval(checkAlert._t); siren(); buzz([700, 250, 700]); }, 9000); // insiste mais duas vezes
+    } else if (S.alertOn) hideAlert();
+  }
+  function hideAlert() { S.alertOn = 0; clearInterval(checkAlert._t); buzz(0); const el = $('#ealert'); if (el) { el.classList.remove('on'); el.setAttribute('aria-hidden', 'true'); } }
+  function dismissAlert() { const at = alertAt() || S.alertOn; if (at) store.set('bttf.alert', String(at)); hideAlert(); }
   // A tela do celular fica acesa nos momentos em que a dinâmica é no celular: encontro e conversa das Conexões,
   // votação aberta da Reflexão e recebimento aberto do Sucesso.
   function phoneBusy() {
     if (S.screen !== 'app' || !S.state || !S.me) return false;
     const pr = currentPresentation(); if (pr) return sucPhase(pr) === 'run';
     const rf = currentReflexao(); if (rf) return !!rf.cur && rfPhase(rf.cur) === 'run';
+    const cn = currentCena(); if (cn) return cn.kind === 'nuvem' && (!S.me.words || S.wordsEdit);            // respondendo as duas perguntas
+    if (S.state.block === 'closing') return !S.me.feedback || S.fbEdit;                                       // respondendo o feedback
     return S.state.block === 'connections' && ['matching', 'talk'].includes(S.state.conn.phase);
   }
   async function wakeLock() {
@@ -212,7 +245,7 @@
     // Reconhecimento: a carga do Flux Capacitor sobe com os toques de todo mundo
     S.socket.on('cena:pulse', p => { const c = currentCena(); if (c && p && p.kind === c.kind && c.live) { c.live.carga = p.carga; patchCharge(); } });
   }
-  function dropLogin() { clearToken(); rememberMe(null); S.me = null; S.wordsSkip = false; S.wordsEdit = false; if (S.screen === 'app') S.screen = 'splash'; }
+  function dropLogin() { clearToken(); rememberMe(null); S.me = null; S.wordsEdit = false; S.fbEdit = false; if (S.screen === 'app') S.screen = 'splash'; }
   // O que o servidor respondeu (pelo WebSocket ou por HTTP): o estado do evento e quem sou eu
   function applySync(res) {
     if (!res || !res.state) return false;
@@ -239,10 +272,10 @@
     finally { S.restoring = false; }
     if (S.restored) hello();
   }
-  // depois de refazer o check-in sozinho, as duas palavras que a pessoa já tinha escrito voltam para o servidor
+  // depois de refazer o check-in sozinho, as respostas da nuvem de palavras que a pessoa já tinha escrito voltam para o servidor
   function resendWords() {
     let w = null; try { w = JSON.parse(store.get('bttf.words') || 'null'); } catch { w = null; }
-    if (S.me && !S.me.words && Array.isArray(w) && w.length) api('/api/words', { token: S.token, words: w }).then(r => { if (r.me) { S.me = r.me; maybeRender(); } }).catch(() => { /* a pessoa responde de novo */ });
+    if (S.me && !S.me.words && Array.isArray(w) && w.length === 2 && w.every(Boolean)) api('/api/words', { token: S.token, words: w, restore: true }).then(r => { if (r.me) { S.me = r.me; maybeRender(); } }).catch(() => { /* a pessoa responde de novo */ });
   }
   function hello() {
     if (!S.socket) return;
@@ -315,18 +348,14 @@
   function currentCena() {
     return (S.screen === 'app' && S.me && S.state && !currentPresentation() && S.state.block === 'cena' && S.state.cena) || null;
   }
-  // "Duas palavras": a primeira tela depois do login, enquanto o evento está na abertura (check-in, vídeo, boas-vindas,
-  // plano de voo). Quem já respondeu não vê de novo, mesmo entrando por outro aparelho: a resposta fica no servidor.
-  function needWords() {
-    if (S.screen !== 'app' || !S.me || !S.state || !S.state.words || !S.state.words.open || currentPresentation() || currentReflexao()) return false;
-    return S.wordsEdit || (!S.me.words && !S.wordsSkip);
-  }
-  const wordsSig = () => { const w = S.state && S.state.words; return w ? `${w.count}:${w.top.map(x => x[0] + x[1]).join('|')}` : ''; };
+  // Nuvem de palavras: enquanto a cena está no ar, o celular mostra as duas perguntas (texto livre). Quem já respondeu vê as
+  // nuvens crescendo, mesmo entrando por outro aparelho: a resposta fica no servidor.
+  const wordsForm = () => !!S.me && (!S.me.words || S.wordsEdit);
+  const wordsSig = i => { const w = S.state && S.state.words; return w && w.clouds ? `${w.count}:${(w.clouds[i] || []).map(x => x[0] + x[1]).join('|')}` : ''; };
   // Quem coordena um bloco faz o login (conta presença), mas não participa dele: nada de dupla, voto ou resposta.
   const sitsOut = block => !!(S.me && S.me.skip && S.me.skip[block]);
   const coordinating = block => `<div class="panel glow msgbox"><div class="e">🎬</div><h2>${esc(t('coordTitle'))}</h2><p>${esc(t('coord', block))}</p></div>`;
   function viewKey() {
-    if (needWords()) return ['words', S.me.person.id, S.wordsSending ? 'env' : '', S.wordsEdit ? 'edit' : ''].join('|');
     const pr = currentPresentation();
     if (pr) {
       const su = S.me.sucesso || {}, d = pr.draw;
@@ -340,22 +369,21 @@
     const cn = currentCena();
     if (cn) { // o que muda a tela do celular em cada cena (o resto é atualizado por cima)
       const l = cn.live || {}, sub = cn.kind === 'reconhecimento' ? [l.fase, l.premio, l.passo, (l.feitos || []).join('.')].join(':') : cn.kind === 'intervalo' ? ivPhase(cn) : cn.kind === 'mph' ? (l.at ? (serverNow() - l.at >= MPH_MS ? 'chegou' : 'indo:' + l.at) : 'antes')
-        : cn.kind === 'almanaque' ? `${l.mes}:${l.pagina ? 1 : 0}` : cn.kind === 'agenda' ? cn.itens.map(x => x.estado[0] || '-').join('') : cn.kind === 'abertura' ? `${l.play ? 1 : 0}${l.fim ? 'f' : ''}` : cn.kind === 'boasvindas' ? (l.nuvem ? 'nuvem' : '') : '';
-      const content = JSON.stringify([cn.titulo, cn.kicker, cn.itens && cn.kind === 'agenda' ? cn.itens : '', cn.texto, cn.frase, cn.pessoas, cn.quem, cn.pergunta, cn.chegada, cn.premios, cn.carga, cn.hosts, cn.nuvemTitulo, S.me.person, S.me.words]);
+        : cn.kind === 'almanaque' ? `${l.mes}:${l.pagina ? 1 : 0}` : cn.kind === 'agenda' ? cn.itens.map(x => x.estado[0] || '-').join('') : cn.kind === 'abertura' ? `${l.play ? 1 : 0}${l.fim ? 'f' : ''}` : cn.kind === 'nuvem' ? `${wordsForm() ? 'form' : 'ok'}${S.wordsSending ? ':env' : ''}${S.wordsEdit ? ':edit' : ''}` : cn.kind === 'visao' ? (l.aberta ? 'aberta' : 'capa') : '';
+      const content = JSON.stringify([cn.titulo, cn.kicker, cn.itens && cn.kind === 'agenda' ? cn.itens : '', cn.texto, cn.frase, cn.pessoas, cn.quem, cn.pergunta, cn.chegada, cn.premios, cn.carga, cn.hosts, cn.perguntas, cn.dica, cn.sub, S.me.person, S.me.words, S.lang]);
       return ['cena', cn.kind, sub, hash(content)].join('|');
     }
     if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}|${S.lang}`;
     const c = S.state.conn, g = S.me && S.me.group, tm = c.timer;
     const dc = S.state.doc || {}, docKey = S.state.block === 'doc' ? [dc.status, !!dc.play, dc.phones, dc.phones ? dc.rev : 0] : ''; // Visão 2027: espera, cena no telão, mensagem no celular
-    const w = S.state.words || {};
-    const content = JSON.stringify([docKey, S.state.message, S.state.event, S.state.settings, S.state.block === 'stage' ? S.state.stage : '', S.me && S.me.person, S.me && S.me.skip, S.me && S.me.words, S.state.block === 'welcome' ? [w.open, w.live] : '', g && g.partners, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result, tm ? tm.kind : '', S.lang]);
+    const fbKey = S.state.block === 'closing' ? [S.me && S.me.feedback, S.fbEdit, S.fbSending] : '';         // encerramento: o formulário de feedback
+    const content = JSON.stringify([docKey, fbKey, S.state.message, S.state.event, S.state.settings, S.state.block === 'stage' ? S.state.stage : '', S.me && S.me.person, S.me && S.me.skip, g && g.partners, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result, tm ? tm.kind : '', S.lang]);
     return ['app', S.state.block, c.phase, c.round, '', g ? g.id : '', g && g.missing ? 'miss' : '', S.me && S.me.ranking ? 'ranked' : '', S.editing ? 'edit' : '', S.me && S.me.result ? 'res' : '', hash(content)].join('|');
   }
   // O bloco que está no ar para este celular (depois do login). Quando ele muda, entra a transição
   // do filme: o velocímetro sobe até 88 MPH com o destino escrito embaixo. Avisos e "olhos no telão" entram direto.
   function blockNow() {
     if (S.screen !== 'app' || !S.me || !S.state) return null;
-    if (needWords()) return { id: 'words' };
     const st = S.state, pr = currentPresentation(), i = st.step ? st.step.index : 0;
     if (pr) return { id: 'sucesso:' + pr.activityId, msg: t('wDest', pr.title), dyn: true };
     if (st.reflexao) return { id: 'reflexao', msg: t('wFuel'), dyn: true };
@@ -375,14 +403,13 @@
     if (!force && k === S.lastKey) { patch(); return; }
     const prev = S.lastKey; S.lastKey = k;
     const p = prev.split('|'), n = k.split('|');
-    // (sair da tela das duas palavras não é troca de bloco: a entrada no app tem a sua própria animação)
-    const blk = blockNow(), moved = !!(prev && blk && blk.msg && S.blk && S.blk !== 'words' && S.blk !== blk.id && S.state.settings.transitions !== false && (!S.state.step || S.state.step.transition !== false));
+    const blk = blockNow(), moved = !!(prev && blk && blk.msg && S.blk && S.blk !== blk.id && S.state.settings.transitions !== false && (!S.state.step || S.state.step.transition !== false));
     // chegou um bloco que entra direto (sem transição) enquanto a transição do bloco anterior ainda passava: ela sai da frente
     if (prev && blk && S.blk && S.blk !== blk.id && !moved && warp._hold) { warp._hold = false; clearInterval(warp._t); const w = $('#warp'); w.classList.remove('on', 'go'); w.setAttribute('aria-hidden', 'true'); }
     S.blk = blk ? blk.id : null;
     // a transição de bloco não é interrompida por atualizações que chegam logo em seguida: a tela nova entra por baixo
-    // dura o mesmo que a transição do telão (15 s por padrão), pedindo para a pessoa olhar para lá
-    const secs = Number(S.state && S.state.settings.transitionSeconds) || 15, long = secs >= 7;
+    // dura o mesmo que a transição do telão (8 s por padrão), pedindo para a pessoa olhar para lá
+    const secs = Number(S.state && S.state.settings.transitionSeconds) || 8, long = secs >= 7;
     const show = () => { if (!moved) return render(); warp._hold = true; warp(`${long ? (blk.dyn ? t('lookWarp') : '👀 LOOK AT THE BIG SCREEN') + '\n\n' : ''}${blk.msg.toUpperCase()}`, () => { warp._hold = false; render(); }, long ? secs * 1000 - 700 : 1500); };
     const stopWarp = () => { if (warp._hold) return; clearInterval(warp._t); $('#warp').classList.remove('on', 'go'); };
     S.jump = !prev || p.slice(0, 4).join('|') !== n.slice(0, 4).join('|');
@@ -421,12 +448,15 @@
           else if (fase === 'cerimonia' && passo === 'vencedor') { beep('result'); buzz([120, 60, 120, 60, 240]); flashSky(); } // vencedor revelado
         }
         if (kind === 'intervalo' && sub === 'done' && was === 'run') { beep('end'); buzz([200, 80, 200]); flashSky(); }
+        if (kind === 'nuvem' && p[1] !== 'nuvem') { beep('ok'); buzz([80, 40, 160]); flashSky(); }                       // as duas perguntas chegaram no celular
       }
+      if (prev && n[0] === 'cena' && n[1] === 'nuvem' && p[1] !== 'nuvem') { S.wordsEdit = false; S.wordsDraft = [...((S.me && S.me.words) || ['', ''])]; }
       return show();
     }
     const enteringPhase = ph => n[0] === 'app' && n[1] === 'connections' && n[2] === ph && !(p[1] === 'connections' && p[2] === ph && p[3] === n[3]);
     const quiet = b => b === 'standby' || b === 'stage'; // telas calmas: ao sair delas, o celular chama a atenção
     if (prev && p[0] === 'app' && quiet(p[1]) && n[0] === 'app' && n[1] && !quiet(n[1])) { beep('ok'); buzz([80, 40, 160]); flashSky(); }
+    if (prev && n[0] === 'app' && n[1] === 'closing' && p[1] !== 'closing') { S.fbEdit = false; if (!moved) { beep('ok'); buzz([80, 40, 160]); } } // encerramento: o feedback é no celular
     if (prev && enteringPhase('matching')) { beep('ok'); buzz([80, 40, 80]); return warp(t('wTrip', n[3], roundEra(+n[3]).year), render); }
     if (prev && enteringPhase('ranking')) { beep('ok'); return warp(t('wBack'), render); }
     if (prev && enteringPhase('results')) { beep('result'); buzz([120, 60, 120, 60, 240]); return warp(t('wCalc'), render); }
@@ -436,10 +466,9 @@
   }
   function render() {
     const app = $('#app');
-    const words = needWords(), presentation = currentPresentation(), reflexao = currentReflexao(), cena = currentCena();
-    const ae = document.activeElement, typing = ae && ae.id === 'ans', searching = ae && ae.id === 'rfQ', wording = ae && (ae.id === 'w1' || ae.id === 'w2') ? ae.id : null;
-    if (words) app.innerHTML = vWords();
-    else if (presentation) app.innerHTML = vPresentation(presentation);
+    const presentation = currentPresentation(), reflexao = currentReflexao(), cena = currentCena();
+    const ae = document.activeElement, typing = ae && ae.id === 'ans', searching = ae && ae.id === 'rfQ', writing = ae && ['w1', 'w2', 'fbLiked', 'fbImprove'].includes(ae.id) ? ae.id : null;
+    if (presentation) app.innerHTML = vPresentation(presentation);
     else if (reflexao) app.innerHTML = vReflexao(reflexao);
     else if (cena) app.innerHTML = vCena(cena);
     else if (S.screen === 'splash') app.innerHTML = vSplash();
@@ -450,14 +479,17 @@
       app.innerHTML = b === 'standby' ? vStandby() : b === 'stage' ? vStage() : b === 'welcome' ? vWelcome() : b === 'message' ? vMessage() : b === 'closing' ? vClosing() : b === 'doc' ? vDoc() : vConnections();
     }
     // "olhos no telão" e blocos de fala: tela calma, com o fundo mais apagado (mas sempre rodando: parado, parecia travado)
-    const calm = !words && !presentation && S.screen === 'app' && !!S.state && !!S.me && (['standby', 'stage'].includes(S.state.block) || (!!cena && CENA_CALM.includes(cena.kind)));
+    const calm = !presentation && S.screen === 'app' && !!S.state && !!S.me && (['standby', 'stage'].includes(S.state.block) || (!!cena && CENA_CALM.includes(cena.kind)));
     document.body.classList.toggle('off', calm);
     if (window.Delorean3D) Delorean3D.pause(false);
     const ans = $('#ans'); if (ans) { ans.value = S.answerDraft; countAnswer(); if (typing && !ans.disabled) { ans.focus(); ans.setSelectionRange(ans.value.length, ans.value.length); } }
     const rq = $('#rfQ'); if (rq) { rq.value = S.rfQ; if (searching) { rq.focus(); rq.setSelectionRange(rq.value.length, rq.value.length); } }
-    if (words) { ['w1', 'w2'].forEach((id, i) => { const el = $('#' + id); if (el) el.value = S.wordsDraft[i] || ''; }); if (wording) { const el = $('#' + wording); if (el && !el.disabled) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } } }
-    const wc = $('#wcloud'); if (wc) wc.dataset.sig = wordsSig();
-    if (reflexao && !words) loadProjects(reflexao.rev);
+    // campos de texto livre (nuvem de palavras e feedback): o rascunho volta para o campo e o cursor continua onde estava
+    ['w1', 'w2'].forEach((id, i) => { const el = $('#' + id); if (el) { el.value = S.wordsDraft[i] || ''; countField(el); } });
+    [['fbLiked', 'liked'], ['fbImprove', 'improve']].forEach(([id, k]) => { const el = $('#' + id); if (el) el.value = S.fbDraft[k] || ''; });
+    if (writing) { const el = $('#' + writing); if (el && !el.disabled) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }
+    [0, 1].forEach(i => { const wc = $('#wcloud' + i); if (wc) wc.dataset.sig = wordsSig(i); });
+    if (reflexao) loadProjects(reflexao.rev);
     mountCar();
     wakeLock();
     if (S.jump !== false) window.scrollTo(0, 0);
@@ -467,9 +499,11 @@
   }
   function patch() {
     if (!S.state) return;
-    const wc = $('#wcloud'); // nuvem das duas palavras: entra palavra nova sem redesenhar a tela
-    if (wc && wc.dataset.sig !== wordsSig()) { wc.innerHTML = cloudHtml(); wc.dataset.sig = wordsSig(); const n = $('#wcN'); if (n) n.textContent = S.state.words.count; }
-    if (needWords()) return;
+    checkAlert();
+    // nuvens de palavras: entra resposta nova sem redesenhar a tela
+    [0, 1].forEach(i => { const wc = $('#wcloud' + i); if (wc && wc.dataset.sig !== wordsSig(i)) { wc.innerHTML = cloudHtml(i); wc.dataset.sig = wordsSig(i); } });
+    const wn = $('#wcN'); if (wn && S.state.words) wn.textContent = S.state.words.count;
+    const fn = $('#fbN'); if (fn && S.state.feedback) fn.textContent = S.state.feedback.count;
     const pr = currentPresentation();
     if (pr) { const n = $('#sucCount'); if (n && pr.live) n.textContent = pr.live.responseCount; return; }
     const rf = currentReflexao();
@@ -612,7 +646,7 @@
   }
   /* ---- Cenas do deck do townhall ----
    * A atenção é no telão: o celular mostra onde o evento está (ato, tema, quem fala). Em algumas cenas ele participa:
-   * a agenda completa, a nuvem das duas palavras, o cronômetro do intervalo, o botão que carrega o Flux Capacitor na
+   * a agenda completa, as duas perguntas da nuvem de palavras, o cronômetro do intervalo (e o alerta de volta), o botão que carrega o Flux Capacitor na
    * cerimônia dos prêmios (cada toque soma energia no telão), o vencedor de cada prêmio e a chegada a 2027. */
   const CENA_CALM = ['abertura', 'boasvindas', 'almanaque', 'ia', 'visao', 'manifesto'];
   const ACT_C = ['var(--cyan)', 'var(--orange)', 'var(--yellow)', 'var(--green)'];
@@ -647,9 +681,38 @@
           ${c.itens.filter(x => x.ato === k + 1).map(x => `<div class="ag-it"><b>${esc(x.hora)}</b><span>${esc(x.t)}<small>${esc(x.d)}</small></span>${x.fone ? '<i title="On your phone">📱</i>' : ''}</div>`).join('')}</div>`).join('')}
         <p class="small center">📱 = this one happens on your phone, in this app</p>`;
     }
+    if (c.kind === 'nuvem') { // nuvem de palavras: duas perguntas, cada uma com um campo de texto livre; depois de responder, as nuvens crescendo
+      const q = c.perguntas || [], mine = S.me.words, w = S.state.words || { count: 0 };
+      if (wordsForm()) return `${vHeader()}${cenaCard(c, c.kicker, plain(c.titulo), '<div class="phonechip" style="margin-top:10px">📱 This one happens here, on your phone</div>', 'var(--cyan)')}
+        <div class="panel wq">
+          ${q.map((text, i) => `<label class="wq-q" for="w${i + 1}"><b>${i + 1}</b><span>${esc(text)}</span></label>
+          <textarea class="input short" id="w${i + 1}" maxlength="80" rows="2" enterkeyhint="${i ? 'send' : 'next'}" placeholder="Write your answer here…" ${S.wordsSending ? 'disabled' : ''}></textarea>
+          <div class="ansmeta"><span></span><span id="w${i + 1}c">0 / 80</span></div>`).join('')}
+          ${c.dica ? `<p class="small" style="margin-bottom:12px">💡 ${esc(c.dica)}</p>` : ''}
+          <button class="btn" data-action="sendWords" ${S.wordsSending ? 'disabled' : ''}>${S.wordsSending ? 'Sending…' : '⚡ Send my answers'}</button>
+          ${S.wordsEdit ? '<button class="linkbtn" data-action="cancelWords" style="display:block;margin:8px auto 0">← keep my answers</button>' : ''}
+        </div>`;
+      return `${vHeader()}${cenaCard(c, c.kicker, plain(c.titulo), '', 'var(--cyan)')}
+        <div class="panel glow center"><div class="kicker" style="color:var(--green)">✓ YOUR ANSWERS ARE IN</div>
+          ${q.map((text, i) => `<div class="rf-drawn" style="text-align:left"><small>${esc(text)}</small><b>${esc((mine || [])[i] || '')}</b></div>`).join('')}
+          <button type="button" class="linkbtn" data-action="editWords" style="margin-top:10px">change my answers</button></div>
+        ${q.map((text, i) => `<div class="panel wc"><div class="kicker">${esc(text)}</div><div class="wcloud" id="wcloud${i}">${cloudHtml(i)}</div></div>`).join('')}
+        <p class="small center"><b id="wcN">${w.count}</b> travelers answered · 👀 the word clouds are on the big screen</p>`;
+    }
+    if (c.kind === 'capasucesso') { // capa do bloco Sucesso (em português ou espanhol, como a dinâmica)
+      return `<div class="spacer"></div>${logo(true, 'dim')}
+        <div class="standby cena-look">
+          <div class="kicker">${esc(tx(c.kicker, 'Frente 3 · Compromiso 2027'))}</div><i class="st-arrow"></i>
+          <div class="st-theme long"><span>${esc(tx(plain(c.titulo), 'De Vuelta al Éxito'))}</span></div>
+          ${hostFaces(c)}${c.quem ? `<p class="st-speaker">${esc(tx('com', 'con'))} ${esc(c.quem)}</p>` : ''}
+          <p class="muted">${esc(tx('👀 Olhe para o telão. Em instantes, a dinâmica acontece aqui no celular.', '👀 Mira la pantalla. En instantes, la dinámica ocurre aquí en el celular.'))}</p>
+          <div class="phonechip" style="margin-top:12px">${esc(tx('📱 Deixe o celular por perto', '📱 Ten el celular a mano'))}</div>
+        </div><div class="spacer"></div>`;
+    }
+    if (c.kind === 'plano26') return cenaLook(c, plain(c.titulo), (c.lideres || []).map(x => x.nome).join(', '));
     if (c.kind === 'abertura') return cenaLook(c, c.name, '', l.play ? '🎬 Now playing · look at the big screen.' : l.fim ? '🍿 That was the opening.' : '🎬 The opening video is about to start.<br>' + LOOK);
     if (c.kind === 'intervalo') {
-      const ph = ivPhase(c), msg = { idle: 'The break is about to start.', run: 'Be back before the clock hits zero.', paused: '❚❚ Timer paused by the host.', done: '⚡ The DeLorean is refueled. Back to your seat!' }[ph];
+      const ph = ivPhase(c), msg = { idle: 'The break is about to start.', run: 'Be back before the clock hits zero. Your phone will ring the alarm when it is time.', paused: '❚❚ Timer paused by the host.', done: '🚨 The break is over. Back to your seat!' }[ph];
       return `${vHeader()}${cenaCard(c, actLine(c), plain(c.titulo), '', 'var(--green)')}
         <div class="panel center"><div class="countdown green ${ph === 'done' ? 'hurry' : ''}" id="ivCd">${fmt(ivLeft(c))}</div><p class="muted" style="margin-top:12px">${esc(msg)}</p></div>
         <div class="panel"><p class="myans" style="margin-top:0">☕ ${esc(c.texto)}</p></div>`;
@@ -686,11 +749,10 @@
     }
     if (c.kind === 'boasvindas') {
       const faces = { ...c, hosts: (c.pessoas || []).map(p => ({ nome: p.nome, foto: (p.fotos || [])[0] })) };
-      if (l.nuvem) return `${vHeader()}${cenaCard(c, actLine(c), plain(c.nuvemTitulo || 'How the crew arrived today'), '', 'var(--cyan)')}${cloudPanel('')}<div class="panel center"><p class="muted">${LOOK}</p></div>`; // a nuvem das duas palavras, também no celular
       return cenaLook(faces, c.name, (c.pessoas || []).map(p => p.nome).join(', '));
     }
     if (c.kind === 'almanaque') return cenaLook(c, c.name, c.quem, l.pagina ? `📄 ${c.stats.entregues} deliveries · ${esc(c.stats.beneficiosTxt)} in benefits<br>${LOOK}` : l.mes >= 0 ? `📅 ${esc(c.meses[l.mes])} 2026<br>${LOOK}` : '');
-    if (c.kind === 'visao') return cenaLook(c, plain(c.titulo), c.quem);
+    if (c.kind === 'visao') return cenaLook(c, plain(c.titulo), c.quem, l.aberta ? '🔭 The 2027 strategy is on the big screen.' : '');
     if (c.kind === 'manifesto') return cenaLook(c, c.name, c.quem, `${esc(c.titulo)} <b style="color:var(--yellow)">${esc(c.pergunta)}</b><br>${LOOK}`);
     return cenaLook(c, plain(c.titulo || c.name), c.quem);
   }
@@ -767,43 +829,24 @@
     const me = S.me.person;
     return `<div class="trip">${logo(true)}<div class="hdr"><button type="button" class="langchip" data-action="langToggle" title="Language for the activities: ${LANGS[S.lang]}" aria-label="Language for the activities: ${LANGS[S.lang]}. Tap to change."><b class="${S.lang === 'pt' ? 'on' : ''}">PT</b><b class="${S.lang === 'es' ? 'on' : ''}">ES</b></button><div class="small">${esc(first(me.name))}</div></div></div>`;
   }
-  /* ---- "Duas palavras": a primeira tela depois do login ----
-   * Os dois campos são os mostradores dos circuitos de tempo. As palavras de todo mundo formam a nuvem das boas-vindas. */
-  function vWords() {
-    const me = S.me.person, edit = S.wordsEdit;
-    return `${logo(true)}
-      <section class="tw">
-        <div class="kicker">${edit ? 'TIME CIRCUITS · CHANGE YOUR WORDS' : 'FIRST STOP · BEFORE WE TAKE OFF'}</div>
-        <h1 class="tw-title"><span>TWO</span><span>WORDS</span></h1>
-        <p class="tw-q"><b>${esc(first(me.name))}</b>, how are you arriving at the Townhall today?</p>
-        <div class="tw-circ">
-          <label class="tc r"><span>WORD ONE</span><input class="led-in" id="w1" maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="next" placeholder="CURIOUS" ${S.wordsSending ? 'disabled' : ''}></label>
-          <label class="tc g"><span>WORD TWO</span><input class="led-in" id="w2" maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="send" placeholder="GRATEFUL" ${S.wordsSending ? 'disabled' : ''}></label>
-        </div>
-        <p class="small center">Any language works. Your words join everyone else's in the word cloud on the big screen.</p>
-        <button class="btn" data-action="sendWords" ${S.wordsSending ? 'disabled' : ''}>${S.wordsSending ? 'Sending…' : '⚡ Send to the future'}</button>
-        <button class="linkbtn" data-action="${edit ? 'cancelWords' : 'skipWords'}">${edit ? '← keep my words' : 'skip for now'}</button>
-      </section>`;
-  }
-  // a nuvem no celular: cada palavra no tamanho de quantas pessoas a escreveram; as minhas ficam marcadas
-  function cloudHtml() {
-    const w = (S.state && S.state.words) || { top: [] }, mine = new Set(((S.me && S.me.words) || []).map(x => x.toLocaleLowerCase()));
-    if (!w.top.length) return '<p class="muted center wc-empty">Waiting for the first words…</p>';
-    const max = Math.max(...w.top.map(x => x[1]));
-    return w.top.slice(0, 70).sort((a, b) => hash(a[0]) % 97 - hash(b[0]) % 97)
+  // uma nuvem no celular (i = qual pergunta): cada termo no tamanho de quantas pessoas o escreveram; a minha resposta fica marcada
+  function cloudHtml(i) {
+    const w = (S.state && S.state.words) || {}, top = (w.clouds && w.clouds[i]) || [], ans = String(((S.me && S.me.words) || [])[i] || '').replace(/[.,;:!?¡¿()“”…]+/g, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+    const mine = new Set(ans.length <= 24 && ans.split(' ').length <= 3 ? [ans] : ans.split(' ')); // resposta curta entra inteira; frase vira palavras (como no servidor)
+    if (!top.length) return '<p class="muted center wc-empty">Waiting for the first answers…</p>';
+    const max = Math.max(...top.map(x => x[1]));
+    return top.slice(0, 50).sort((a, b) => hash(a[0]) % 97 - hash(b[0]) % 97)
       .map(([word, n]) => `<span class="${mine.has(word.toLocaleLowerCase()) ? 'me' : ''}" style="--s:${(max > 1 ? .85 + 1.15 * Math.sqrt(n / max) : 1.15).toFixed(2)};--c:${color(word)};--d:${(hash(word) % 40) / 10}s">${esc(word)}</span>`).join('');
   }
-  const cloudPanel = (kicker = 'How the crew is arriving') => { const w = (S.state && S.state.words) || { count: 0 }; return `<div class="panel wc">${kicker ? `<div class="kicker">${kicker}</div>` : ''}<div class="wcloud" id="wcloud">${cloudHtml()}</div><p class="small center"><b id="wcN">${w.count}</b> travelers shared their two words</p></div>`; };
+  function countField(el) { const c = $('#' + el.id + 'c'); if (c) c.textContent = `${el.value.length} / ${el.maxLength}`; }
   function vWelcome() {
-    const st = S.state, me = S.me.person, mine = S.me.words, w = st.words || {};
+    const st = S.state, me = S.me.person;
     return `${vHeader()}
       <div class="panel glow match">
         <div class="polaroids"><div class="polaroid"><div class="photo">${av(me)}</div><div class="cap">${esc(first(me.name))} · Hill Valley</div></div></div>
         <div class="pname">Welcome aboard, ${esc(first(me.name))}!</div>
         <p class="muted" style="margin-top:12px">${esc(st.event.welcomeText)}</p>
-        ${mine ? `<div class="mywords"><small>YOUR TWO WORDS</small><b>${esc(mine.join(' · '))}</b>${w.open ? '<button type="button" class="linkbtn" data-action="editWords">change</button>' : ''}</div>` : w.open ? '<button type="button" class="btn ghost" data-action="editWords" style="margin-top:14px">⚡ Tell us your two words</button>' : ''}
       </div>
-      ${w.live && (w.count || mine) ? cloudPanel() : ''}
       <div class="panel center">
         <div class="kicker">Aboard</div>
         <div class="big"><span id="count">${st.counts.checkedIn}</span><span style="font-size:18px;color:var(--muted)"> / ${st.counts.total}</span></div>
@@ -816,10 +859,34 @@
     const m = S.state.message;
     return `${vHeader()}<div class="panel glow msgbox"><div class="e">${esc(m.emoji || '📣')}</div><h2>${esc(m.title)}</h2><p>${linkify(m.body)}</p></div>`;
   }
+  // Encerramento: a mensagem final e o formulário de feedback (nota de 1 a 5 e dois textos livres, opcionais).
+  const FB_LABEL = ['', 'Great Scott… not good', 'Could be better', 'Good', 'Great', '1.21 gigawatts! Loved it'];
+  function vFeedback() {
+    const f = S.me.feedback, d = S.fbDraft, n = (S.state.feedback || {}).count || 0;
+    if (f && !S.fbEdit) return `<div class="panel glow center fb"><div class="kicker" style="color:var(--green)">✓ FEEDBACK RECEIVED</div>
+        <div class="fb-stars done">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= f.rating ? 'on' : ''}">⚡</i>`).join('')}</div>
+        <p class="muted">Thank you! Your feedback helps us build the next Townhall.</p>
+        <button type="button" class="linkbtn" data-action="fbEdit" style="margin-top:8px">change my feedback</button>
+        <p class="small" style="margin-top:8px"><b id="fbN">${n}</b> travelers already answered</p></div>`;
+    return `<div class="panel glow fb">
+        <div class="phonechip">📱 One last thing · 1 minute</div>
+        <h2 class="fb-h">How was the Townhall for you?</h2>
+        <div class="fb-stars" role="radiogroup" aria-label="Rating from 1 to 5">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="${i <= d.rating ? 'on' : ''}" data-action="fbRate" data-n="${i}" role="radio" aria-checked="${i === d.rating}" aria-label="${i} of 5">⚡</button>`).join('')}</div>
+        <p class="fb-label" id="fbLabel">${esc(FB_LABEL[d.rating] || 'Tap to rate: 1 (low) to 5 (high)')}</p>
+        <label class="wq-q" for="fbLiked"><span>What did you like the most?</span></label>
+        <textarea class="input short" id="fbLiked" maxlength="600" rows="3" placeholder="Optional · any language" ${S.fbSending ? 'disabled' : ''}></textarea>
+        <label class="wq-q" for="fbImprove" style="margin-top:12px"><span>What should we do better next time?</span></label>
+        <textarea class="input short" id="fbImprove" maxlength="600" rows="3" placeholder="Optional · any language" ${S.fbSending ? 'disabled' : ''}></textarea>
+        <label class="sw" style="margin-top:12px"><input type="checkbox" id="fbAnon" ${d.anonymous ? 'checked' : ''}> Send without my name</label>
+        <button class="btn" data-action="fbSend" ${S.fbSending ? 'disabled' : ''}>${S.fbSending ? 'Sending…' : '⚡ Send feedback'}</button>
+        ${S.fbEdit ? '<button class="linkbtn" data-action="fbCancel" style="display:block;margin:8px auto 0">← keep my feedback</button>' : ''}
+      </div>`;
+  }
   function vClosing() {
     const r = S.me.result;
     return `${vHeader()}
-      <div class="panel glow msgbox"><div class="e">🕰️</div><h2>End of the journey</h2><p>${esc(S.state.event.closingText)}</p></div>
+      <div class="panel glow msgbox slim"><div class="e">🕰️</div><h2>End of the journey</h2><p>${esc(S.state.event.closingText)}</p></div>
+      ${vFeedback()}
       ${r && r.match ? `<div class="panel center"><div class="kicker">Your connection</div><div class="polaroids"><div class="polaroid"><div class="photo">${av(r.match)}</div><div class="cap">${esc(first(r.match.name))}</div></div></div><div class="pname" style="font-size:18px">${esc(r.match.name)}</div></div>` : ''}`;
   }
   // Visão 2027: enquanto o Doc fala no telão, o celular pede para olhar para lá; depois, a mensagem fica no celular.
@@ -1010,9 +1077,9 @@
   /* ---------------- timer ---------------- */
   function tick() {
     if (!S.state) return;
+    checkAlert();
     const led = $('#ledNow'); if (led) led.textContent = ledNow();
     const osdNow = $('#osdNow'); if (osdNow) osdNow.textContent = ledNow();
-    if (needWords()) return;
     const pr = currentPresentation();
     if (pr) { // dinâmica do Sucesso: prazo de recebimento e tempo de fala do sorteado
       const l = pr.live, st = $('#sucTimer');
@@ -1108,32 +1175,50 @@
           S.socket.emit('cena:tap', { token: S.token });
           break;
         }
-        // --- duas palavras ---
+        // --- nuvem de palavras: as duas respostas ---
         case 'sendWords': {
-          const list = S.wordsDraft.map(w => String(w || '').replace(/\s+/g, ' ').trim()).filter(Boolean);
-          if (!list.length) { toast('Type at least one word.', true); const f = $('#w1'); if (f) f.focus(); break; }
+          const list = S.wordsDraft.map(w => String(w || '').replace(/\s+/g, ' ').trim());
+          const miss = list.findIndex(x => !x);
+          if (miss >= 0) { toast('Answer both questions.', true); const f = $('#w' + (miss + 1)); if (f) f.focus(); break; }
           S.wordsSending = true; maybeRender(true);
           try {
             const r = await api('/api/words', { token: S.token, words: list });
-            S.wordsSending = false; S.wordsEdit = false; S.wordsSkip = false; if (r.me) S.me = r.me;
+            S.wordsSending = false; S.wordsEdit = false; if (r.me) S.me = r.me;
             store.set('bttf.words', JSON.stringify((r.me && r.me.words) || list));
-            buzz([40, 30, 90]); beep('result'); flashSky();
-            // entra no app com uma viagem curta (não é troca de bloco: a tela nova já fica registrada)
-            S.lastKey = viewKey(); const b = blockNow(); S.blk = b ? b.id : null;
-            warp('WORDS RECEIVED ⚡\n\nWELCOME ABOARD', render, 1100);
+            buzz([40, 30, 90]); beep('result'); flashSky(); toast('Answers received ⚡ Watch the big screen.'); maybeRender(true);
           } catch (e) { S.wordsSending = false; toast(e.status ? e.message : 'No connection. Tap send again.', true); maybeRender(true); }
           break;
         }
-        case 'skipWords': S.wordsSkip = true; maybeRender(true); break;
         case 'cancelWords': S.wordsEdit = false; maybeRender(true); break;
-        case 'editWords': S.wordsEdit = true; S.wordsSkip = false; S.wordsDraft = [...((S.me && S.me.words) || []), '', ''].slice(0, 2); maybeRender(true); { const f = $('#w1'); if (f) f.focus(); } break;
+        case 'editWords': S.wordsEdit = true; S.wordsDraft = [...((S.me && S.me.words) || []), '', ''].slice(0, 2); maybeRender(true); { const f = $('#w1'); if (f) f.focus(); } break;
+        // --- feedback do encerramento ---
+        case 'fbRate': { // a nota muda na hora, sem redesenhar (para não mexer no que a pessoa está escrevendo)
+          S.fbDraft.rating = +el.dataset.n || 0; buzz(15);
+          document.querySelectorAll('.fb-stars button').forEach(b => { const on = +b.dataset.n <= S.fbDraft.rating; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(+b.dataset.n === S.fbDraft.rating)); });
+          const lb = $('#fbLabel'); if (lb) lb.textContent = FB_LABEL[S.fbDraft.rating] || '';
+          break;
+        }
+        case 'fbSend': {
+          if (!S.fbDraft.rating) { toast('Tap a rating from 1 to 5 first.', true); break; }
+          S.fbSending = true; maybeRender(true);
+          try {
+            const r = await api('/api/feedback', { token: S.token, ...S.fbDraft });
+            S.fbSending = false; S.fbEdit = false; if (r.me) S.me = r.me;
+            buzz([40, 30, 90]); beep('result'); flashSky(); toast('Thank you! ⚡'); maybeRender(true);
+          } catch (e) { S.fbSending = false; toast(e.status ? e.message : 'No connection. Tap send again.', true); maybeRender(true); }
+          break;
+        }
+        case 'fbEdit': { const f = S.me && S.me.feedback; if (f) S.fbDraft = { rating: f.rating, liked: f.liked, improve: f.improve, anonymous: f.anonymous }; S.fbEdit = true; maybeRender(true); break; }
+        case 'fbCancel': S.fbEdit = false; maybeRender(true); break;
+        // --- alerta de volta do intervalo ---
+        case 'alertOk': dismissAlert(); break;
         case 'pick': S.pick = S.people.find(p => p.id === +el.dataset.id) || null; maybeRender(true); break;
         case 'unpick': S.pick = null; maybeRender(true); break;
         case 'checkin': {
           unlockAudio(); el.disabled = true;
           const r = await api('/api/checkin', { personId: S.pick.id, token: S.token });
           saveToken(r.token); if (r.epoch) store.set('bttf.epoch', r.epoch); store.set('bttf.lang', S.lang);
-          S.pick = null; S.q = ''; S.screen = 'app'; S.me = null; S.wordsSkip = false; S.wordsEdit = false; S.wordsDraft = ['', ''];
+          S.pick = null; S.q = ''; S.screen = 'app'; S.me = null; S.wordsEdit = false; S.wordsDraft = ['', '']; S.fbEdit = false; S.fbDraft = { rating: 0, liked: '', improve: '', anonymous: false };
           maybeRender(true); hello(); toast(`Welcome aboard, ${first(r.person.name)}! ⚡`); buzz(60);
           break;
         }
@@ -1179,16 +1264,17 @@
     if (e.target.id === 'q') { S.q = e.target.value; const l = $('#plist'); if (l) l.innerHTML = vPeopleList(); }
     if (e.target.id === 'ans') { S.answerDraft = e.target.value; countAnswer(); }
     if (e.target.id === 'rfQ') { S.rfQ = e.target.value; const l = $('#rfList'); if (l) l.innerHTML = vProjects(); }
-    if (e.target.id === 'w1') S.wordsDraft[0] = e.target.value;
-    if (e.target.id === 'w2') S.wordsDraft[1] = e.target.value;
+    if (e.target.id === 'w1' || e.target.id === 'w2') { S.wordsDraft[e.target.id === 'w1' ? 0 : 1] = e.target.value; countField(e.target); }
+    if (e.target.id === 'fbLiked') S.fbDraft.liked = e.target.value;
+    if (e.target.id === 'fbImprove') S.fbDraft.improve = e.target.value;
   });
-  // duas palavras: Enter no primeiro campo vai para o segundo; no segundo, envia
+  // nuvem de palavras: Enter no primeiro campo vai para o segundo; no segundo, envia (a resposta é curta, sem quebra de linha)
   document.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
+    if (e.key !== 'Enter' || e.shiftKey) return;
     if (e.target.id === 'w1') { e.preventDefault(); const f = $('#w2'); if (f) f.focus(); }
     if (e.target.id === 'w2') { e.preventDefault(); e.target.blur(); act('sendWords', e.target); }
   });
-  document.addEventListener('change', e => { if (e.target.id === 'anon') S.anon = e.target.checked; });
+  document.addEventListener('change', e => { if (e.target.id === 'anon') S.anon = e.target.checked; if (e.target.id === 'fbAnon') S.fbDraft.anonymous = e.target.checked; });
   // foto de perfil que não carregou: sai, e as iniciais que estavam por baixo aparecem
   document.addEventListener('error', e => { const el = e.target; if (el && el.tagName === 'IMG' && el.parentNode && el.parentNode.classList.contains('av')) { el.parentNode.classList.remove('ph'); el.remove(); } }, true);
   // o celular voltou: tela acesa de novo, aba de volta (inclusive pelo "voltar" do navegador), rede de volta

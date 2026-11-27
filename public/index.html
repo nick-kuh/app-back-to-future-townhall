@@ -38,6 +38,17 @@
   <div class="warp-flash"></div>
 </div>
 
+<!-- alerta de volta do intervalo (no estilo dos alertas de emergência do celular) -->
+<div id="ealert" class="ealert" role="alertdialog" aria-modal="true" aria-hidden="true" aria-labelledby="eaTitle" aria-describedby="eaBody">
+  <div class="ea-card">
+    <div class="ea-stripes"></div>
+    <div class="ea-head"><span class="ea-ico">⚠</span><b id="eaTitle">Emergency alert</b></div>
+    <p id="eaBody"></p>
+    <small id="eaFrom"></small>
+    <button type="button" class="ea-ok" data-action="alertOk">OK · I'm on my way</button>
+  </div>
+</div>
+
 <div id="offline" class="offline" role="status">⚠ Lost connection to the timeline · reconnecting…</div>
 <div id="toast" class="toast" role="status"></div>
 

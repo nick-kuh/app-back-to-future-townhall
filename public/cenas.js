@@ -1,6 +1,6 @@
 /* ===== Cenas do deck do townhall no telão =====
  * O conteúdo do deck "CDIO HC + BPC · 2026 Townhall" (agenda v18), em INGLÊS (como no deck) e com a cara do app:
- * vídeo de abertura, boas-vindas (com a nuvem das "duas palavras"), plano de voo, almanaque 2026, reconhecimento
+ * vídeo de abertura, boas-vindas, nuvem de palavras (duas perguntas), plano de voo, Estratégia 2026, almanaque 2026, reconhecimento
  * (prêmios), intervalo, Visão 2027 (a estratégia, no arquivo original) e 88 MPH. ("IA em 2026" e "Manifesto 2027" continuam
  * disponíveis como cenas avulsas, mas no roteiro padrão são os próprios blocos Reflexão e Sucesso.)
  * O telão segue o estado do servidor: quem comanda é o Painel do Doc (server/cenas.js guarda conteúdo e estado).
@@ -62,6 +62,17 @@ window.Cenas = (() => {
   // quem conduz o bloco: placas com a foto de perfil e o nome (vêm do servidor, em c.hosts)
   const hostsRow = (c, cls = '', label = 'WITH') => { const h = (c && c.hosts) || []; return h.length ? `<div class="hosts ${cls}">${label ? `<small>${label}</small>` : ''}${h.map(x => `<div class="host"><div class="av ${x.foto ? 'foto' : ''}">${esc(ini(x.nome))}${x.foto ? `<img src="${esc(x.foto)}" alt="">` : ''}</div><b>${esc(x.nome)}</b></div>`).join('')}</div>` : ''; };
   const who = c => `<div class="cn-chips">${c.quem ? chip(`With <b>${esc(c.quem)}</b>`, c.ato ? ACT_C[c.ato.k] : '') : ''}</div>`; // (sem os minutos do bloco)
+  // Capa de bloco: o ato, o nome do bloco em letras do logo, a frase e quem conduz (placas com a foto), com a DeLorean na estrada
+  const cover = (c, { title, sub = '', label = 'WITH', note = '' }) => `<div class="cv"><div class="cv-txt">${head(c)}<i class="cv-arrow"></i>
+      <h1 class="cv-title ${plain(title).length > 22 ? 'long' : ''}"><span class="bttf">${esc(plain(title))}</span></h1>
+      ${sub ? `<p class="cv-sub">${esc(sub)}</p>` : ''}${hostsRow(c, 'stack cv-hosts', label)}${note ? `<div class="cv-note">${note}</div>` : ''}</div>
+    <div class="carbox cv-car"><canvas class="car3d" data-car></canvas></div></div>`;
+  function coverLive(first) { // a DeLorean da capa fica carregada e soltando faíscas
+    if (!first) return;
+    const hero = () => (hooks.car ? hooks.car() : null);
+    later(300, () => { const h = hero(); if (h && h.setEnergy) h.setEnergy(.6); });
+    every(1300, () => { const h = hero(); if (h && h.spark && !document.hidden) h.spark(); });
+  }
   function qrBox() {
     const url = location.origin + '/'; let svg = '';
     try { const q = qrcode(0, 'M'); q.addData(url); q.make(); svg = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch { svg = ''; }
@@ -163,17 +174,48 @@ window.Cenas = (() => {
     }).join(' ');
     return `${head(c)}<div class="bv-quote">${words}</div>
       <div class="bv-people">${(c.pessoas || []).map(p => `<div class="cn-person">${faces(p)}<div><b>${esc(p.nome)}</b><small>${esc(p.papel)}</small></div></div>`).join('')}</div>
-      ${strip(c.faixa)}
-      <div class="bv-cloud" id="bvCloud"><div class="bvc-h">${head(c, 'Two words · check-in')}<h2 class="cn-h2">${fire(c.nuvemTitulo || 'How the crew *arrived* today')}</h2></div><canvas id="bvCanvas"></canvas><div class="bvc-n"><b id="bvCount">0</b> travelers shared their two words</div></div>`;
+      ${strip(c.faixa)}`;
   }
-  // A nuvem das "duas palavras" (o que cada pessoa respondeu logo depois do login): entra quando o Doc clica em "Mostrar a nuvem"
-  function mBoasvindas(c, first) {
-    const w = (st && st.words) || { top: [], count: 0 }, on = !!(c.live && c.live.nuvem);
-    if (first || !L.bvCloud) L.bvCloud = window.NuvemDePalavras && $('#bvCanvas') ? new NuvemDePalavras($('#bvCanvas'), { scale: 1.6, wide: true, empty: 'WAITING FOR THE FIRST WORDS…' }) : null;
-    if (L.bvCloud) L.bvCloud.sync(w.top);
-    const n = $('#bvCount'); if (n) n.textContent = w.count;
-    if (on && !root.classList.contains('cloud')) { root.classList.add('cloud'); if (!first) { sfx('reveal'); flash(); } }
-    else if (!on) root.classList.remove('cloud');
+
+  /* ================= NUVEM DE PALAVRAS · DUAS PERGUNTAS =================
+   * Logo depois das boas-vindas: os celulares mostram as duas perguntas (texto livre) e cada uma forma a sua nuvem no telão.
+   * No painel o Doc pode dar destaque a uma pergunta por vez (foco). */
+  function vNuvem(c) {
+    const q = c.perguntas || [];
+    return `<div class="cn-top nv-top"><div>${head(c)}<h1 class="cn-h1">${fire(c.titulo)}</h1></div>
+        <div class="nv-side"><div class="nv-call"><span>📱</span><div><b>ANSWER ON YOUR PHONE</b><small>the two questions are in the app</small></div></div>
+          <div class="nv-n"><b id="nvCount">0</b><small>ANSWERS</small></div></div></div>
+      <div class="nv-grid" id="nvGrid" data-foco="0">${q.map((t, i) => `<div class="nv-box" data-i="${i + 1}" style="--c:${i ? 'var(--orange)' : 'var(--cyan)'}">
+        <div class="nv-q"><b>${i + 1}</b><span>${esc(t)}</span></div><canvas id="nvC${i}"></canvas></div>`).join('')}</div>`;
+  }
+  function mNuvem(c, first) {
+    const w = (st && st.words) || { clouds: [[], []], count: 0 }, foco = (c.live && c.live.foco) || 0, grid = $('#nvGrid'); if (!grid) return;
+    if (first) L.nv = [0, 1].map(i => (window.NuvemDePalavras && $('#nvC' + i) ? new NuvemDePalavras($('#nvC' + i), { scale: 1.5, wide: true, radius: .33, cy: .5, empty: 'WAITING FOR THE FIRST ANSWERS…' }) : null));
+    (L.nv || []).forEach((n, i) => { if (n) n.sync((w.clouds && w.clouds[i]) || []); });
+    const n = $('#nvCount'); if (n) n.textContent = w.count;
+    if (!first && w.count > (L.nvCount || 0)) sfx('blip');
+    if (grid.dataset.foco !== String(foco)) { grid.dataset.foco = foco; if (!first) sfx('reveal'); }
+    L.nvCount = w.count;
+  }
+
+  /* ================= ESTRATÉGIA 2026 =================
+   * O plano estratégico LATAM GDT 2026 no visual do filme: o destino (Desire at Scale) em cima, os três motores do meio
+   * (Growth, Operational Effectiveness, Net Productivity) e a estrada (Governance & Culture) embaixo. No painel o Doc pode
+   * dar destaque a uma parte por vez. */
+  const P26_C = { topo: '#ff4fa3', p1: 'var(--green)', p2: 'var(--cyan)', p3: 'var(--orange)', base: 'var(--yellow)' };
+  function vPlano26(c) {
+    const item = x => `<li><b>${esc(x.t)}</b>${x.d ? `<span>${esc(x.d)}</span>` : ''}</li>`;
+    const band = (k, n, tag) => { const p = c[k] || { itens: [] }; return `<section class="p26-band" data-p="${n}" style="--c:${P26_C[k]};--i:${n - 1}">
+        <div class="p26-bh"><small>${tag}</small><h3>${esc(p.t)}</h3>${p.s ? `<em>${esc(p.s)}</em>` : ''}</div><ul class="p26-row n${Math.min(4, p.itens.length)}">${p.itens.map(item).join('')}</ul></section>`; };
+    const col = (k, n) => { const p = c[k] || { itens: [] }; return `<section class="p26-col ${p.itens.length > 6 ? 'cmp' : ''}" data-p="${n}" style="--c:${P26_C[k]};--i:${n - 1}">
+        <div class="p26-ch"><i>0${n - 1}</i><div><small>ENGINE 0${n - 1}</small><h3>${esc(p.t)}</h3>${p.s ? `<em>${esc(p.s)}</em>` : ''}</div></div><ul>${p.itens.map(item).join('')}</ul></section>`; };
+    return `<div class="cn-top p26-top"><div>${head(c)}<h1 class="cn-h1">${fire(c.titulo)}</h1></div>
+        <div class="p26-leads">${(c.lideres || []).map(x => `<div class="cn-person">${faces(x)}<div><b>${esc(x.nome)}</b><small>${esc(x.papel)}</small></div></div>`).join('')}</div></div>
+      <div class="p26" id="p26" data-foco="0">${band('topo', 1, 'DESTINATION')}<div class="p26-cols">${col('p1', 2)}${col('p2', 3)}${col('p3', 4)}</div>${band('base', 5, 'THE ROAD')}</div>`;
+  }
+  function mPlano26(c, first) {
+    const f = (c.live && c.live.foco) || 0, el = $('#p26'); if (!el) return;
+    if (el.dataset.foco !== String(f)) { el.dataset.foco = f; if (!first) sfx(f ? 'blip' : 'reveal'); }
   }
 
   /* ================= JORNADA 2026 · ALMANAQUE ================= */
@@ -184,6 +226,7 @@ window.Cenas = (() => {
       <div class="al-rib"><div class="line"></div><div class="fill" id="alFill"></div>
         ${['Q1', 'Q2', 'Q3', 'Q4'].map((q, i) => `<span class="q" style="left:${(i * 3 + 1) / 11 * 100}%">${q}</span>`).join('')}
         ${c.meses.map((m, i) => `<div class="mo ${c.itens.some(x => x.m === i && x.k === 'E') ? 'dl' : ''}" data-i="${i}" style="left:${i / 11 * 100}%"><i></i><span>${m}</span></div>`).join('')}
+        <span class="rw">◀◀ REWINDING 2026</span>
         <div class="car" id="alCar"><i class="trail"></i><canvas aria-hidden="true"></canvas></div></div>
       <div class="al-focus"><div class="al-month"><div class="q" id="alQ"></div><div class="mn"><span class="bttf" id="alMn"></span></div><div class="stt" id="alSt"></div>${hostsRow(c, 'col')}</div>
         <div class="al-cards" id="alCards"></div>
@@ -203,11 +246,12 @@ window.Cenas = (() => {
       <div class="pg-lead"><b>2026 LEADERSHIP TAKEAWAYS</b><span>${esc(pg.lideranca)}</span></div>`;
   }
   function alMonth(c, i, animate) {
-    const blank = i < 0, m = Math.max(0, i), it = blank ? [] : c.itens.filter(x => x.m === m), off = new Set(c.live.off || []);
+    // A viagem é de trás para a frente: a DeLorean parte de dezembro e vai de ré, mês a mês, até janeiro (o rastro fica à direita).
+    const blank = i < 0, m = blank ? 11 : i, it = blank ? [] : c.itens.filter(x => x.m === m), off = new Set(c.live.off || []);
     const car = $('#alCar'); car.style.left = m / 11 * 100 + '%'; if (animate) { car.classList.add('mv'); later(1000, () => car.classList.remove('mv')); }
-    root.classList.toggle('blank', blank); // antes de o ano começar: a DeLorean na estrada, pronta para partir
-    $('#alFill').style.width = m / 11 * 100 + '%';
-    $$('.al-rib .mo').forEach((d, k) => { d.classList.toggle('cur', !blank && k === m); d.classList.toggle('seen', !blank && k < m); });
+    root.classList.toggle('blank', blank); // antes de a viagem começar: a DeLorean na estrada, pronta para partir
+    $('#alFill').style.width = (11 - m) / 11 * 100 + '%';
+    $$('.al-rib .mo').forEach((d, k) => { d.classList.toggle('cur', !blank && k === m); d.classList.toggle('seen', !blank && k > m); });
     const mn = $('#alMn'); mn.textContent = c.meses[m]; if (animate) { mn.classList.remove('flip'); void mn.offsetWidth; mn.classList.add('flip'); }
     $('#alQ').textContent = `Q${Math.floor(m / 3) + 1} · 2026`;
     const dl = it.filter(x => x.k === 'E').length, ms = it.filter(x => x.k === 'M').length;
@@ -227,8 +271,8 @@ window.Cenas = (() => {
       (function f(t) { const p = Math.min(1, (t - t0) / d), v = target * (1 - Math.pow(1 - p, 3)); el.textContent = m[1] + v.toFixed(dec).replace('.', sep) + m[3]; if (p < 1 && el.isConnected) requestAnimationFrame(f); else el.textContent = txt; })(t0);
     });
   }
-  // A DeLorean de verdade (o modelo 3D do app, delorean-model.js) na linha do tempo: de perfil, com as rodas girando;
-  // quando o mês muda ela acelera (rodas mais rápidas, luzes acesas e os rastros de fogo). Sem WebGL, entra o desenho simples.
+  // A DeLorean de verdade (o modelo 3D do app, delorean-model.js) na linha do tempo: de perfil, com a frente para a direita
+  // (o futuro). Quando o mês muda ela dá ré (as rodas giram para trás, luzes acesas e os rastros de fogo). Sem WebGL, entra o desenho simples.
   let carModule = null;
   function alCar3d() {
     const box = $('#alCar'), cv = box && box.querySelector('canvas'); if (!cv) return;
@@ -242,7 +286,7 @@ window.Cenas = (() => {
         me.raf = requestAnimationFrame(frame);
         if (t - last < 33 || document.hidden) return;
         const dt = Math.min(.1, (t - last) / 1000), w = cv.clientWidth, h = cv.clientHeight; last = t; if (!w || !h || view.lost) return;
-        boost += ((box.classList.contains('mv') ? 1 : 0) - boost) * Math.min(1, dt * 6); spin += dt * (2.2 + boost * 24);
+        boost += ((box.classList.contains('mv') ? 1 : 0) - boost) * Math.min(1, dt * 6); spin -= dt * boost * 26; // parada, as rodas não giram; de ré, giram para trás
         view.resize(w, h, Math.min(devicePixelRatio || 1, 2)); view.setCamera({ x: 0, y: 1.45, z: 7.2 }, { x: 0, y: .66, z: 0 }, 21);
         view.update({ pos: { x: 0, y: .012 + Math.sin(t * .009) * .006, z: 0 }, ry: -.32, e: .3 + boost * .7, flash: 0, pulse: boost * .6, spin, visible: true });
         view.render();
@@ -260,7 +304,7 @@ window.Cenas = (() => {
     else {
       if (p.mes !== l.mes) { alMonth(c, l.mes, true); if (p.mes < 0 && l.mes >= 0) kpiCount(); } // saiu da capa: os números sobem contando
       else if (p.off !== (l.off || []).join()) { alMonth(c, l.mes, false); alLegend(c); }
-      if (l.fim && l.fim !== p.fim && now() - l.fim < 4000) { sfx('reveal'); flash(); confetti(220, .5, .46); } // dezembro: o ano fechou
+      if (l.fim && l.fim !== p.fim && now() - l.fim < 4000) { sfx('reveal'); flash(); confetti(220, .5, .46); } // chegou a janeiro: o ano inteiro foi revisto
     }
     const pg = $('#alPage');
     if (l.pagina && !pg.classList.contains('on')) { pg.innerHTML = alPage(c); void pg.offsetWidth; pg.classList.add('on'); if (!first) sfx('blip'); }
@@ -388,28 +432,52 @@ window.Cenas = (() => {
   const IV_ST = { idle: 'THE BREAK IS ABOUT TO START', run: '● REFUELING…', paused: '❚❚ PAUSED', done: '⚡ 1.21 GW · FULL TANK · BACK TO YOUR SEATS' };
   const vIntervalo = c => `${head(c)}<h1 class="cn-h1">${fire(c.titulo)}</h1>
     <div class="iv-row"><div class="iv-ring"><svg viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="90"/><circle class="fg" id="ivRing" cx="100" cy="100" r="90" stroke-dasharray="565.5" stroke-dashoffset="0"/></svg><div class="cd" id="ivCd">--:--</div></div>
-      <div class="iv-side"><p>${esc(c.texto)}</p><div class="iv-st" id="ivSt"></div></div></div>`;
+      <div class="iv-side"><p>${esc(c.texto)}</p><div class="iv-st" id="ivSt"></div></div></div>
+    <div class="iv-alert" id="ivAlert" role="alert" aria-hidden="true"><i class="ia-stripes"></i>
+      <div class="ia-box"><div class="ia-ico">⚠</div><div class="ia-k">${esc(c.alertaTitulo || 'Emergency alert')}</div><h2>BACK TO YOUR SEATS</h2><p>${esc(c.alertaTexto || '')}</p><small>${esc(c.alertaOrigem || '')}</small></div>
+      <i class="ia-stripes"></i></div>`;
   function tIntervalo(c) {
     const l = c.live, cd = $('#ivCd'); if (!cd) return;
     const ph = l.phase === 'run' && l.endsAt && l.endsAt <= now() ? 'done' : l.phase, left = ph === 'run' ? Math.max(0, Math.ceil((l.endsAt - now()) / 1000)) : ph === 'done' ? 0 : l.remaining;
     cd.textContent = fmt(left); $('#ivRing').style.strokeDashoffset = 565.5 * (1 - left / Math.max(1, l.duration));
     root.dataset.phase = ph; root.classList.toggle('last', ph === 'run' && left <= 60);
     $('#ivSt').textContent = IV_ST[ph] || '';
-    if (ph === 'done' && L.ivPhase === 'run') { flash(); confetti(160, .3, .5); }
+    if (ph === 'done' && L.ivPhase === 'run') flash();
     L.ivPhase = ph;
+    // Alerta de volta do intervalo (o cronômetro zerou ou o Doc disparou): tela cheia, no estilo de um alerta de emergência, com a sirene.
+    const al = l.alerta || 0, box = $('#ivAlert');
+    if (box && al !== (L.ivAlert || 0)) {
+      L.ivAlert = al; clearInterval(L.ivSiren);
+      box.classList.toggle('on', !!al); box.setAttribute('aria-hidden', String(!al)); document.body.classList.toggle('iv-alerting', !!al);
+      if (al && now() - al < 20000) { let n = 0; flash(); sfx('alarm'); L.ivSiren = every(8000, () => { if (++n > 3) return clearInterval(L.ivSiren); sfx('alarm'); }); } // insiste mais três vezes
+    }
   }
 
-  /* ================= VISÃO 2027 · ESTRATÉGIA (arquivo original, sem alterações) ================= */
-  const vVisao = c => `<div class="vs-top"><div>${head(c)}<h1 class="vs-title"><span class="bttf">${esc(c.titulo)}</span></h1></div><div class="vs-side">${hostsRow(c, 'sm')}<span class="vs-note">${esc(c.nota)}</span></div></div>
-    <div class="vs-frame"><iframe id="vsFrame" title="CDIO LATAM 2027 Strategy" src="${esc(c.src)}"></iframe></div>`;
+  /* ================= VISÃO 2027 =================
+   * Primeiro a capa do bloco (o nome e quem conduz). Quando o Doc abre a estratégia, o arquivo original (sem alterações)
+   * ocupa a tela inteira, por cima de tudo: sem moldura, sem o relógio do telão e sem as linhas de TV. */
+  const vVisao = c => `${cover(c, { title: c.titulo, sub: c.nota })}
+    <div class="vs-full" id="vsFull" aria-hidden="true"><iframe id="vsFrame" title="CDIO LATAM 2027 Strategy"></iframe></div>`;
   function mVisao(c, first) {
-    const fr = $('#vsFrame'), intro = !!c.live.intro; if (!fr) return;
+    const fr = $('#vsFrame'), full = $('#vsFull'), intro = !!c.live.intro, open = !!c.live.aberta; if (!fr) return;
+    coverLive(first);
     // Sem a abertura em vídeo, a página vai direto para o mapa da estratégia (igual ao deck): o arquivo não é alterado,
     // só se clica no botão "Go to 2027 Strategy" dele depois de carregar.
-    const skip = () => { try { const d = fr.contentDocument, w = fr.contentWindow; if (!d || L.vsIntro) return; const s = d.createElement('style'); s.textContent = '#intro,#replay{display:none!important}'; d.head.appendChild(s); const k = d.getElementById('intro-skip'); if (k) k.click(); d.documentElement.classList.remove('intro-on'); setTimeout(() => { try { if (typeof w.fit === 'function') w.fit(); } catch { /* segue */ } }, 1000); } catch { /* outra origem: fica como está */ } };
-    if (first) { L.vsIntro = intro; fr.addEventListener('load', skip); if (fr.contentDocument && fr.contentDocument.readyState === 'complete') skip(); }
-    else if (L.vsIntro !== intro) { L.vsIntro = intro; fr.src = c.src; } // o Doc ligou/desligou a abertura: carrega de novo
+    const skip = () => { try { const d = fr.contentDocument, w = fr.contentWindow; if (!d || !d.head || L.vsIntro) return; const s = d.createElement('style'); s.textContent = '#intro,#replay{display:none!important}'; d.head.appendChild(s); const k = d.getElementById('intro-skip'); if (k) k.click(); d.documentElement.classList.remove('intro-on'); setTimeout(() => { try { if (typeof w.fit === 'function') w.fit(); } catch { /* segue */ } }, 1000); } catch { /* outra origem: fica como está */ } };
+    // Sem a abertura, a página já carrega atrás da capa (abre na hora). Com a abertura em vídeo, só carrega quando o Doc abre.
+    if (first) { L.vsIntro = intro; L.vsOpen = false; fr.addEventListener('load', skip); if (!intro) fr.src = c.src; }
+    else if (L.vsIntro !== intro) { L.vsIntro = intro; if (!intro || open) fr.src = c.src; } // o Doc ligou/desligou a abertura: carrega de novo
+    if (open !== L.vsOpen) {
+      L.vsOpen = open;
+      if (open && intro) fr.src = c.src;
+      full.classList.toggle('on', open); full.setAttribute('aria-hidden', String(!open)); document.body.classList.toggle('vs-open', open);
+      if (open && !first) flash();
+      if (open) later(700, () => { try { const w = fr.contentWindow; if (w && typeof w.fit === 'function') w.fit(); } catch { /* segue */ } });
+    }
   }
+
+  /* ================= CAPA DO BLOCO SUCESSO (em português, como a dinâmica) ================= */
+  const vCapaSucesso = c => cover(c, { title: c.titulo, sub: c.sub, label: 'COM', note: '<span>📱</span><b>Em instantes, as dinâmicas acontecem no celular</b>' });
 
   /* ================= MANIFESTO 2027 ================= */
   const vManifesto = c => `<div class="cn-split"><div class="cn-col">${head(c)}
@@ -449,8 +517,8 @@ window.Cenas = (() => {
   }
 
   /* ---------- montagem ---------- */
-  const VIEW = { abertura: vAbertura, agenda: vAgenda, boasvindas: vBoasvindas, almanaque: vAlmanaque, ia: vIa, reconhecimento: vReconhecimento, intervalo: vIntervalo, visao: vVisao, manifesto: vManifesto, mph: vMph };
-  const LIVE = { abertura: mAbertura, agenda: mAgenda, boasvindas: mBoasvindas, almanaque: mAlmanaque, reconhecimento: mReconhecimento, visao: mVisao, mph: mMph, intervalo: tIntervalo };
+  const VIEW = { abertura: vAbertura, agenda: vAgenda, boasvindas: vBoasvindas, nuvem: vNuvem, plano26: vPlano26, capasucesso: vCapaSucesso, almanaque: vAlmanaque, ia: vIa, reconhecimento: vReconhecimento, intervalo: vIntervalo, visao: vVisao, manifesto: vManifesto, mph: vMph };
+  const LIVE = { abertura: mAbertura, agenda: mAgenda, nuvem: mNuvem, plano26: mPlano26, capasucesso: (c, first) => coverLive(first), almanaque: mAlmanaque, reconhecimento: mReconhecimento, visao: mVisao, mph: mMph, intervalo: tIntervalo };
   // o que obriga a desenhar a cena de novo (o conteúdo, ou a fase do reconhecimento); o resto é atualização por cima
   function signature(c) {
     const { live, ...content } = c;
@@ -464,7 +532,7 @@ window.Cenas = (() => {
   }
   function start(first) {
     const c = cena(); if (!c) return;
-    document.body.classList.toggle('cn-clean', c.kind === 'visao'); // a estratégia aparece limpa, sem as linhas de TV por cima
+    if (first) document.body.classList.remove('vs-open', 'iv-alerting'); // a cena foi (re)desenhada: o que estava por cima de tudo sai
     if (c.kind === 'manifesto') later(600, () => typeTo($('#mfTy'), c.pergunta, 70));
     if (LIVE[c.kind]) LIVE[c.kind](c, first);
   }
@@ -485,16 +553,16 @@ window.Cenas = (() => {
     }
     if (LIVE[c.kind]) LIVE[c.kind](c, false);
   }
-  function unmount() { clear(); confetti.run++; const cv = $('#cnConfetti'); if (cv) cv.remove(); document.body.classList.remove('cn-clean', 'ab-playing'); root = null; kind = null; sig = ''; }
+  function unmount() { clear(); confetti.run++; const cv = $('#cnConfetti'); if (cv) cv.remove(); document.body.classList.remove('vs-open', 'iv-alerting', 'ab-playing'); root = null; kind = null; sig = ''; }
   function tick() { const c = cena(); if (c && root && c.kind === 'intervalo') tIntervalo(c); }
   function pulse(p) { if (p && p.kind === 'reconhecimento' && kind === 'reconhecimento') { const c = cena(); if (c && c.live.passo === 'carga') { c.live.carga = p.carga; c.live.nivel = p.nivel || 0; rcCharge(p.carga, p.nivel); } } }
   // O céu e a estrada continuam rodando no fundo em todas as cenas (parado, parecia que o telão tinha travado).
-  // Na estratégia (uma moldura que ocupa a tela inteira) o fundo fica bem escuro e sem raios (calm); nas cenas com texto,
-  // um pouco mais escuro (dim); no intervalo e nos 88 MPH, com o céu vivo.
-  const calm = state => { const c = state && state.cena; return !!c && ['visao', 'abertura'].includes(c.kind); };
-  const dim = state => { const c = state && state.cena; return !!c && !['intervalo', 'mph', 'visao', 'abertura'].includes(c.kind); };
+  // No vídeo de abertura o fundo fica bem escuro e sem raios (calm); nas cenas com texto, um pouco mais escuro (dim);
+  // no intervalo, nas capas dos blocos e nos 88 MPH, com o céu vivo.
+  const calm = state => { const c = state && state.cena; return !!c && c.kind === 'abertura'; };
+  const dim = state => { const c = state && state.cena; return !!c && !['intervalo', 'mph', 'abertura', 'visao', 'capasucesso'].includes(c.kind); };
   // nome para os circuitos de tempo da transição e a frase do deck
-  const TR = { abertura: ['circuits', 'Roads? Where we\'re going, we don\'t need roads.'], agenda: ['circuits', 'Set the time circuits.'], boasvindas: ['clock', 'Doc gathers the crew.'], almanaque: ['speed', 'Our year, month by month.'], ia: ['fuel', 'The butterfly effect.'], reconhecimento: ['clock', 'The lightning is coming.'],
+  const TR = { abertura: ['circuits', 'Roads? Where we\'re going, we don\'t need roads.'], agenda: ['circuits', 'Set the time circuits.'], boasvindas: ['clock', 'Doc gathers the crew.'], nuvem: ['circuits', 'The crew has something to say.'], plano26: ['clock', 'First, where we said we would go.'], capasucesso: ['speed', 'Your future is whatever you make it.'], almanaque: ['speed', 'Our year, month by month.'], ia: ['fuel', 'The butterfly effect.'], reconhecimento: ['clock', 'The lightning is coming.'],
     intervalo: ['fuel', 'Mr. Fusion recharging.'], visao: ['speed', 'Where we\'re going…'], manifesto: ['speed', 'Your future is whatever you make it.'], mph: ['speed', 'Hold on…'] };
   const info = state => { const c = state && state.cena; if (!c) return null; const t = TR[c.kind] || TR.agenda; return { id: 'cena:' + c.kind, type: 'cena', name: plain(c.name), tr: { kind: t[0], ms: 3600, quote: [t[1], `${c.ato ? c.ato.n + ' · ' + c.ato.nome : 'CDIO HC + BPC · 2026 Townhall'}`] } }; };
   return { html, mount, update, unmount, tick, pulse, calm, dim, info, confetti, videos: () => ({ ...Vid.has }) };

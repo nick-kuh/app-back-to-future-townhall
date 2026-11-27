@@ -6,7 +6,7 @@
  *
  *   const nuvem = new NuvemDePalavras(canvas); nuvem.add('texto da resposta'); nuvem.reset(); nuvem.dim = true
  *   nuvem.sync([['palavra', 3], ['outra', 1]])  → deixa a nuvem igual à lista (palavra, quantas vezes); usado pela
- *   nuvem das "duas palavras" das boas-vindas, que chega pronta do servidor. Opções: { scale, wide, empty: 'texto sem palavras' }
+ *   nuvem de palavras do townhall (duas perguntas), que chega pronta do servidor. Opções: { scale, wide, radius, cy, empty: 'texto sem palavras' }
  */
 (function () {
   'use strict';
@@ -64,7 +64,7 @@
     this.dirty = false;
     c.clearRect(0, 0, W, H);
     if (!still) this.rot += .24 * dt;
-    const R = Math.min(W, H) * .32, cx = W / 2, cy = H * .44, f = Math.min(W, H) * .9, cs = Math.cos(this.rot), sn = Math.sin(this.rot);
+    const R = Math.min(W, H) * (this.o.radius || .32), cx = W / 2, cy = H * (this.o.cy || .44), f = Math.min(W, H) * .9, cs = Math.cos(this.rot), sn = Math.sin(this.rot);
     const ax = 1.25 * (this.o.wide ? Math.max(1, Math.min(2.2, W / H * .8)) : 1); // caixas largas: a nuvem se espalha na horizontal
     const proj = p => { const x = p.x * cs - p.z * sn, z = p.x * sn + p.z * cs, y = p.y * .8, s = f / (f + z * R * 1.2); return { x: cx + x * R * ax * s, y: cy + y * R * 1.15 * s, s, z }; };
     const pp = this.parts.map(proj); c.fillStyle = '#7df9ff';

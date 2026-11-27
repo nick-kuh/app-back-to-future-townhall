@@ -79,7 +79,7 @@
 .al-kpi small{display:block;font:700 clamp(7px,.68vw,11px)/1.4 Inter;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-top:.4vh;max-width:7.6vw}
 .al-rib{position:relative;height:12.5vh;margin:.4vh 5vw 0}
 .al-rib .line{position:absolute;left:0;right:0;top:66%;height:3px;background:#2a2550}
-.al-rib .fill{position:absolute;left:0;top:66%;height:3px;width:0;background:linear-gradient(90deg,var(--cyan),var(--yellow),var(--orange));box-shadow:0 0 12px var(--orange);transition:width .9s cubic-bezier(.3,.8,.3,1)}
+.al-rib .fill{position:absolute;right:0;top:66%;height:3px;width:0;background:linear-gradient(90deg,var(--cyan),var(--yellow),var(--orange));box-shadow:0 0 12px var(--orange);transition:width .9s cubic-bezier(.3,.8,.3,1)}
 .al-rib .q{position:absolute;top:0;transform:translateX(-50%);font:400 clamp(7px,.75vw,11px) var(--pixel);color:#6a61a8}
 .al-rib .mo{position:absolute;top:66%;transform:translate(-50%,-50%)}
 .al-rib .mo i{display:block;width:1.7vh;height:1.7vh;border-radius:50%;border:2px solid #5c5490;background:#0b0618;margin:1.5px auto 0;transition:.3s}
@@ -92,9 +92,10 @@
 .al-rib .car{position:absolute;z-index:2;top:66%;left:0;width:clamp(120px,12.5vw,240px);aspect-ratio:2.5;transform:translate(-50%,-79%);transition:left .9s cubic-bezier(.3,.8,.3,1);filter:drop-shadow(0 0 10px rgba(46,230,214,.45));pointer-events:none}
 .al-rib .car canvas,.al-rib .car svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 .al-rib .car svg{inset:22% 14% 8%;width:72%;height:70%}
-.al-rib .car .trail{position:absolute;right:62%;top:76.5%;width:0;height:.5vh;border-radius:9px;background:linear-gradient(90deg,transparent,#ff2a00 30%,#ff9a12 70%,#ffe65c);box-shadow:0 0 14px rgba(255,106,0,.9);opacity:0;transition:width .25s,opacity .5s}
+.al-rib .car .trail{position:absolute;left:62%;top:76.5%;width:0;height:.5vh;border-radius:9px;background:linear-gradient(270deg,transparent,#ff2a00 30%,#ff9a12 70%,#ffe65c);box-shadow:0 0 14px rgba(255,106,0,.9);opacity:0;transition:width .25s,opacity .5s}
 .al-rib .car.mv{filter:drop-shadow(0 0 14px rgba(255,160,40,.75))}
 .al-rib .car.mv .trail{width:120%;opacity:1}
+.al-rib .rw{position:absolute;left:50%;top:0;transform:translateX(-50%);white-space:nowrap;font:400 clamp(7px,.75vw,11px) var(--pixel);letter-spacing:1px;color:var(--orange);text-shadow:0 0 10px rgba(255,106,0,.7);animation:blink 1.6s steps(2) infinite}
 .al-focus{display:grid;grid-template-columns:21% 1fr;gap:1.2vw;flex:1;min-height:0;position:relative}
 /* antes de o ano começar: a DeLorean 3D na estrada, pronta para partir (no lugar do painel do mês e dos cartões) */
 /* CAPA do bloco (antes de o ano começar): só o nome do bloco, quem conduz e a DeLorean na estrada.
@@ -325,16 +326,11 @@
 .iv-st{margin-top:3vh;font:400 clamp(10px,1.1vw,18px) var(--pixel);color:var(--cyan);letter-spacing:2px;line-height:1.9;text-shadow:0 0 10px rgba(46,230,214,.6)}
 
 /* ---------- Visão 2027: a estratégia (página original dentro de uma moldura) ---------- */
-.cn-visao{gap:1.2vh;width:100%}
-.scene.projection-scene:has(.cn-visao){padding:clamp(52px,6.4vh,76px) 2.4vw 2.4vh}
-.vs-top{display:flex;justify-content:space-between;align-items:flex-end;gap:2vw}
-.vs-title{font-size:clamp(26px,3.8vw,66px);line-height:1.08;margin-top:.4vh}
-.vs-title .bttf{display:inline-block;padding:0 .08em}
-.vs-note{font:500 clamp(11px,1.1vw,17px) Inter;color:var(--muted);padding-bottom:.6vh}
-.vs-side{display:flex;flex-direction:column;align-items:flex-end;gap:.8vh;flex:none}
-.vs-frame{flex:1;min-height:0;border-radius:18px;overflow:hidden;border:3px solid rgba(255,210,31,.6);box-shadow:0 0 50px rgba(255,106,0,.3);background:#f7f6f3}
-.vs-frame iframe{width:100%;height:100%;border:0;display:block}
-body.cn-clean .crt{display:none}
+.vs-full{position:fixed;inset:0;z-index:40;background:#f7f6f3;opacity:0;visibility:hidden;transition:opacity .5s,visibility 0s .5s}
+.vs-full.on{opacity:1;visibility:visible;transition:opacity .6s}
+.vs-full iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
+/* a estratégia aberta ocupa a tela inteira: sem o relógio do telão, sem as linhas de TV e sem os avisos do canto */
+body.vs-open .osd,body.vs-open .crt,body.vs-open .phonetag,body.vs-open .sound-chip{display:none}
 
 /* ---------- 88 MPH ---------- */
 .cn-mph{align-items:center;text-align:center;gap:1.6vh}
@@ -388,14 +384,6 @@ body.cn-clean .crt{display:none}
 .ag-it .fone{font-style:normal;font-size:.9em;margin-left:.25em}
 .ag-note{flex:none;text-align:right;font:700 clamp(10px,1vw,16px) var(--led);letter-spacing:2px;color:var(--muted);margin-top:-.4vh}
 
-/* ---- boas-vindas: a nuvem das "duas palavras" cobre a cena quando o Doc clica em "Mostrar a nuvem" ---- */
-.bv-cloud{position:absolute;inset:-1vh -1vw;z-index:6;display:flex;flex-direction:column;gap:.6vh;padding:1vh 1vw;border-radius:20px;background:radial-gradient(ellipse at 50% 46%,rgba(24,12,60,.98),rgba(5,3,12,.985) 80%);box-shadow:0 0 0 2px rgba(46,230,214,.25);opacity:0;visibility:hidden;transform:scale(1.03);transition:opacity .6s,transform .6s,visibility 0s .6s}
-.cn-boasvindas.cloud .bv-cloud{opacity:1;visibility:visible;transform:none;transition:opacity .6s,transform .6s}
-.bv-cloud canvas{flex:1;min-height:0;width:100%;display:block}
-.bvc-h{flex:none}
-.bvc-n{flex:none;text-align:center;font:700 clamp(12px,1.3vw,22px) var(--led);letter-spacing:2px;color:var(--muted);padding-bottom:.6vh}
-.bvc-n b{color:var(--yellow)}
-
 /* ---- vídeo de abertura: o cartão do evento e, tocando, o vídeo em tela cheia ---- */
 .cn-abertura{align-items:center;justify-content:center;text-align:center}
 .ab-card{display:flex;flex-direction:column;align-items:center;gap:2vh;cursor:pointer}
@@ -412,3 +400,92 @@ body.cn-clean .crt{display:none}
 .cn-abertura.playing .ab-video{opacity:1;visibility:visible;transition:opacity .6s}
 .cn-abertura.playing .ab-card{visibility:hidden}
 body.ab-playing .osd,body.ab-playing .crt,body.ab-playing .phonetag,body.ab-playing .sound-chip{display:none}
+
+/* ===== CAPA DE BLOCO (Visão 2027 e Sucesso): o nome do bloco, quem conduz e a DeLorean na estrada ===== */
+.cv{flex:1;min-height:0;display:flex;align-items:center;gap:3vw;animation:cn-up .6s both}
+.cv-txt{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:2.2vh}
+.cv-arrow{display:block;width:min(30vw,520px);height:1.5vh;background:linear-gradient(90deg,#ff2a12,#ff8a0e 55%,#ffe65c);clip-path:polygon(0 30%,92% 30%,92% 0,100% 50%,92% 100%,92% 70%,0 70%);filter:drop-shadow(0 0 10px rgba(255,138,0,.7));animation:cv-arrow .9s cubic-bezier(.2,.8,.2,1) both}
+@keyframes cv-arrow{from{transform:scaleX(0);transform-origin:left;opacity:0}to{transform:none;transform-origin:left;opacity:1}}
+.cv-title{font-size:clamp(44px,6.8vw,124px);line-height:1.04}
+.cv-title.long{font-size:clamp(34px,5.1vw,94px)}
+.cv-title .bttf{display:inline-block;padding:.04em .1em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.cv-sub{font:600 clamp(15px,1.8vw,31px)/1.35 Inter;color:var(--txt);max-width:26ch}
+.cv-hosts{margin-top:.6vh}
+.cv-note{display:flex;align-items:center;gap:.8vw;padding:.9vh 1.3vw;border:2px solid var(--cyan);border-radius:99px;background:rgba(5,4,9,.85);box-shadow:0 0 20px rgba(46,230,214,.35)}
+.cv-note span{font-size:clamp(18px,1.8vw,30px)}
+.cv-note b{font:700 clamp(11px,1.15vw,20px) Inter;color:var(--cyan)}
+.cv-car{flex:none;width:52%;height:auto;aspect-ratio:16/10;max-height:100%}
+
+/* ===== NUVEM DE PALAVRAS · DUAS PERGUNTAS ===== */
+.cn-nuvem{gap:1.4vh;width:100%}
+.nv-top{align-items:center}
+.nv-top .cn-h1{font-size:clamp(26px,3.6vw,62px);white-space:nowrap}
+.nv-side{display:flex;align-items:center;gap:1.6vw;flex:none}
+.nv-call{display:flex;align-items:center;gap:.9vw;padding:1vh 1.4vw;border:2px solid var(--cyan);border-radius:14px;background:rgba(5,4,9,.85);box-shadow:0 0 22px rgba(46,230,214,.35)}
+.nv-call span{font-size:clamp(22px,2.4vw,42px);animation:pcbuzz 1.6s ease-in-out infinite}
+.nv-call b{display:block;font:900 clamp(11px,1.15vw,20px) var(--display);letter-spacing:2px;color:var(--cyan)}
+.nv-call small{display:block;font:600 clamp(9px,.85vw,14px) Inter;color:var(--muted);margin-top:.2vh}
+.nv-n{text-align:center;line-height:1}
+.nv-n b{display:block;font:700 clamp(30px,4.2vw,74px) var(--led);color:var(--yellow);text-shadow:0 0 18px rgba(255,210,31,.6)}
+.nv-n small{font:400 clamp(7px,.7vw,11px) var(--pixel);color:var(--muted);letter-spacing:2px}
+.nv-grid{flex:1;min-height:0;display:flex;gap:1.4vw}
+.nv-box{position:relative;flex:1 1 0;min-width:0;display:flex;flex-direction:column;border:2px solid color-mix(in srgb,var(--c) 55%,#2a2550);border-top:6px solid var(--c);border-radius:16px;overflow:hidden;background:radial-gradient(ellipse at 50% 46%,rgba(29,20,70,.9),rgba(5,3,12,.94) 78%);box-shadow:0 0 30px color-mix(in srgb,var(--c) 22%,transparent);transition:flex-grow .7s cubic-bezier(.3,.8,.3,1),opacity .5s,margin .7s}
+.nv-q{flex:none;display:flex;align-items:center;gap:1vw;padding:1.4vh 1.4vw 1vh;text-align:left}
+.nv-q b{flex:none;width:2em;height:2em;display:grid;place-items:center;border-radius:50%;background:var(--c);color:#050409;font:900 clamp(14px,1.5vw,26px) var(--display)}
+.nv-q span{font:800 clamp(15px,1.75vw,30px)/1.25 Inter;color:var(--txt)}
+.nv-box canvas{flex:1;min-height:0;width:100%;display:block}
+.nv-grid[data-foco="1"] .nv-box[data-i="2"],.nv-grid[data-foco="2"] .nv-box[data-i="1"]{flex-grow:0;opacity:0;border-width:0;margin:0 -.7vw}
+
+/* ===== ESTRATÉGIA 2026 (o plano estratégico LATAM GDT no visual do filme) ===== */
+.cn-plano26{gap:1.1vh;width:100%}
+.scene.projection-scene:has(.cn-plano26){padding:clamp(52px,6.6vh,78px) 2.6vw 2.2vh}
+.p26-top{align-items:center}
+.p26-top .cn-h1{font-size:clamp(20px,2.65vw,46px);white-space:nowrap;margin-top:.3vh}
+.p26-top>div:first-child{flex:none}
+.p26-leads{display:flex;gap:.6vw;flex:0 1 auto;min-width:0;justify-content:flex-end}
+.p26-leads .cn-person{padding:.5vh .8vw .6vh .45vw;border-width:2px;border-radius:10px;gap:.5vw;min-width:0;box-shadow:0 4px 0 #0a1750,0 0 18px rgba(36,68,184,.4)}
+.p26-leads .cn-person b{font-size:clamp(8px,.72vw,13px);white-space:nowrap}
+.p26-leads .cn-person small{font-size:clamp(6px,.52vw,9px);letter-spacing:1.5px;margin-top:.2vh;white-space:nowrap}
+.p26-leads .cn-person .av{font-size:clamp(9px,.86vw,15px)}
+.p26{flex:1;min-height:0;display:flex;flex-direction:column;gap:1vh;text-align:left}
+.p26 ul{list-style:none;margin:0;padding:0}
+.p26 h3{font:900 clamp(14px,min(1.7vw,3vh),30px)/1.08 var(--display);letter-spacing:.04em;text-transform:uppercase;color:var(--c);text-shadow:0 0 14px color-mix(in srgb,var(--c) 55%,transparent)}
+.p26 em{display:block;font:600 italic clamp(9px,min(.92vw,1.65vh),16px)/1.3 Inter;color:var(--txt);opacity:.86;margin-top:.3vh}
+.p26 small{display:block;font:400 clamp(6px,.62vw,10px) var(--pixel);letter-spacing:2px;color:var(--muted);margin-bottom:.5vh}
+.p26 li b{display:block;font:800 clamp(10px,min(1.06vw,1.9vh),19px)/1.2 Inter;color:#fff}
+.p26 li span{display:block;font:500 clamp(8px,min(.84vw,1.5vh),15px)/1.3 Inter;color:#bcaee0;margin-top:.15vh}
+.p26-band,.p26-col{background:linear-gradient(180deg,rgba(17,10,40,.93),rgba(8,5,20,.93));border:2px solid color-mix(in srgb,var(--c) 45%,#2a2550);border-radius:12px;animation:cn-up .6s both;animation-delay:calc(var(--i)*.13s);transition:opacity .45s,filter .45s,box-shadow .45s,transform .45s}
+.p26-band{flex:none;display:flex;align-items:stretch;gap:1.3vw;border-left:7px solid var(--c);padding:.9vh 1.1vw}
+.p26-bh{flex:none;width:25vw;display:flex;flex-direction:column;justify-content:center}
+.p26-bh h3{font-size:clamp(13px,min(1.5vw,2.7vh),27px);white-space:nowrap}
+.p26-row{flex:1;display:grid;gap:.8vw;align-items:stretch}
+.p26-row.n1{grid-template-columns:1fr}.p26-row.n2{grid-template-columns:repeat(2,1fr)}.p26-row.n3{grid-template-columns:repeat(3,1fr)}.p26-row.n4{grid-template-columns:repeat(4,1fr)}
+.p26-row li{display:flex;flex-direction:column;justify-content:center;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.1);border-top:3px solid var(--c);border-radius:8px;padding:.6vh .8vw .7vh}
+.p26-cols{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,1fr);gap:1vw}
+.p26-col{display:flex;flex-direction:column;min-height:0;border-top:7px solid var(--c);padding:.9vh 1.1vw 1.1vh}
+.p26-ch{flex:none;display:flex;align-items:center;gap:.9vw;padding-bottom:.8vh;border-bottom:2px dashed color-mix(in srgb,var(--c) 40%,transparent)}
+.p26-ch i{flex:none;font:400 clamp(20px,min(2.6vw,4.6vh),46px)/1 var(--led);font-style:normal;color:var(--c);text-shadow:0 0 14px var(--c);background:#040404;border:1px solid #333;border-radius:6px;padding:.5vh .6vw}
+.p26-ch small{margin-bottom:.3vh}
+.p26-col ul{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:space-evenly;gap:.4vh;margin-top:.6vh}
+.p26-col li{position:relative;padding-left:1.5em}
+.p26-col li::before{content:"⚡";position:absolute;left:0;top:.05em;font-size:clamp(10px,min(1vw,1.8vh),18px);filter:drop-shadow(0 0 6px var(--c))}
+.p26-col.cmp li span{line-height:1.22}
+/* destaque: uma parte por vez (as outras ficam apagadas) */
+.p26[data-foco="1"] [data-p]:not([data-p="1"]),.p26[data-foco="2"] [data-p]:not([data-p="2"]),.p26[data-foco="3"] [data-p]:not([data-p="3"]),.p26[data-foco="4"] [data-p]:not([data-p="4"]),.p26[data-foco="5"] [data-p]:not([data-p="5"]){opacity:.2;filter:saturate(.3)}
+.p26[data-foco="1"] [data-p="1"],.p26[data-foco="2"] [data-p="2"],.p26[data-foco="3"] [data-p="3"],.p26[data-foco="4"] [data-p="4"],.p26[data-foco="5"] [data-p="5"]{box-shadow:0 0 0 2px var(--c),0 0 44px color-mix(in srgb,var(--c) 55%,transparent);transform:scale(1.012)}
+
+/* ===== INTERVALO · alerta de volta (tela cheia, no estilo de um alerta de emergência) ===== */
+.iv-alert{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;justify-content:space-between;align-items:stretch;background:#140202;text-align:center}
+.iv-alert.on{display:flex;animation:ia-bg 1s steps(1) infinite}
+@keyframes ia-bg{50%{background:#5a0606}}
+.ia-stripes{display:block;height:7vh;background:repeating-linear-gradient(-45deg,#ffd21f 0 5vh,#0a0a0a 5vh 10vh);background-size:14.142vh 100%;animation:ia-march 1s linear infinite}
+@keyframes ia-march{to{background-position:14.142vh 0}}
+.ia-box{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.2vh;padding:2vh 6vw}
+.ia-ico{width:15vh;height:15vh;display:grid;place-items:center;border-radius:50%;background:#e21d0c;color:#fff;font-size:9vh;line-height:1;box-shadow:0 0 0 1.2vh rgba(226,29,12,.3),0 0 80px rgba(255,42,18,.8);animation:ia-pulse 1s ease-in-out infinite}
+@keyframes ia-pulse{50%{transform:scale(1.09);box-shadow:0 0 0 2.6vh rgba(226,29,12,.18),0 0 120px rgba(255,42,18,1)}}
+.ia-k{font:400 clamp(12px,1.5vw,26px) var(--pixel);letter-spacing:4px;color:#ffd21f;text-transform:uppercase;text-shadow:0 0 14px rgba(255,210,31,.7)}
+.ia-box h2{font:900 clamp(44px,8.6vw,158px)/1 var(--display);letter-spacing:.02em;color:#fff;text-shadow:0 0 30px rgba(255,60,30,.9),0 6px 0 #000}
+.ia-box p{font:700 clamp(18px,2.5vw,44px)/1.3 Inter;color:#fff;max-width:30ch}
+.ia-box small{font:700 clamp(10px,1.1vw,19px) var(--led);letter-spacing:3px;color:#ffb3a8;text-transform:uppercase}
+body.iv-alerting .osd,body.iv-alerting .crt,body.iv-alerting .phonetag,body.iv-alerting .sound-chip{display:none}
+@media (prefers-reduced-motion:reduce){.iv-alert.on,.ia-stripes,.ia-ico{animation:none}}

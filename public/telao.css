@@ -401,41 +401,19 @@ body.dim .sky{filter:brightness(.56) saturate(.85);transition:filter 1.2s}
 .tr-progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--yellow),var(--orange));box-shadow:0 0 14px var(--orange)}
 @media (prefers-reduced-motion:reduce){.tr.shake .tr-box,.tr-step{animation:none}}
 
-/* ---- check-in: a nuvem das "duas palavras" (no meio, entre o QR e o carro) ---- */
 .qrbox .cta{font:700 clamp(10px,.95vw,15px) var(--led);letter-spacing:2px;color:var(--cyan);max-width:21vw;line-height:1.5;text-shadow:0 0 8px rgba(46,230,214,.5)}
-.welcome-row.has-cloud{gap:2.2vw}
-.welcome-row.has-cloud .qr{width:min(25vh,230px);height:min(25vh,230px)}
-.welcome-row.has-cloud .url{max-width:21vw;font-size:clamp(9px,.9vw,14px)}
-.scene[data-key="welcome"] .welcome-row.has-cloud .checkin-car .carbox{width:min(30vw,30vh*2.2,500px)}
-.scene[data-key="welcome"] .welcome-row.has-cloud .checkin-car .count{font-size:clamp(28px,3.6vw,60px)}
-.wbox{position:relative;flex:none;width:min(38vw,660px);height:min(44vh,430px);border:2px solid #3a3560;border-radius:16px;overflow:hidden;background:radial-gradient(ellipse at 50% 40%,rgba(29,20,64,.84),rgba(5,4,9,.93) 78%);box-shadow:0 0 40px rgba(34,211,238,.18),inset 0 0 60px rgba(0,0,0,.5)}
-.wbox canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-.wbox .wb-k{position:absolute;left:0;right:0;top:12px;z-index:2;font:700 clamp(10px,1vw,15px) var(--led);letter-spacing:3px;color:var(--cyan);text-shadow:0 0 8px rgba(46,230,214,.6)}
-.wbox .wb-n{position:absolute;left:0;right:0;bottom:10px;z-index:2;font:700 clamp(10px,1vw,15px) var(--led);letter-spacing:2px;color:var(--muted)}
-.wbox .wb-n b{color:var(--yellow)}
-
-/* ---- dinâmicas no celular: o aviso em tela cheia ("PEGUE O CELULAR") e a etiqueta fixa no canto ---- */
-.phonecall{position:fixed;inset:0;z-index:28;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;visibility:hidden;background:radial-gradient(ellipse at 50% 50%,rgba(5,3,12,.9),rgba(5,3,12,.68) 70%);transition:opacity .45s,visibility 0s .45s}
-.phonecall.on{opacity:1;visibility:visible;transition:opacity .35s}
-.pc-box{display:flex;align-items:center;gap:4.5vw;padding:5vh 5vw;border:3px solid var(--cyan);border-radius:28px;background:rgba(11,6,24,.94);box-shadow:0 0 90px rgba(46,230,214,.45),inset 0 0 40px rgba(46,230,214,.12);transform:scale(.7);opacity:0}
-.phonecall.on .pc-box{animation:pcin .6s cubic-bezier(.2,1.4,.4,1) forwards}
-@keyframes pcin{to{transform:none;opacity:1}}
-.pc-phone{position:relative;width:13vh;height:23vh;flex:none}
-.pc-dev{position:absolute;inset:0;border:.7vh solid #e9e6ff;border-radius:2.4vh;background:linear-gradient(160deg,#22135a,#0b0618);display:flex;align-items:center;justify-content:center;font-size:7vh;box-shadow:0 0 30px rgba(46,230,214,.6);animation:pcbuzz .9s ease-in-out infinite}
-.pc-dev::after{content:"";position:absolute;bottom:.9vh;left:50%;width:3.4vh;height:.5vh;margin-left:-1.7vh;border-radius:9px;background:#e9e6ff}
+/* ---- o que acontece no celular: um ícone discreto no canto do telão ---- */
 @keyframes pcbuzz{0%,100%{transform:rotate(0)}15%{transform:rotate(-9deg)}30%{transform:rotate(8deg)}45%{transform:rotate(-6deg)}60%{transform:rotate(4deg)}75%{transform:rotate(0)}}
-.pc-phone i{position:absolute;left:50%;top:50%;width:16vh;height:16vh;margin:-8vh 0 0 -8vh;border:.4vh solid var(--cyan);border-radius:50%;opacity:0;animation:pcring 1.8s ease-out infinite}
-.pc-phone i:nth-child(2){animation-delay:.6s}.pc-phone i:nth-child(3){animation-delay:1.2s}
-@keyframes pcring{0%{transform:scale(.5);opacity:.9}100%{transform:scale(2.1);opacity:0}}
-.pc-txt{display:flex;flex-direction:column;gap:1.3vh;text-align:left}
-.pc-txt b{font-size:clamp(40px,6.2vw,108px);line-height:1.05;padding:.04em .1em}
-.pc-txt span{font:800 clamp(18px,2.4vw,42px) Inter;color:var(--txt)}
-.pc-txt small{font:700 clamp(12px,1.25vw,22px) var(--led);letter-spacing:2px;color:var(--cyan)}
-.pc-txt em{font:400 clamp(11px,1.05vw,18px) var(--pixel);font-style:normal;color:var(--yellow);margin-top:.8vh}
-.phonetag{position:fixed;left:28px;top:14px;z-index:21;display:flex;align-items:center;gap:12px;padding:9px 20px 9px 13px;border:2px solid var(--cyan);border-radius:99px;background:rgba(5,4,9,.92);box-shadow:0 0 24px rgba(46,230,214,.45);animation:ptglow 2.2s ease-in-out infinite}
+.phonetag{position:fixed;left:24px;top:12px;z-index:21;display:flex;align-items:center;gap:9px;padding:6px 15px 6px 10px;border:2px solid var(--cyan);border-radius:99px;background:rgba(5,4,9,.92);box-shadow:0 0 18px rgba(46,230,214,.4);animation:ptglow 2.6s ease-in-out infinite}
 .phonetag[hidden]{display:none}
-.pt-ico{font-size:clamp(22px,2.1vw,36px);display:inline-block;animation:pcbuzz 1.6s ease-in-out infinite}
+.pt-ico{font-size:clamp(18px,1.6vw,28px);display:inline-block;animation:pcbuzz 1.6s ease-in-out infinite}
 .pt-tx{display:flex;flex-direction:column;text-align:left;line-height:1.15}
-.pt-tx b{font:900 clamp(13px,1.3vw,23px) var(--display);letter-spacing:2px;color:var(--cyan)}
-.pt-tx small{font:700 clamp(9px,.8vw,14px) var(--led);letter-spacing:2px;color:var(--muted)}
-@keyframes ptglow{50%{box-shadow:0 0 44px rgba(46,230,214,.85)}}
+.pt-tx b{font:900 clamp(11px,.95vw,17px) var(--display);letter-spacing:2px;color:var(--cyan)}
+.pt-tx small{font:700 clamp(8px,.62vw,11px) var(--led);letter-spacing:2px;color:var(--muted)}
+@keyframes ptglow{50%{box-shadow:0 0 32px rgba(46,230,214,.75)}}
+/* encerramento: o chamado para o feedback no celular, acima dos créditos */
+.fbcall{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:1.6vh;padding:10px 22px;border:2px solid var(--cyan);border-radius:99px;background:rgba(5,4,9,.85);box-shadow:0 0 22px rgba(46,230,214,.35)}
+.fbcall span{font-size:clamp(20px,2vw,34px)}
+.fbcall b{font:900 clamp(12px,1.25vw,22px) var(--display);letter-spacing:2px;color:var(--cyan)}
+.fbcall i{font:600 clamp(11px,1.05vw,18px) Inter;font-style:normal;color:var(--muted)}
+.fbcall em{font-style:normal;font-weight:800;color:var(--yellow)}

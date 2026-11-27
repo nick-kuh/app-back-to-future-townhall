@@ -1,25 +1,31 @@
 // Cenas do townhall: o conteúdo do deck "CDIO HC + BPC · 2026 Townhall" (v18, agenda atualizada), em INGLÊS (como
 // no deck original) e com a cara do app. Cada cena é um passo do roteiro (tipo "cena") que o Doc coloca no telão:
-//   abertura (vídeo de abertura) · boasvindas (com a nuvem das "duas palavras") · agenda (plano de voo)
-//   almanaque (Jornada 2026) · ia (IA em 2026) · reconhecimento (prêmios) · intervalo (cronômetro)
-//   visao (Estratégia 2027, arquivo original sem alterações) · manifesto · mph (88 MPH)
+//   abertura (vídeo de abertura) · boasvindas · nuvem (duas perguntas no celular e as nuvens de palavras) · agenda (plano de voo)
+//   plano26 (Estratégia 2026) · almanaque (Jornada 2026, de dezembro para janeiro) · ia (IA em 2026)
+//   reconhecimento (prêmios) · intervalo (cronômetro e o alerta de volta) · visao (capa e a Estratégia 2027 em tela cheia)
+//   capasucesso (capa do bloco Sucesso) · manifesto · mph (88 MPH)
 // Aqui ficam o conteúdo (editável em Preparar → Agenda e cenas), o estado ao vivo de cada cena (mês do almanaque,
 // fase da cerimônia, cronômetro do intervalo…) e os comandos do Painel do Doc. Tudo guardado no banco.
 // As dinâmicas (Conexões, Reflexão e Sucesso) continuam em português e não ficam neste arquivo.
 const { kvGet, kvSet } = require('./db');
 
-const KINDS = ['abertura', 'boasvindas', 'agenda', 'almanaque', 'ia', 'reconhecimento', 'intervalo', 'visao', 'manifesto', 'mph'];
+const KINDS = ['abertura', 'boasvindas', 'nuvem', 'agenda', 'plano26', 'almanaque', 'ia', 'reconhecimento', 'intervalo', 'visao', 'capasucesso', 'manifesto', 'mph'];
+// Cenas que não são conteúdo confidencial do townhall: a nuvem de palavras (precisa dos celulares), o intervalo e a capa do Sucesso
+const OPEN_KINDS = ['nuvem', 'intervalo', 'capasucesso'];
 // name: o nome que aparece no telão e nos celulares (inglês) · label e hint: como o passo aparece no Painel do Doc (português)
 // act: ato (0 a 3) · tr: a frase da transição do telão (do deck)
 const META = {
   abertura: { name: 'Opening video', label: 'Vídeo de abertura', icon: '🎬', act: 0, hint: 'o vídeo que abre o townhall, em tela cheia', tr: 'Roads? Where we\'re going, we don\'t need roads' },
-  boasvindas: { name: 'Welcome', label: 'Boas-vindas e jornada', icon: '👋', act: 0, hint: 'abertura com Monserrat, William e Luciano e a nuvem das duas palavras', tr: 'Doc gathers the crew' },
+  boasvindas: { name: 'Welcome', label: 'Boas-vindas e jornada', icon: '👋', act: 0, hint: 'abertura com Monserrat, William e Luciano', tr: 'Doc gathers the crew' },
+  nuvem: { name: 'Word cloud', label: 'Nuvem de palavras', icon: '☁️', act: 0, hint: 'duas perguntas no celular; as respostas formam as nuvens no telão', tr: 'The crew has something to say' },
   agenda: { name: 'Flight plan', label: 'Plano de voo (agenda)', icon: '🗺️', act: -1, hint: 'a agenda do dia em 4 atos', tr: 'Set the time circuits' },
-  almanaque: { name: '2026 Journey', label: 'Jornada 2026', icon: '📅', act: 1, hint: 'o almanaque do ano, mês a mês, e o resumo em uma página', tr: 'Our year, month by month' },
+  plano26: { name: '2026 Strategy', label: 'Estratégia 2026', icon: '🧭', act: 1, hint: 'o plano estratégico LATAM GDT 2026, no visual do filme (antes da Jornada 2026)', tr: 'First, where we said we would go' },
+  almanaque: { name: '2026 Journey', label: 'Jornada 2026', icon: '📅', act: 1, hint: 'o almanaque do ano, de dezembro para janeiro (o carro vai de ré), e o resumo em uma página', tr: 'Our year, month by month' },
   ia: { name: 'How AI helped us in 2026', label: 'Como a IA nos ajudou em 2026', icon: '🦋', act: 1, hint: 'abertura da Frente 2 (antes da Reflexão)', tr: 'The butterfly effect' },
   reconhecimento: { name: 'Recognition 2026', label: 'Reconhecimento 2026', icon: '🏆', act: 2, hint: 'tributo, Prêmios Torre do Relógio e Hall da Fama', tr: 'The lightning is coming' },
   intervalo: { name: 'Break', label: 'Intervalo', icon: '☕', act: 2, hint: 'cronômetro: reabastecendo a DeLorean', tr: 'Mr. Fusion recharging' },
-  visao: { name: '2027 Vision', label: 'Visão 2027 · Estratégia', icon: '🔭', act: 3, hint: 'a Estratégia CDIO LATAM 2027 (arquivo original) no telão', tr: 'Where we\'re going…' },
+  visao: { name: '2027 Vision', label: 'Visão 2027 · Estratégia', icon: '🔭', act: 3, hint: 'a capa do bloco e, em seguida, a Estratégia CDIO LATAM 2027 (arquivo original) em tela cheia', tr: 'Where we\'re going…' },
+  capasucesso: { name: 'De Volta para o Sucesso', label: 'Sucesso · capa do bloco', icon: '🚀', act: 3, hint: 'a capa do bloco Sucesso: o nome e quem conduz', tr: 'Your future is whatever you make it' },
   manifesto: { name: '2027 Manifesto', label: 'Manifesto 2027', icon: '📜', act: 3, hint: 'abertura da Frente 3 (antes das dinâmicas do Sucesso)', tr: 'Your future is whatever you make it' },
   mph: { name: '88 MPH', label: '88 MPH · Encerramento', icon: '🏎️', act: 3, hint: 'o velocímetro chega a 88 e todo mundo chega a 2027', tr: 'Hold on…' },
 };
@@ -112,7 +118,46 @@ const DEFAULT_CONFIG = () => ({
     kicker: 'Welcome', frase: 'Close 2026 with *pride*. Leave with a clear 2027 *destination*.',
     pessoas: [{ nome: 'Monserrat Diaz', papel: 'WELCOME & JOURNEY' }, { nome: 'William Manganeli', papel: 'WELCOME & JOURNEY' }, { nome: 'Luciano Barbosa', papel: 'LEADERSHIP CONTEXT' }],
     faixa: 'WELCOME · BACK TO THE FUTURE · 2026 → 2027',
-    nuvemTitulo: 'How the crew *arrived* today', // a nuvem das "duas palavras" que cada pessoa responde logo depois do login
+  },
+  // Nuvem de palavras: logo depois das boas-vindas o Doc lança duas perguntas; cada pessoa responde no celular (texto livre)
+  // e as respostas formam uma nuvem por pergunta no telão.
+  nuvem: {
+    kicker: 'Two questions · word cloud', titulo: 'The crew, in *your own words*',
+    perguntas: ['How are you arriving at the Townhall today?', 'Which word best describes your 2026?'],
+    dica: 'Short answers work best: one or two words. Any language.',
+  },
+  // Estratégia 2026 (o slide "LATAM GDT 2026 Strategic Plan"), antes da Jornada 2026: uma faixa de cima, três pilares e a base.
+  plano26: {
+    kicker: '2026 Strategy', titulo: 'LATAM GDT *2026* Strategic Plan',
+    lideres: [{ nome: 'Claudia Meira', papel: 'CDIO BPC LATAM' }, { nome: 'Fermín Grandas', papel: 'CDIO HC LATAM' }, { nome: 'Aldo Medina', papel: 'CDIO Foods LATAM' }],
+    topo: { t: 'Desire at Scale', s: 'Master our Social First Demand Generation Model',
+      itens: [{ t: 'Content & Social First', d: 'Content Studio | UCA (AR) | Insights' }, { t: 'Measurement', d: 'Rapid ROI (BR and MX)' }, { t: 'Influencer & Social Commerce', d: 'Social + dCom | Influencer @ Scale' }] },
+    p1: { t: 'Growth', s: 'Excellence in Frontline Execution · CSP & CD Tooling', itens: [
+      { t: 'Perfect Store', d: 'EDDGIE Horizon 1 & 2' },
+      { t: 'Pricing & Promo Management', d: 'TPM & TPA improvements (MX & BR), Business Process Review, HC BR NRM & Upose' },
+      { t: 'Data Governance & Accuracy', d: 'Brazil Phoenix Data Foundation (BR & Arg), Sellout Governance (BR)' },
+      { t: 'Analytics and Insights delivery', d: 'Enabling better decisions through insights generation' },
+      { t: 'DCommerce Perfect Store Online', d: 'improve operational efficiency & execution (BW paper WIP)' },
+      { t: 'Hermes AI (HPC)', d: '' },
+      { t: 'One view of performance to Action – Foods MX', d: 'Performance Hub joins sell-in, sell-out and customer data for a comprehensive view' },
+    ] },
+    p2: { t: 'Operational Effectiveness', s: 'Reduce complexity, unlock capacity, scale AI', itens: [
+      { t: 'AI at Scale', d: 'Unlock Productivity at Scale @ Copilot' },
+      { t: 'BR Tax Reform (45M UOP)', d: 'Risk 9MM/Day' },
+      { t: 'Improve Cost to Serve', d: '& Capital allocation to boost economy' },
+      { t: 'Customer Ops Efficiency', d: 'LATAM Forecast (FEU), BR & AR Fix the S&OP, BR Demand Plan (SKY 2.0), BR Logistic Tower (Optimums Prime), BR New Hubs: Minecraft H1 (14.2M total), MX Service Optimization' },
+      { t: 'Apolo', d: 'Local and global TSA agreements' },
+    ] },
+    p3: { t: 'Net Productivity', s: 'Digital Manufacturing', itens: [
+      { t: 'PC - MES Aguaí', d: 'Automation, integration, efficiency & cost control' },
+      { t: 'PC - Streamline Valinhos', d: 'WMS Implementation, Smart WH' },
+      { t: 'Factory Capacity Expansion', d: 'HC - Appius (Indaiatuba), BW - Macgyver (Vinhedo), PC - Dreamland (Aguaí), BPC - Hidalgo (Cuernavaca)' },
+      { t: 'BW Reimagine Program', d: 'Spotify I & II, Automatic Goods Receipt (RFID), Specialties (BR & MX)' },
+      { t: 'Foods', d: 'Pouso: Automatic labelling and LGVs. Lerma: Traceability waste avoidance. Pilar: Wrong Addition' },
+      { t: 'Logistic Master Plan', d: 'Digital Dispatch (RFID, BR & MX), WMS Improvements, Yard Management, Factory Digital Dispatch (MX & AR)' },
+    ] },
+    base: { t: 'Governance & Culture', s: '',
+      itens: [{ t: 'Cost Management', d: 'BU\'s Budget Model' }, { t: 'Governance on Projects', d: 'Prioritization with clear results' }, { t: 'Strengthen Relationship', d: 'Business Leaders / BG&BU leaders / GDT team' }] },
   },
   almanaque: {
     kicker: 'Front 2 · Reconnect 2026', titulo: 'Our 2026 *almanac*', sub: 'A year of delivery, month by month.', quem: 'Claudia Meira & Fermín Grandas',
@@ -161,8 +206,13 @@ const DEFAULT_CONFIG = () => ({
         vencedor: 2, citacao: 'For building an AI agent that changes how leadership tracks and decides.' },
     ],
   },
-  intervalo: { kicker: 'Break', titulo: 'Refueling the *DeLorean*', min: 15, texto: 'Mr. Fusion is recharging. Grab a coffee, meet someone new, and be back before the clock hits zero.' },
-  visao: { kicker: '2027 Vision', titulo: 'Where we\'re going…', nota: 'CDIO LATAM 2027 Strategy · interactive', quem: 'Claudia Meira & Fermín Grandas' },
+  intervalo: { kicker: 'Break', titulo: 'Refueling the *DeLorean*', min: 15, texto: 'Mr. Fusion is recharging. Grab a coffee, meet someone new, and be back before the clock hits zero.',
+    // quando o cronômetro zera, o telão e os celulares mostram um "alerta de emergência" (no estilo da defesa civil) chamando todo mundo de volta
+    alertaTitulo: 'Emergency alert', alertaTexto: 'The break is over. The DeLorean leaves for 2027 in a moment: return to your seat now.', alertaOrigem: 'Hill Valley Civil Defense · Time Travel Division' },
+  // Visão 2027: a capa do bloco (o nome do bloco, a frase e quem conduz) e, em seguida, a estratégia em tela cheia
+  visao: { kicker: 'Fast-forward to 2027', titulo: '2027 Vision', nota: 'Where we\'re going… the CDIO LATAM 2027 Strategy.', quem: 'Claudia Meira & Fermín Grandas' },
+  // Capa do bloco Sucesso (a dinâmica é em português): o nome do bloco e quem conduz (Quem conduz cada bloco → Sucesso)
+  capasucesso: { kicker: 'Frente 3 · Compromisso 2027', titulo: 'De Volta para o *Sucesso*', sub: 'Quatro perguntas no celular. Um manifesto coletivo para 2027.' },
   manifesto: { kicker: 'Front 3 · 2027 Commitment', mes: 'DEC', dia: '11', ano: '2027', titulo: 'We know the 2027 destination.', pergunta: 'What made it a success?', faixa: 'INTERACTIVE QR / APP · COLLECTIVE 2027 MANIFESTO', quem: 'Lucas & Giovana' },
   mph: { kicker: 'Closing', antes: '2026 gave us the momentum.', chegada: 'Welcome to 2027', depois: 'Where we\'re going, we build the road together.', quem: 'Young voices · accelerate together' },
   // Quem conduz cada bloco: aparece no telão com o nome e a foto de perfil (como nas boas-vindas).
@@ -224,9 +274,25 @@ function cleanSection(key, cur, p) {
       }
       break;
     case 'boasvindas':
-      txt('kicker', 80); txt('frase', 240); txt('faixa', 120); txt('nuvemTitulo', 80);
+      txt('kicker', 80); txt('frase', 240); txt('faixa', 120);
       if (Array.isArray(p.pessoas)) out.pessoas = p.pessoas.slice(0, 6).map(x => ({ nome: clip(x && x.nome, 60), papel: clip(x && x.papel, 60) })).filter(x => x.nome);
       break;
+    case 'nuvem':
+      txt('kicker', 80); txt('titulo', 100); txt('dica', 160);
+      if (Array.isArray(p.perguntas)) { const q = p.perguntas.slice(0, 2).map(x => clip(x, 140)); if (q.length < 2 || q.some(x => !x)) fail('A nuvem de palavras precisa das duas perguntas.', 400); out.perguntas = q; }
+      break;
+    case 'plano26': {
+      txt('kicker', 80); txt('titulo', 100);
+      const itens = (list, n) => list.slice(0, n).map(x => ({ t: clip(x && x.t, 80), d: clip(x && x.d, 260) })).filter(x => x.t);
+      if (Array.isArray(p.lideres)) out.lideres = p.lideres.slice(0, 5).map(x => ({ nome: clip(x && x.nome, 60), papel: clip(x && x.papel, 60) })).filter(x => x.nome);
+      for (const k of ['topo', 'p1', 'p2', 'p3', 'base']) {
+        const v = p[k]; if (!v || typeof v !== 'object') continue;
+        out[k] = { t: clip(v.t ?? cur[k].t, 60) || cur[k].t, s: clip(v.s ?? cur[k].s, 140), itens: Array.isArray(v.itens) ? itens(v.itens, ['topo', 'base'].includes(k) ? 4 : 10) : cur[k].itens };
+        if (!out[k].itens.length) fail('Cada parte da Estratégia 2026 precisa de pelo menos um item.', 400);
+      }
+      break;
+    }
+    case 'capasucesso': txt('kicker', 80); txt('titulo', 80); txt('sub', 160); break;
     case 'almanaque':
       txt('kicker', 80); txt('titulo', 80); txt('sub', 160); txt('quem', 80); txt('kpiEntregas', 60); txt('kpiBeneficios', 60); txt('fonte', 400);
       if (Array.isArray(p.kpis)) out.kpis = p.kpis.slice(0, 4).map(x => ({ v: clip(x && x.v, 12), l: clip(x && x.l, 60) })).filter(x => x.v);
@@ -255,7 +321,7 @@ function cleanSection(key, cur, p) {
         if (p.exemplo === undefined && JSON.stringify(premios.map(x => x.indicados)) !== JSON.stringify(cur.premios.map(x => x.indicados))) out.exemplo = false; // indicados editados: deixam de ser "de exemplo"
       }
       break;
-    case 'intervalo': txt('kicker', 80); txt('titulo', 100); txt('texto', 300); if (p.min !== undefined) out.min = int(p.min, 1, 120, cur.min); break;
+    case 'intervalo': txt('kicker', 80); txt('titulo', 100); txt('texto', 300); txt('alertaTitulo', 40); txt('alertaTexto', 200); txt('alertaOrigem', 80); if (p.min !== undefined) out.min = int(p.min, 1, 120, cur.min); break;
     case 'visao': txt('kicker', 100); txt('titulo', 80); txt('nota', 100); txt('quem', 80); break;
     case 'manifesto': txt('kicker', 80); txt('mes', 6); txt('dia', 4); txt('ano', 6); txt('titulo', 120); txt('pergunta', 120); txt('faixa', 120); txt('quem', 80); break;
     case 'mph': txt('kicker', 80); txt('antes', 160); txt('chegada', 60); txt('depois', 160); txt('quem', 80); break;
@@ -286,11 +352,12 @@ const DRAW_MS = 8600;      // sorteio do prêmio: holofote girando, pausa, raio 
 const PLAY_MS = 3200;      // "tocar o ano": um mês a cada 3,2 s (como no deck)
 const defaultState = () => ({
   abertura: { play: false, at: 0, fim: false },                                                 // vídeo de abertura: tocando, desde quando, terminou
-  boasvindas: { nuvem: false },                                                                 // a nuvem das "duas palavras" no telão
+  nuvem: { foco: 0 },                                                                           // nuvens de palavras: 0 = as duas perguntas · 1 ou 2 = só uma em destaque
+  plano26: { foco: 0 },                                                                         // Estratégia 2026: 0 = tudo · 1 a 5 = uma parte em destaque
   almanaque: { mes: -1, tocando: false, pagina: false, fim: 0, off: [] },                       // mês -1 = ainda em branco
   reconhecimento: { fase: 'intro', premio: null, passo: 'categoria', at: 0, carga: 0, feitos: [], video: false },
-  intervalo: { phase: 'idle', endsAt: null, remaining: null },
-  visao: { intro: false },
+  intervalo: { phase: 'idle', endsAt: null, remaining: null, alerta: null },                 // alerta: quando o "alerta de emergência" de volta do intervalo foi disparado
+  visao: { intro: false, aberta: false },                                                     // aberta: false = a capa do bloco · true = a estratégia em tela cheia
   mph: { at: null },
 });
 
@@ -358,7 +425,10 @@ function createCenas() {
     switch (kind) {
       case 'abertura': return { ...base, ...config.abertura, live: { ...state.abertura } };
       case 'agenda': return { ...base, ...agendaView(ctx) };
-      case 'boasvindas': return { ...base, ...config.boasvindas, live: { ...state.boasvindas } };
+      case 'boasvindas': return { ...base, ...config.boasvindas };
+      case 'nuvem': return { ...base, ...config.nuvem, live: { ...state.nuvem } };
+      case 'plano26': return { ...base, ...config.plano26, live: { ...state.plano26 } };
+      case 'capasucesso': return { ...base, ...config.capasucesso, quem: names(hosts('sucesso')) };
       case 'almanaque': { const c = config.almanaque, s = state.almanaque; return { ...base, kicker: c.kicker, titulo: c.titulo, sub: c.sub, quem: names(hosts('almanaque')) || c.quem, kpis: c.kpis, kpiEntregas: c.kpiEntregas, kpiBeneficios: c.kpiBeneficios, itens: c.itens, fonte: c.fonte, pagina: c.pagina, stats: almanaqueStats(), meses: MONTHS, bus: BUS, tipos: TIPOS, live: { ...s } }; }
       case 'ia': { const { nota, ...c } = config.ia; return { ...base, ...c }; } // a nota é para quem apresenta: fica só no painel
       case 'reconhecimento': {
@@ -370,7 +440,7 @@ function createCenas() {
           carga: c.carga || 'mic', quem: names(hosts('reconhecimento')),
           live: { fase: s.fase, premio: s.premio, passo: s.passo, at: s.at, carga: s.carga, nivel: s.passo === 'carga' ? s.nivel || 0 : 0, feitos: s.feitos, video: !!s.video, sorteioMs: DRAW_MS } };
       }
-      case 'intervalo': { const c = config.intervalo, s = state.intervalo; return { ...base, ...c, live: { phase: s.phase, endsAt: s.endsAt, remaining: s.remaining === null ? c.min * 60 : s.remaining, duration: s.duration || c.min * 60 } }; }
+      case 'intervalo': { const c = config.intervalo, s = state.intervalo; return { ...base, ...c, live: { phase: s.phase, endsAt: s.endsAt, remaining: s.remaining === null ? c.min * 60 : s.remaining, duration: s.duration || c.min * 60, alerta: s.alerta || null } }; }
       case 'visao': return { ...base, ...config.visao, quem: names(hosts('visao')) || config.visao.quem, src: '/estrategia-2027.html', live: { ...state.visao } };
       case 'manifesto': return { ...base, ...config.manifesto };
       case 'mph': return { ...base, ...config.mph, live: { ...state.mph } };
@@ -378,32 +448,33 @@ function createCenas() {
     }
   }
   // quem conduz um bloco (nomes): o servidor junta a foto de perfil de cada um
-  const hosts = key => (HOST_KEYS.includes(key) ? (config.anfitrioes[key] || []).slice() : []);
+  const hosts = key => { const k = key === 'capasucesso' ? 'sucesso' : key; return HOST_KEYS.includes(k) ? (config.anfitrioes[k] || []).slice() : []; }; // a capa do Sucesso mostra quem conduz o Sucesso
   const especial = () => ({ nomes: (config.anfitrioes.especial || []).slice(), nota: config.anfitrioes.especialNota || '' }); // participação especial (Conexões)
   const names = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} & ${list[list.length - 1]}` : list[0] || '');
   const evento = () => ({ ...config.evento });
   const creditos = () => ({ ...config.creditos, titulo: config.evento.titulo, sub: config.evento.sub });
-  const adminState = () => ({ kinds: KINDS, meta: META, config, state, stats: almanaqueStats(), months: MONTHS, bus: BUS, tipos: TIPOS, drawMs: DRAW_MS });
+  const adminState = () => ({ kinds: KINDS, open: OPEN_KINDS, meta: META, config, state, stats: almanaqueStats(), months: MONTHS, bus: BUS, tipos: TIPOS, drawMs: DRAW_MS });
 
   /* ---------- almanaque ---------- */
   function stopPlay() { clearInterval(playT); playT = null; clearTimeout(pageT); pageT = null; state.almanaque.tocando = false; }
+  // A Jornada 2026 é contada de trás para a frente: começa em dezembro e o carro vai de ré, mês a mês, até janeiro.
   function almanaque(a) {
     const s = state.almanaque;
     switch (a.action) {
-      case 'mes': stopPlay(); s.mes = int(a.mes, -1, 11, 0); s.pagina = false; break;
-      case 'prox': stopPlay(); s.mes = Math.min(11, s.mes + 1); s.pagina = false; break;
-      case 'ant': stopPlay(); s.mes = Math.max(0, s.mes - 1); s.pagina = false; break;
+      case 'mes': stopPlay(); s.mes = int(a.mes, -1, 11, 11); s.pagina = false; break;
+      case 'prox': stopPlay(); s.mes = s.mes < 0 ? 11 : Math.max(0, s.mes - 1); s.pagina = false; break;   // próximo passo da viagem: um mês para trás
+      case 'ant': stopPlay(); s.mes = s.mes < 0 ? 11 : Math.min(11, s.mes + 1); s.pagina = false; break;   // volta um passo: um mês para a frente
       case 'tocar': {
         if (s.tocando) { stopPlay(); break; }
         stopPlay(); s.pagina = false; s.tocando = true;
-        if (s.mes < 0 || s.mes >= 11) s.mes = 0;
+        if (s.mes <= 0) s.mes = 11;                                                                         // em branco (ou já em janeiro): parte de dezembro
         playT = setInterval(() => {
-          if (s.mes >= 11) { // chegou a dezembro: fanfarra no telão e, logo depois, o resumo em uma página
+          if (s.mes <= 0) { // chegou a janeiro: fanfarra no telão e, logo depois, o resumo em uma página
             clearInterval(playT); playT = null; s.tocando = false; s.fim = now(); emit();
             pageT = setTimeout(() => { pageT = null; s.pagina = true; emit(); }, 2600);
             return;
           }
-          s.mes++; emit();
+          s.mes--; emit();
         }, PLAY_MS);
         break;
       }
@@ -488,15 +559,18 @@ function createCenas() {
   function armBreak() {
     clearTimeout(breakT); breakT = null;
     const s = state.intervalo;
-    if (s.phase === 'run' && s.endsAt) breakT = setTimeout(() => { breakT = null; s.phase = 'done'; s.endsAt = null; s.remaining = 0; emit({ title: 'Break is over', body: 'The DeLorean is refueled. Back to your seats!' }); }, Math.max(0, s.endsAt - now()) + 50);
+    // o cronômetro zerou: dispara o "alerta de emergência" no telão e nos celulares
+    if (s.phase === 'run' && s.endsAt) breakT = setTimeout(() => { breakT = null; s.phase = 'done'; s.endsAt = null; s.remaining = 0; s.alerta = now(); emit({ title: `🚨 ${config.intervalo.alertaTitulo}`, body: config.intervalo.alertaTexto }); }, Math.max(0, s.endsAt - now()) + 50);
   }
   function intervalo(a) {
     const s = state.intervalo, left = () => (s.phase === 'run' && s.endsAt ? Math.max(0, Math.ceil((s.endsAt - now()) / 1000)) : s.remaining === null ? config.intervalo.min * 60 : s.remaining);
     switch (a.action) {
-      case 'start': { const d = a.min ? int(a.min, 1, 120, config.intervalo.min) * 60 : config.intervalo.min * 60; s.duration = d; s.remaining = d; s.endsAt = now() + d * 1000; s.phase = 'run'; break; }
+      case 'start': { const d = a.min ? int(a.min, 1, 120, config.intervalo.min) * 60 : config.intervalo.min * 60; s.duration = d; s.remaining = d; s.endsAt = now() + d * 1000; s.phase = 'run'; s.alerta = null; break; }
+      case 'alerta': s.alerta = now(); armBreak(); return emit({ title: `🚨 ${config.intervalo.alertaTitulo}`, body: config.intervalo.alertaTexto }); // dispara (ou repete) o alerta na hora
+      case 'silenciar': s.alerta = null; break;
       case 'pause': if (s.phase === 'run') { s.remaining = left(); s.endsAt = null; s.phase = 'paused'; } break;
       case 'resume': if (s.phase === 'paused') { s.endsAt = now() + s.remaining * 1000; s.phase = 'run'; } break;
-      case 'add': { const d = int(a.seconds, -600, 600, 60), r = Math.max(0, left() + d); s.duration = Math.max(1, (s.duration || config.intervalo.min * 60) + d); if (s.phase === 'run') s.endsAt = now() + r * 1000; else { s.remaining = r; if (s.phase === 'done' && r > 0) s.phase = 'paused'; } break; }
+      case 'add': { const d = int(a.seconds, -600, 600, 60), r = Math.max(0, left() + d); s.duration = Math.max(1, (s.duration || config.intervalo.min * 60) + d); if (s.phase === 'run') s.endsAt = now() + r * 1000; else { s.remaining = r; if (s.phase === 'done' && r > 0) { s.phase = 'paused'; s.alerta = null; } } break; }
       case 'reset': Object.assign(s, defaultState().intervalo); break;
       default: fail('Comando inválido.', 400);
     }
@@ -520,11 +594,16 @@ function createCenas() {
     if (!a || typeof a !== 'object') fail('Comando inválido.', 400);
     switch (kind) {
       case 'abertura': return abertura(a);
-      case 'boasvindas': if (a.action !== 'nuvem') fail('Comando inválido.', 400); state.boasvindas.nuvem = !!a.on; return emit();
+      case 'nuvem': if (a.action !== 'foco') fail('Comando inválido.', 400); state.nuvem.foco = int(a.n, 0, 2, 0); return emit();
+      case 'plano26': // uma parte em destaque por vez (1 a 5), ou tudo (0)
+        if (a.action === 'foco') state.plano26.foco = int(a.n, 0, 5, 0); else if (a.action === 'prox') state.plano26.foco = (state.plano26.foco + 1) % 6; else fail('Comando inválido.', 400);
+        return emit();
       case 'almanaque': return almanaque(a);
       case 'reconhecimento': return reconhecimento(a);
       case 'intervalo': return intervalo(a);
-      case 'visao': if (a.action !== 'intro') fail('Comando inválido.', 400); state.visao.intro = !!a.on; return emit();
+      case 'visao': // capa do bloco → a estratégia em tela cheia; a página pode começar pela abertura em vídeo dela
+        if (a.action === 'intro') state.visao.intro = !!a.on; else if (a.action === 'abrir') state.visao.aberta = a.on === undefined ? true : !!a.on; else fail('Comando inválido.', 400);
+        return emit();
       case 'mph': if (a.action === 'go') state.mph.at = now(); else if (a.action === 'reset') state.mph.at = null; else fail('Comando inválido.', 400); return emit(a.action === 'go' ? { title: '88 MPH!', body: config.mph.chegada } : null);
       default: fail('Esta cena não tem comandos.', 400);
     }
@@ -533,7 +612,10 @@ function createCenas() {
   // na abertura, o velocímetro em zero). Os prêmios já revelados e o cronômetro do intervalo ficam como estão.
   function enter(kind) {
     if (kind === 'abertura') Object.assign(state.abertura, { play: !!config.abertura.auto, at: now(), fim: false }); // o vídeo começa do início
-    if (kind === 'boasvindas') state.boasvindas.nuvem = false;
+    if (kind === 'nuvem') state.nuvem.foco = 0;
+    if (kind === 'plano26') state.plano26.foco = 0;
+    if (kind === 'visao') state.visao.aberta = false;                                                // o bloco começa pela capa
+    if (kind === 'intervalo') state.intervalo.alerta = null;                                         // um alerta antigo não volta para a tela
     if (kind === 'almanaque') { stopPlay(); Object.assign(state.almanaque, { mes: -1, tocando: false, pagina: false, fim: 0 }); }
     if (kind === 'reconhecimento') { clearTimeout(drawT); drawT = null; Object.assign(state.reconhecimento, { fase: 'intro', premio: null, passo: 'categoria', carga: 0, at: now(), video: false }); }
     if (kind === 'mph') state.mph.at = null;
@@ -591,4 +673,4 @@ function createCenas() {
     onChange: fn => listeners.push(fn), onPulse: fn => pulses.push(fn), agendaView, config: () => config };
 }
 
-module.exports = { createCenas, KINDS, META, MONTHS, HOST_KEYS, PHONE_REFS, DEFAULT_CONFIG };
+module.exports = { createCenas, KINDS, OPEN_KINDS, META, MONTHS, HOST_KEYS, PHONE_REFS, DEFAULT_CONFIG };

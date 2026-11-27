@@ -5,7 +5,7 @@ const { db, kvGet, kvSet, seedIfEmpty, resetQuestions, dbEpoch } = require('./db
 const { generateRounds, checkGroups, pairKey } = require('./matching');
 const { buildQueues, ERAS, eraOfRound, CATEGORIES, catKey, catOfRound, QUESTION_MODES } = require('./queues');
 const { computeResults, POINTS } = require('./results');
-const { KINDS: CENA_KINDS, META: CENA_META } = require('./cenas');
+const { KINDS: CENA_KINDS, META: CENA_META, OPEN_KINDS } = require('./cenas');
 const { createFotos } = require('./fotos');
 
 const TOTAL_ROUNDS = 3;
@@ -23,31 +23,35 @@ const SUCESSO_ACTS = ['d1', 'd2', 'd3', 'd4'];
 const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 // Roteiro padrão: a agenda do townhall (deck v18) em 4 atos. Conexões, Reflexão e as dinâmicas do Sucesso são os
 // blocos interativos de sempre; os outros passos são as cenas do deck.
-//   ATO I · Reconectar: chegada (check-in) · vídeo de abertura · boas-vindas · plano de voo · Conexões
-//   ATO II · Rebobinar 2026: Jornada 2026 (almanaque) · IA em 2026 + Reflexão
+//   ATO I · Reconectar: chegada (check-in) · vídeo de abertura · boas-vindas · nuvem de palavras · plano de voo · Conexões
+//   ATO II · Rebobinar 2026: Estratégia 2026 · Jornada 2026 (almanaque) · IA em 2026 + Reflexão
 //   ATO III · Reconhecer: Reconhecimento 2026 · intervalo
-//   ATO IV · Avançar para 2027: Visão 2027 (estratégia) · Manifesto 2027 + Sucesso 01 a 04 + o Doc · 88 MPH · créditos
+//   ATO IV · Avançar para 2027: Visão 2027 (capa + estratégia) · capa do Sucesso + Sucesso 01 a 04 + o Doc · 88 MPH · créditos e feedback
 // "Como a IA nos ajudou em 2026" é o próprio bloco Reflexão, e o "Manifesto 2027" é o bloco Sucesso: um passo só para cada.
 function defaultSteps() {
   const cena = k => ({ type: 'cena', cena: k });
   return [
     { type: 'checkin' },                // a porta de entrada: é por aqui que todo mundo faz o login
     cena('abertura'),                   // quando o evento começa: o vídeo de abertura
-    cena('boasvindas'), cena('agenda'), // boas-vindas e, em seguida, o plano de voo do dia
+    cena('boasvindas'),                 // boas-vindas
+    cena('nuvem'),                      // duas perguntas no celular: as respostas viram as nuvens de palavras
+    cena('agenda'),                     // o plano de voo do dia
     { type: 'connections' },
-    cena('almanaque'),
+    cena('plano26'), cena('almanaque'), // a Estratégia 2026 e, em seguida, a Jornada 2026 (de dezembro para janeiro)
     { type: 'reflexao' },
     cena('reconhecimento'), cena('intervalo'),
-    cena('visao'),
+    cena('visao'),                      // capa do bloco e a Estratégia 2027 em tela cheia
+    cena('capasucesso'),                // capa do bloco Sucesso
     { type: 'sucesso', activity: 'd1' }, { type: 'sucesso', activity: 'd2' }, { type: 'sucesso', activity: 'd3' }, { type: 'sucesso', activity: 'd4' },
     { type: 'doc' },                    // Visão 2027 do Doc: fecha o Sucesso com o resumo do que todo mundo escreveu
     cena('mph'),
-    { type: 'closing' },                // créditos
+    { type: 'closing' },                // créditos e o formulário de feedback nos celulares
   ].map((x, i) => ({ id: 'p' + (i + 1), ...x, ...(noTransition(x) ? { transition: false } : {}) }));
 }
-// Passos que entram direto, sem a "viagem no tempo" de transição (pedido da organização): vídeo de abertura, boas-vindas, reconhecimento,
-// intervalo, Visão 2027, as dinâmicas do Sucesso e o Doc, 88 MPH e os créditos. Em Preparar → Roteiro dá para ligar e desligar em cada passo.
-const NO_TRANSITION_CENAS = ['abertura', 'boasvindas', 'reconhecimento', 'intervalo', 'visao', 'mph'];
+// Passos que entram direto, sem a "viagem no tempo" de transição (pedido da organização): vídeo de abertura, boas-vindas, nuvem de palavras,
+// Jornada 2026 (a transição do bloco acontece antes, na Estratégia 2026), reconhecimento, intervalo, as dinâmicas do Sucesso (a transição
+// acontece na capa do bloco) e o Doc, 88 MPH e os créditos. Em Preparar → Roteiro dá para ligar e desligar em cada passo.
+const NO_TRANSITION_CENAS = ['abertura', 'boasvindas', 'nuvem', 'almanaque', 'reconhecimento', 'intervalo', 'mph'];
 function noTransition(x) { return ['sucesso', 'doc', 'closing'].includes(x.type) || (x.type === 'cena' && NO_TRANSITION_CENAS.includes(x.cena)); }
 // Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões, Reflexão,
 // Visão 2027 e cada dinâmica do Sucesso só entram uma vez (o estado delas é um só).
@@ -91,12 +95,11 @@ const DEFAULT_SETTINGS = {
   stageText: 'All eyes on the stage.',
   stageMutes: true,       // exibir um bloco de fala desliga o som do telão
   transitions: true,      // transição do filme no telão e nos celulares ao trocar de bloco
-  transitionSeconds: 15,  // quanto dura a transição entre blocos (avisos e "olhos no telão" entram em 3 s)
+  transitionSeconds: 8,   // quanto dura a transição entre blocos (avisos e "olhos no telão" entram em 3 s)
   // Modo confidencial: o conteúdo do townhall (cenas do deck, blocos de fala, créditos e a estratégia 2027) só aparece para
   // quem entrou com a senha mestra (Painel do Doc e o telão aberto nesse navegador). Os celulares e os outros telões veem
   // "olhe para o telão". No dia do evento o Doc libera para todos (Painel do Doc → 🔒 Confidencial).
   confidencial: true,
-  wordsLive: true,        // a nuvem das "duas palavras" aparece ao vivo no telão do check-in e nos celulares
   // quem não participa de cada bloco (ex.: quem coordena): faz o login e conta presença, mas fica fora das duplas, da votação ou das respostas
   skip: { connections: [], reflexao: [], sucesso: [] },
   musicUrl: '',           // opcional: arquivo de áudio próprio para "Música" (senão, toca a trilha gerada no navegador)
@@ -118,12 +121,24 @@ const DEFAULT_SETTINGS = {
 const DEFAULT_MESSAGE = { title: 'Break', body: 'Back in 15 minutes.', emoji: '☕' };
 // Textos padrão antigos (em português): quem ainda os tem guardados passa para os novos, em inglês (o app agora é em inglês)
 const OLD_TEXTS = { welcomeText: 'Aguarde: a viagem começa em breve.', closingText: 'Obrigado por viajar com a gente. Marque aquele café com a sua conexão!', standbyText: 'Agora você não precisa do celular.', stageText: 'Agora a atenção é no palco.' };
-// Passos do roteiro com conteúdo do townhall (confidencial até o Doc liberar): cenas do deck, blocos de fala e créditos
-const CONFIDENTIAL_STEPS = ['cena', 'stage', 'closing'];
-// Passos em que o celular pede as "duas palavras" de quem ainda não respondeu: a abertura do evento, antes das Conexões
-const wordsOpenAt = step => !!step && (step.type === 'checkin' || (step.type === 'cena' && ['abertura', 'boasvindas', 'agenda'].includes(step.cena)));
-// Uma das "duas palavras": sem quebras de linha nem símbolos soltos, até 20 letras
-const cleanWord = v => String(v ?? '').normalize('NFC').replace(/[\u0000-\u001f<>"`{}\[\]\\|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 20);
+// Passos do roteiro com conteúdo do townhall (confidencial até o Doc liberar): as cenas do deck e os blocos de fala. Ficam de fora
+// as cenas que não contam nada do townhall (nuvem de palavras, intervalo e a capa do Sucesso) e o encerramento (só os créditos são guardados).
+const confidentialStep = step => !!step && (step.type === 'stage' || (step.type === 'cena' && !OPEN_KINDS.includes(step.cena)));
+// Nuvem de palavras: a resposta de cada pergunta é um texto livre curto (sem quebras de linha nem símbolos soltos, até 80 letras)
+const cleanAnswer = v => String(v ?? '').normalize('NFC').replace(/[\u0000-\u001f<>"`{}\[\]\\|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+// O que entra na nuvem: a resposta curta inteira (até 3 palavras) ou, se a pessoa escreveu uma frase, as palavras dela sem os conectivos
+const STOP = new Set(('a o os as um uma uns umas de do da dos das e em no na nos nas com por para pra que eu me meu minha muito muita muitos muitas mais mas como estou esta está to tô é foi ser sou ao à às bem hoje chegando '
+  + 'el la los las un una unos unas y del al en con que yo mi muy más mucho mucha muchos muchas pero estoy es soy lo se hoy llegando '
+  + 'the an and of to in on for with i im i\'m my me is am are was very so it this that at be but a lot much many really today feel feeling arriving').split(' '));
+function termsOf(answer) {
+  const s = String(answer || '').replace(/[.,;:!?¡¿()“”…]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!s) return [];
+  const parts = s.split(' ');
+  if (s.length <= 24 && parts.length <= 3) return [s];
+  const seen = new Set(), out = [];
+  for (const w of parts) { const k = w.toLocaleLowerCase('pt-BR'); if (w.length < 3 || STOP.has(k) || seen.has(k)) continue; seen.add(k); out.push(w); }
+  return out.slice(0, 8);
+}
 const defaultConn = () => ({ phase: 'idle', round: 0, played: 0, timer: null, generatedAt: null, worstLevel: null, levels: {}, resultsAt: null, repeats: false });
 const DEFAULT_SCREEN = { scene: 'auto' }; // telão: auto (segue o bloco) | clock | logo | quote
 // Visão 2027: a mensagem do Doc (gerada no servidor) e a cena no telão (play: qual parte, pausada ou não)
@@ -242,6 +257,22 @@ class Engine {
       if (ag >= 0 && bv === ag + 1) [steps[ag], steps[bv]] = [steps[bv], steps[ag]]; // a agenda passa para depois das boas-vindas
       this.settings.roteiroV20 = true;
     }
+    // Ajustes do roteiro (valem uma vez para roteiros guardados): a nuvem de palavras depois das boas-vindas, a Estratégia 2026 antes da
+    // Jornada 2026 (que passa a entrar direto), a capa do bloco Sucesso antes da primeira dinâmica e a Visão 2027 com transição.
+    if (!this.settings.roteiroV21) {
+      const has = k => steps.some(x => x.type === 'cena' && x.cena === k), at = k => steps.findIndex(x => x.type === 'cena' && x.cena === k);
+      const put = (i, k, tr) => steps.splice(i, 0, { id: 'p' + crypto.randomBytes(4).toString('hex'), type: 'cena', cena: k, ...(tr ? {} : { transition: false }) });
+      if (steps.length) {
+        if (!has('nuvem')) { const i = at('boasvindas') >= 0 ? at('boasvindas') : at('abertura') >= 0 ? at('abertura') : steps.findIndex(x => x.type === 'checkin'); put(i + 1, 'nuvem', false); }
+        if (!has('plano26') && has('almanaque')) { put(at('almanaque'), 'plano26', true); steps[at('almanaque')].transition = false; }
+        if (!has('capasucesso') && steps.some(x => x.type === 'sucesso')) put(steps.findIndex(x => x.type === 'sucesso'), 'capasucesso', true);
+        if (has('visao')) delete steps[at('visao')].transition;
+      }
+      this.settings.roteiroV21 = true;
+    }
+    // Transição entre blocos mais rápida (vale uma vez): quem estava com os 15 s de antes passa para 8 s.
+    if (!this.settings.fastV1) { if ((this.settings.transitionSeconds || 15) >= 15) this.settings.transitionSeconds = 8; this.settings.fastV1 = true; }
+    delete this.settings.wordsLive;
     // O app passou para o inglês: quem ainda tem os textos padrão antigos (em português) guardados recebe os novos, uma vez.
     if (!this.settings.enV1) {
       for (const [k, old] of Object.entries(OLD_TEXTS)) if (this.settings[k] === old) this.settings[k] = DEFAULT_SETTINGS[k];
@@ -342,29 +373,58 @@ class Engine {
     return { ok: true };
   }
 
-  /* ---------------- "duas palavras" (logo depois do login) ---------------- */
-  // Cada pessoa conta, em duas palavras, como está chegando. A resposta fica ligada à pessoa: quem entrar de novo
-  // (outro celular, navegador limpo) não responde de novo. As palavras formam a nuvem das boas-vindas.
-  wordsOf(personId) { const r = db.prepare('SELECT w1, w2 FROM words WHERE person_id = ?').get(Number(personId)); return r ? [r.w1, r.w2].filter(Boolean) : null; }
-  setWords(personId, words) {
-    const list = (Array.isArray(words) ? words : [words]).map(cleanWord).filter(Boolean).slice(0, 2);
-    if (!list.length) throw Object.assign(new Error('Write at least one word.'), { status: 400 });
-    db.prepare('INSERT INTO words (person_id, w1, w2, at) VALUES (?, ?, ?, ?) ON CONFLICT(person_id) DO UPDATE SET w1 = excluded.w1, w2 = excluded.w2, at = excluded.at').run(Number(personId), list[0], list[1] || '', iso());
+  /* ---------------- nuvem de palavras: duas perguntas, texto livre ---------------- */
+  // Logo depois das boas-vindas o Doc coloca a cena "nuvem" no ar: os celulares mostram as duas perguntas (o texto vem do conteúdo
+  // da cena) e cada pessoa responde as duas, em texto livre. A resposta fica ligada à pessoa: quem entrar de novo (outro celular,
+  // navegador limpo) não responde de novo. Cada pergunta forma uma nuvem no telão.
+  wordsOpen() { const st = this.currentStep(); return this.state.block === 'cena' && !this.state.presentation && st.type === 'cena' && st.cena === 'nuvem'; }
+  wordsOf(personId) { const r = db.prepare('SELECT w1, w2 FROM words WHERE person_id = ?').get(Number(personId)); return r ? [r.w1, r.w2 || ''] : null; }
+  setWords(personId, answers) {
+    const list = [0, 1].map(i => cleanAnswer(Array.isArray(answers) ? answers[i] : ''));
+    if (list.some(x => !x)) throw Object.assign(new Error('Answer both questions.'), { status: 400 });
+    db.prepare('INSERT INTO words (person_id, w1, w2, at) VALUES (?, ?, ?, ?) ON CONFLICT(person_id) DO UPDATE SET w1 = excluded.w1, w2 = excluded.w2, at = excluded.at').run(Number(personId), list[0], list[1], iso());
     this.commit();
     return list;
   }
   removeWords(personId) { db.prepare('DELETE FROM words WHERE person_id = ?').run(Number(personId)); this.commit(); }
   clearWords({ silent = false } = {}) { db.exec('DELETE FROM words'); if (!silent) this.commit(); }
-  // A nuvem: cada palavra com quantas pessoas a escreveram (sem nomes). Maiúsculas e minúsculas contam como a mesma palavra.
+  // As nuvens (uma por pergunta): cada termo com quantas pessoas o escreveram, sem nomes. Maiúsculas e minúsculas contam como o mesmo termo.
   wordsCloud() {
-    const m = new Map(); let count = 0;
+    const maps = [new Map(), new Map()]; let count = 0;
     for (const r of db.prepare('SELECT w.w1, w.w2 FROM words w JOIN people p ON p.id = w.person_id ORDER BY w.at').all()) {
       count++;
-      for (const w of [r.w1, r.w2]) { if (!w) continue; const k = w.toLocaleLowerCase('pt-BR'), t = m.get(k); if (t) t[1]++; else m.set(k, [w, 1]); }
+      [r.w1, r.w2].forEach((ans, i) => { for (const w of termsOf(ans)) { const k = w.toLocaleLowerCase('pt-BR'), t = maps[i].get(k); if (t) t[1]++; else maps[i].set(k, [w, 1]); } });
     }
-    return { count, top: [...m.values()].sort((a, b) => b[1] - a[1]).slice(0, 120) };
+    return { count, clouds: maps.map(m => [...m.values()].sort((a, b) => b[1] - a[1]).slice(0, 80)) };
   }
-  wordsList() { return db.prepare('SELECT w.person_id AS id, p.name, w.w1, w.w2, w.at FROM words w JOIN people p ON p.id = w.person_id ORDER BY w.at').all().map(r => ({ id: r.id, name: r.name, words: [r.w1, r.w2].filter(Boolean), at: r.at })); }
+  wordsList() { return db.prepare('SELECT w.person_id AS id, p.name, w.w1, w.w2, w.at FROM words w JOIN people p ON p.id = w.person_id ORDER BY w.at').all().map(r => ({ id: r.id, name: r.name, words: [r.w1, r.w2 || ''], at: r.at })); }
+
+  /* ---------------- feedback do encerramento ---------------- */
+  // No encerramento, cada pessoa conta no celular como foi o townhall: uma nota de 1 a 5 e dois textos opcionais (o que mais gostou e
+  // o que pode melhorar). Vale uma resposta por pessoa (enviar de novo troca). Quem marca "sem o meu nome" não tem o nome mostrado
+  // no painel nem na extração de dados.
+  feedbackOpen() { return this.state.block === 'closing' && !this.state.presentation; }
+  feedbackOf(personId) { const r = db.prepare('SELECT rating, liked, improve, anonymous FROM feedback WHERE person_id = ?').get(Number(personId)); return r ? { rating: r.rating, liked: r.liked || '', improve: r.improve || '', anonymous: !!r.anonymous } : null; }
+  setFeedback(personId, f) {
+    const rating = Math.round(Number(f && f.rating));
+    if (!(rating >= 1 && rating <= 5)) throw Object.assign(new Error('Pick a rating from 1 to 5.'), { status: 400 });
+    const text = v => String(v ?? '').normalize('NFC').replace(/[\u0000-\u0008\u000b-\u001f]/g, ' ').trim().slice(0, 600);
+    db.prepare('INSERT INTO feedback (person_id, rating, liked, improve, anonymous, at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(person_id) DO UPDATE SET rating = excluded.rating, liked = excluded.liked, improve = excluded.improve, anonymous = excluded.anonymous, at = excluded.at')
+      .run(Number(personId), rating, text(f.liked), text(f.improve), f.anonymous ? 1 : 0, iso());
+    this.commit();
+    return this.feedbackOf(personId);
+  }
+  clearFeedback({ silent = false } = {}) { db.exec('DELETE FROM feedback'); if (!silent) this.commit(); }
+  feedbackStats() {
+    const dist = [0, 0, 0, 0, 0]; let sum = 0, count = 0;
+    for (const r of db.prepare('SELECT rating, COUNT(*) AS n FROM feedback GROUP BY rating').all()) if (r.rating >= 1 && r.rating <= 5) { dist[r.rating - 1] = r.n; sum += r.rating * r.n; count += r.n; }
+    return { count, avg: count ? Math.round(sum / count * 10) / 10 : 0, dist };
+  }
+  // Para o painel e a extração de dados: quem pediu "sem o meu nome" aparece sem nome
+  feedbackList() {
+    return db.prepare('SELECT f.rating, f.liked, f.improve, f.anonymous, f.at, p.name, p.area FROM feedback f LEFT JOIN people p ON p.id = f.person_id ORDER BY f.at').all()
+      .map(r => ({ name: r.anonymous ? '' : r.name || '', area: r.anonymous ? '' : r.area || '', rating: r.rating, liked: r.liked || '', improve: r.improve || '', anonymous: !!r.anonymous, at: r.at }));
+  }
 
   addPerson(f) {
     const name = String(f.name || '').trim();
@@ -400,7 +460,7 @@ class Engine {
     db.prepare('DELETE FROM rankings WHERE person_id = ?').run(Number(id));
     db.prepare('DELETE FROM results WHERE person_id = ?').run(Number(id));
     db.prepare('DELETE FROM seen WHERE person_id = ?').run(Number(id));
-    db.prepare('DELETE FROM words WHERE person_id = ?').run(Number(id));
+    db.prepare('DELETE FROM words WHERE person_id = ?').run(Number(id)); db.prepare('DELETE FROM feedback WHERE person_id = ?').run(Number(id));
     this.fotos.remove(id);
     this.commit();
   }
@@ -420,7 +480,7 @@ class Engine {
     try {
       let inserted = 0, updated = 0;
       if (mode === 'replace') {
-        db.exec('DELETE FROM people; DELETE FROM groups; DELETE FROM seen; DELETE FROM rankings; DELETE FROM results; DELETE FROM words;');
+        db.exec('DELETE FROM people; DELETE FROM groups; DELETE FROM seen; DELETE FROM rankings; DELETE FROM results; DELETE FROM words; DELETE FROM feedback;');
         this.state.conn = defaultConn();
       }
       const existing = this.listPeople();
@@ -795,7 +855,7 @@ class Engine {
       message: { title: this.state.message.title, body: this.state.message.body },
       welcome: wasOff ? { title: 'Time circuits on', body: 'We are back. Check your phone.' } : null,
       connections: wasOff ? { title: 'Circuitos ligados', body: 'O bloco Conexões está começando.', es: { title: 'Circuitos encendidos', body: 'El bloque Conexiones está por comenzar.' } } : null,
-      closing: { title: 'End of the journey', body: this.settings.closingText, secret: true },
+      closing: { title: 'End of the journey', body: '📱 One last thing: tell us how the Townhall was.' },
     };
     this.commit(notices[block] || null);
   }
@@ -817,9 +877,8 @@ class Engine {
     for (const k of ['eventName', 'welcomeText', 'closingText', 'standbyText', 'stageText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
     if (partial.stageMutes !== undefined) s.stageMutes = !!partial.stageMutes;
     if (partial.confidencial !== undefined) s.confidencial = !!partial.confidencial; // modo confidencial (só a senha mestra muda)
-    if (partial.wordsLive !== undefined) s.wordsLive = !!partial.wordsLive;
     if (partial.transitions !== undefined) s.transitions = !!partial.transitions;
-    if (partial.transitionSeconds !== undefined) s.transitionSeconds = Math.max(3, Math.min(30, Math.round(Number(partial.transitionSeconds) || 15)));
+    if (partial.transitionSeconds !== undefined) s.transitionSeconds = Math.max(3, Math.min(30, Math.round(Number(partial.transitionSeconds) || 8)));
     if (partial.skip !== undefined) s.skip = this.cleanSkip({ ...s.skip, ...(partial.skip && typeof partial.skip === 'object' ? partial.skip : {}) });
     // áudio próprio: só endereços http(s) ou caminhos do próprio site
     for (const k of ['musicUrl', 'ambientUrl', 'docVideoUrl']) if (partial[k] !== undefined) { const u = String(partial[k]).trim(); s[k] = /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; }
@@ -857,7 +916,8 @@ class Engine {
   // roteiro e textos não são tocados. (Reflexão, Sucesso e cenas são reiniciados pelo servidor, que conhece esses blocos.)
   resetEvent({ keepCheckins = false } = {}) {
     this.resetConnections();
-    if (!keepCheckins) db.exec("UPDATE people SET checked_in_at = NULL, token = NULL; DELETE FROM words;"); // as "duas palavras" vão junto com os check-ins
+    db.exec('DELETE FROM words; DELETE FROM feedback;'); // as respostas da nuvem de palavras e o feedback do encerramento
+    if (!keepCheckins) db.exec("UPDATE people SET checked_in_at = NULL, token = NULL;");
     this.state.presentation = null; this.state.returnStep = null; this.state.drawn = {};
     this.state.doc = defaultDoc();
     this.state.screen = Object.assign({}, DEFAULT_SCREEN);
@@ -867,7 +927,7 @@ class Engine {
   resetCheckins() {
     db.exec('DELETE FROM groups; DELETE FROM seen; DELETE FROM rankings; DELETE FROM results;');
     this.clearTimer(); this.state.conn = defaultConn();
-    db.exec("UPDATE people SET checked_in_at = NULL, token = NULL; DELETE FROM words;");
+    db.exec("UPDATE people SET checked_in_at = NULL, token = NULL; DELETE FROM words; DELETE FROM feedback;");
     this.commit();
   }
   // utilidades de teste
@@ -1030,13 +1090,16 @@ class Engine {
       case 'connections': this.state.block = 'connections'; notice = { title: 'Conexões', body: '📱 Pegue o celular: esta dinâmica acontece no app.', es: { title: 'Conexiones', body: '📱 Toma tu celular: esta dinámica ocurre en la app.' } }; break;
       case 'message': this.state.message = { title: step.title, body: step.body, emoji: step.emoji }; this.state.block = 'message'; notice = { title: step.title, body: step.body }; break;
       case 'standby': this.state.block = 'standby'; break;
-      case 'closing': this.state.block = 'closing'; notice = { title: 'End of the journey', body: this.settings.closingText, secret: true }; break;
+      case 'closing': this.state.block = 'closing'; notice = { title: 'End of the journey', body: '📱 One last thing: tell us how the Townhall was.' }; break;
       case 'reflexao': this.state.block = 'reflexao'; notice = { title: 'Reflexão', body: '📱 Pegue o celular: esta dinâmica acontece no app.', es: { title: 'Reflexión', body: '📱 Toma tu celular: esta dinámica ocurre en la app.' } }; break;
       case 'doc': this.state.block = 'doc'; notice = { title: 'Visão 2027', body: 'Olhe para o telão: o Doc está chegando de 2027.', es: { title: 'Visión 2027', body: 'Mira la pantalla: el Doc está llegando de 2027.' } }; break;
       case 'cena': // cena do deck: atenção no telão; o som segue a regra dos blocos de fala (no intervalo, a música entra)
         this.state.block = 'cena';
         if (this.settings.stageMutes) this.state.audio.mode = step.cena === 'intervalo' ? (this.settings.spotifyBreak ? 'spotify' : 'music') : 'off';
-        notice = { title: CENA_META[step.cena].name, body: 'Look at the big screen.', secret: true }; break; // secret: no modo confidencial, só quem tem a senha mestra recebe
+        notice = step.cena === 'nuvem' ? { title: 'Word cloud', body: '📱 Grab your phone: two quick questions.' }
+          : step.cena === 'capasucesso' ? { title: 'De Volta para o Sucesso', body: 'Olhe para o telão: o bloco Sucesso vai começar.', es: { title: 'De Vuelta al Éxito', body: 'Mira la pantalla: el bloque Éxito va a comenzar.' } }
+          : { title: CENA_META[step.cena].name, body: 'Look at the big screen.', secret: confidentialStep(step) }; // secret: no modo confidencial, só quem tem a senha mestra recebe
+        break;
       default: break; // sucesso: a apresentação entra em seguida
     }
     if (step.type === 'connections') this.releaseJourney(); else this.holdJourney();
@@ -1084,12 +1147,14 @@ class Engine {
       presentation: this.presentation(),
       doc: this.docPublic(),
       stage: this.stageInfo(),
-      // "duas palavras": se o celular deve perguntar agora (abertura do evento) e a nuvem (palavra, quantas pessoas)
-      words: { open: wordsOpenAt(this.currentStep()), live: this.settings.wordsLive !== false, ...this.wordsCloud() },
+      // nuvem de palavras: aberta enquanto a cena está no ar (os celulares mostram as duas perguntas); cada nuvem = [termo, quantas pessoas]
+      words: this.wordsOpen() ? { open: true, ...this.wordsCloud() } : { open: false, count: db.prepare('SELECT COUNT(*) AS n FROM words').get().n, clouds: [[], []] },
+      // feedback do encerramento: aberto enquanto o encerramento está no ar; o telão mostra só quantas pessoas já responderam
+      feedback: { open: this.feedbackOpen(), count: db.prepare('SELECT COUNT(*) AS n FROM feedback').get().n },
       epoch: this.epoch,
       step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length, type: this.currentStep().type, cena: this.currentStep().cena || null, transition: this.currentStep().transition !== false },
       audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', beeps: this.state.audio.beeps !== false, musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
-      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, questionMode: this.settings.questionMode, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 15,
+      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, questionMode: this.settings.questionMode, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 8,
         docVoice: this.settings.docVoice !== false, docVoiceName: this.settings.docVoiceName || '', docRate: this.settings.docRate || 1, docVideoUrl: this.settings.docVideoUrl || '', docVideoFull: !!this.settings.docVideoFull },
       now: now(),
     };
@@ -1131,7 +1196,7 @@ class Engine {
     const ranking = rk.length ? Object.fromEntries(rk.map(r => [r.round, r.rank])) : null;
     const result = c.phase === 'results' ? this.resultOf(p.id) : null;
     const skip = { connections: this.skips('connections', p.id), reflexao: this.skips('reflexao', p.id), sucesso: this.skips('sucesso', p.id) };
-    return { person: { ...this.publicPerson(p), checkedInAt: p.checkedInAt }, group, conversations, ranking, result, skip, words: this.wordsOf(p.id) };
+    return { person: { ...this.publicPerson(p), checkedInAt: p.checkedInAt }, group, conversations, ranking, result, skip, words: this.wordsOf(p.id), feedback: this.feedbackOf(p.id) };
   }
   // Extração de dados das Conexões: duplas de cada viagem com as perguntas que tiveram, a avaliação
   // (ranking) de cada pessoa e a conexão sugerida (match) de cada uma.
@@ -1190,10 +1255,10 @@ class Engine {
     return {
       state: this.state, settings: this.settings, now: now(),
       people: people.map(p => ({ id: p.id, name: p.name, photo: p.photo, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.active && p.checkedInAt && !inRounds.has(p.id) && !this.skips('connections', p.id)) })),
-      rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, cats: CATEGORIES, points: POINTS, fotosSeed: this.fotos.seedStatus(), words: this.wordsList(),
+      rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, cats: CATEGORIES, points: POINTS, fotosSeed: this.fotos.seedStatus(), words: this.wordsList(), wordsCloud: this.wordsCloud(), feedback: { stats: this.feedbackStats(), list: this.feedbackList() },
       counts: this.publicState().counts,
     };
   }
 }
 
-module.exports = { Engine, TOTAL_ROUNDS, BLOCKS, PHASES, STEP_TYPES, CONFIDENTIAL_STEPS, normalizeWl, defaultSteps };
+module.exports = { Engine, TOTAL_ROUNDS, BLOCKS, PHASES, STEP_TYPES, confidentialStep, normalizeWl, defaultSteps };

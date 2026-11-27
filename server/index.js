@@ -5,11 +5,11 @@ const crypto = require('crypto');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
-const { Engine, TOTAL_ROUNDS, CONFIDENTIAL_STEPS } = require('./engine');
+const { Engine, TOTAL_ROUNDS } = require('./engine');
 const { DB_PATH, DATA_DIR } = require('./db');
 const { createSucesso } = require('./sucesso');
 const { createReflexao } = require('./reflexao');
-const { createCenas } = require('./cenas');
+const { createCenas, OPEN_KINDS } = require('./cenas');
 const doc = require('./doc');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -76,20 +76,24 @@ app.get('/estrategia-2027.html', (req, res, next) => (!confidential() || isMaste
 app.get(['/dinamicas', '/dinamicas.html'], (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'admin.html')));
 app.use(express.static(path.join(__dirname, '..', 'public'), { etag: true, maxAge: 0 }));
 
-// Fotos nas cenas: quem fala nas boas-vindas e os indicados dos prêmios ganham a foto de perfil quando o nome escrito
+// Fotos nas cenas: quem fala nas boas-vindas, os líderes da Estratégia 2026 e os indicados dos prêmios ganham a foto de perfil quando o nome escrito
 // na cena aponta para uma pessoa só da lista. "Giovana & Lucas" são duas pessoas (até duas fotos).
 function withPhotos(c) {
-  if (!c || (c.kind !== 'boasvindas' && c.kind !== 'reconhecimento')) return c;
+  if (!c || !['boasvindas', 'reconhecimento', 'plano26'].includes(c.kind)) return c;
   const people = engine.listPeople(), of = nome => String(nome || '').split(/\s*(?:&|\/| e )\s*/i).map(n => engine.photoByName(n, people)).filter(Boolean).slice(0, 2);
   if (c.kind === 'boasvindas') return { ...c, pessoas: (c.pessoas || []).map(p => ({ ...p, fotos: of(p.nome) })) };
+  if (c.kind === 'plano26') return { ...c, lideres: (c.lideres || []).map(p => ({ ...p, fotos: of(p.nome) })) }; // os líderes da Estratégia 2026
   return { ...c, premios: c.premios.map(p => ({ ...p, indicados: p.indicados.map(x => ({ ...x, fotos: of(x.nome) })) })) };
 }
 // Modo confidencial: quem não entrou com a senha mestra não recebe as cenas do deck, os blocos de fala nem os créditos.
 // Enquanto um desses passos está no ar, os celulares e os outros telões veem a tela de "olhos no telão".
+// Ficam de fora as cenas que não contam nada do townhall (nuvem de palavras, intervalo, capa do Sucesso) e o encerramento,
+// que nos celulares é o formulário de feedback (só os créditos do telão são guardados).
 function redact(s) {
-  const out = { ...s, cena: null, creditos: null, stage: { title: '', theme: '', speaker: '' } };
-  if (!s.presentation && ['cena', 'stage', 'closing'].includes(s.block)) { out.block = 'standby'; out.hosts = []; out.step = { ...s.step, type: 'standby', cena: null, transition: false }; }
-  else out.step = { ...s.step, cena: null };
+  const open = !!s.cena && OPEN_KINDS.includes(s.cena.kind);
+  const out = { ...s, cena: open ? s.cena : null, creditos: null, stage: { title: '', theme: '', speaker: '' } };
+  if (!s.presentation && !open && ['cena', 'stage'].includes(s.block)) { out.block = 'standby'; out.hosts = []; out.step = { ...s.step, type: 'standby', cena: null, transition: false }; }
+  else if (!open) out.step = { ...s.step, cena: null };
   return out;
 }
 // Estado público + situação da dinâmica do Sucesso em exibição (fase, cronômetro, quantidade de respostas)
@@ -137,6 +141,8 @@ const wrapAsync = fn => (req, res) => {
 const adminOnly = (req, res, next) => { req.role = roleOf(req); return req.role ? next() : res.status(401).json({ error: 'Senha de admin inválida.' }); };
 // O que a senha das dinâmicas alcança: os passos do roteiro, os comandos, os ajustes e os reinícios de Conexões, Reflexão e Sucesso.
 const TEAM_STEPS = ['checkin', 'connections', 'reflexao', 'sucesso', 'doc']; // o check-in é a porta de entrada; o Doc fecha o Sucesso
+const TEAM_CENAS = ['capasucesso'];                                          // a capa do bloco Sucesso faz parte do Sucesso
+const teamStep = x => !!x && (TEAM_STEPS.includes(x.type) || (x.type === 'cena' && TEAM_CENAS.includes(x.cena)));
 const TEAM_ACTIONS = new Set(['generate', 'reveal', 'startTalk', 'pause', 'resume', 'addTime', 'endTalk', 'skip', 'startJourney', 'openRanking', 'computeResults', 'resetConnections',
   'testCheckinAll', 'testRandomRankings', 'setAudio', 'settings']);
 const TEAM_SETTINGS = ['roundSeconds', 'findSeconds', 'questionMode', 'breakSeconds', 'rankingSeconds', 'autoFlow', 'showMutualOnScreen', 'showFormHints', 'skip', 'docVoice', 'docVoiceName', 'docRate', 'docVideoUrl', 'docVideoFull'];
@@ -155,11 +161,22 @@ app.get('/api/photo/:id', (req, res) => {
 });
 // name (opcional): o celular que refaz o check-in sozinho depois de o servidor reiniciar manda o nome guardado
 app.post('/api/checkin', wrap(req => ({ ...engine.checkin(req.body.personId, req.body.token, req.body.name), epoch: engine.epoch })));
-// "Duas palavras": como a pessoa está chegando (logo depois do login). Vale uma resposta por pessoa; enviar de novo troca.
+// Nuvem de palavras: as respostas das duas perguntas (texto livre), enquanto a cena está no ar. Vale uma resposta por pessoa; enviar de novo troca.
+// restore: o celular que refez o check-in sozinho (servidor reiniciado) devolve as respostas que tinha guardado.
+const gone = () => Object.assign(new Error('Your check-in is no longer active. Pick your name again.'), { status: 401 });
 app.post('/api/words', wrap(req => {
   const b = req.body || {}, person = engine.personByToken(b.token);
-  if (!person || !person.checkedInAt || !person.active) throw Object.assign(new Error('Your check-in is no longer active. Pick your name again.'), { status: 401 });
+  if (!person || !person.checkedInAt || !person.active) throw gone();
+  if (!engine.wordsOpen() && !(b.restore && !engine.wordsOf(person.id))) throw Object.assign(new Error('The word cloud is closed right now.'), { status: 409 });
   engine.setWords(person.id, b.words);
+  return { ok: true, me: meState(person.id) };
+}));
+// Feedback do encerramento: nota de 1 a 5 e dois textos opcionais. Vale uma resposta por pessoa; enviar de novo troca.
+app.post('/api/feedback', wrap(req => {
+  const b = req.body || {}, person = engine.personByToken(b.token);
+  if (!person || !person.checkedInAt || !person.active) throw gone();
+  if (!engine.feedbackOpen()) throw Object.assign(new Error('The feedback form opens at the end of the Townhall.'), { status: 409 });
+  engine.setFeedback(person.id, b);
   return { ok: true, me: meState(person.id) };
 }));
 app.post('/api/checkout', wrap(req => engine.checkout(req.body.token)));
@@ -259,7 +276,8 @@ app.post('/api/admin/action', wrap(req => {
 // votos, respostas, prêmios revelados, cronômetros). Não mexe no que foi preparado: pessoas, fotos, perguntas, roteiro,
 // textos e conteúdo das cenas.
 //   scope: all (keepCheckins opcional) · checkin · connections · reflexao · sucesso · sucesso:d1..d4 · doc · cenas ·
-//          cena:<abertura|boasvindas|almanaque|reconhecimento|intervalo|visao|mph> · words (as duas palavras) · roteiro (só volta para o primeiro passo)
+//          cena:<abertura|nuvem|plano26|almanaque|reconhecimento|intervalo|visao|mph> · words (respostas da nuvem de palavras) ·
+//          feedback (respostas do encerramento) · roteiro (só volta para o primeiro passo)
 app.post('/api/admin/reset', wrapAsync(async req => {
   const b = req.body || {}, scope = String(b.scope || ''), room = engine.state.sucessoRoom, bad = () => { throw Object.assign(new Error('Não sei reiniciar isso.'), { status: 400 }); };
   if (req.role !== 'master' && !TEAM_RESET(scope)) throw onlyMaster();
@@ -273,7 +291,8 @@ app.post('/api/admin/reset', wrapAsync(async req => {
   else if (scope === 'sucesso') { if (!sucesso.ready()) bad(); await sucesso.clearRoom(room); }
   else if (/^sucesso:d[1-4]$/.test(scope)) { if (!sucesso.ready()) bad(); await sucesso.clearActivity(room, scope.slice(8)); }
   else if (scope === 'doc') engine.setDocMessage(null);
-  else if (scope === 'words') engine.clearWords();
+  else if (scope === 'words') { engine.clearWords({ silent: true }); cenas.resetKind('nuvem'); }
+  else if (scope === 'feedback') engine.clearFeedback();
   else if (scope === 'cenas') cenas.resetState();
   else if (scope.startsWith('cena:')) cenas.resetKind(scope.slice(5));
   else if (scope === 'roteiro') return goStep(engine.settings.steps[0].id);
@@ -312,7 +331,7 @@ async function goStep(id) {
 }
 app.post('/api/admin/step', wrapAsync(req => {
   const id = String((req.body || {}).id || ''), step = engine.stepById(id);
-  if (req.role !== 'master' && step && !TEAM_STEPS.includes(step.type)) throw onlyMaster();
+  if (req.role !== 'master' && step && !teamStep(step)) throw onlyMaster();
   return goStep(id);
 }));
 
@@ -398,7 +417,7 @@ app.post('/api/admin/cena', masterOnly, wrap(req => {
   cenas.command(kind, a);
   return { ok: true };
 }));
-// "Duas palavras" (nuvem das boas-vindas): tirar a resposta de uma pessoa ou apagar todas
+// Nuvem de palavras: tirar as respostas de uma pessoa ou apagar todas
 app.post('/api/admin/words', masterOnly, wrap(req => {
   const a = req.body || {};
   if (a.action === 'remove') engine.removeWords(a.id);
@@ -407,10 +426,12 @@ app.post('/api/admin/words', masterOnly, wrap(req => {
   return { ok: true };
 }));
 // Página de extração de dados (/dados.html): tudo o que o evento gerou, em um pedido só.
-app.get('/api/admin/export', wrap(() => {
-  const c = engine.publicState().counts;
-  return { now: Date.now(), event: engine.settings.eventName, counts: c,
-    conexoes: engine.exportConnections(), reflexao: reflexao.exportData(), sucesso: sucesso.ready() ? sucesso.exportData(engine.state.sucessoRoom) : { roomId: null, acts: [] } };
+// A nuvem de palavras e o feedback do encerramento vão só para quem entrou com a senha mestra.
+app.get('/api/admin/export', wrap(req => {
+  const c = engine.publicState().counts, master = req.role === 'master';
+  return { now: Date.now(), event: engine.settings.eventName, counts: c, role: req.role,
+    conexoes: engine.exportConnections(), reflexao: reflexao.exportData(), sucesso: sucesso.ready() ? sucesso.exportData(engine.state.sucessoRoom) : { roomId: null, acts: [] },
+    ...(master ? { nuvem: { perguntas: cenas.adminState().config.nuvem.perguntas, respostas: engine.wordsList(), ...engine.wordsCloud() }, feedback: { stats: engine.feedbackStats(), list: engine.feedbackList() } } : {}) };
 }));
 // Visão 2027: o Doc escreve a mensagem (IA ou roteiro automático), o Doc do painel revisa e conduz a cena no telão.
 const sucessoExport = () => (sucesso.ready() ? sucesso.exportData(engine.state.sucessoRoom) : { roomId: null, acts: [] });
@@ -494,7 +515,7 @@ engine.onChange(() => { if (!reflexaoOnAir()) reflexao.hold(); });
 engine.onChange(() => cenas.sync(cenaOnAir())); // saiu de uma cena: o que estava tocando para
 engine.onChange(pushAll);
 reflexao.onChange(pushAll);
-cenas.onChange(n => pushAll(n ? { ...n, secret: true } : null)); // tudo o que vem das cenas é conteúdo do townhall
+cenas.onChange(n => pushAll(n ? { ...n, secret: !OPEN_KINDS.includes(cenaOnAir()) } : null)); // o que vem das cenas é conteúdo do townhall (menos nuvem, intervalo e capa do Sucesso)
 cenas.onPulse(p => (confidential() ? io.to('master') : io).emit('cena:pulse', p));   // carga do Flux Capacitor subindo com os toques dos celulares
 // Resposta nova ou comando numa dinâmica do Sucesso: celulares, telão e painel atualizam na hora.
 let pulseTimer = null, expiryTimer = null;
@@ -529,12 +550,14 @@ const adminOverview = () => ({ ...engine.adminOverview(), role: 'master', team: 
   doc: { ai: doc.hasAI(), model: doc.MODEL, parts: doc.parts(engine.state.doc.message) } });
 // O painel de quem entrou com a senha das dinâmicas: só os passos de Conexões, Reflexão e Sucesso (mais o check-in e o Doc),
 // só os ajustes delas e nada das cenas. Se o que está no ar é um passo do townhall, o painel só fica sabendo que "há outro bloco no ar".
+// Das cenas, só a capa do bloco Sucesso (o nome dela e quem conduz).
 function teamOverview() {
-  const o = adminOverview(), live = engine.currentStep(), st = o.state;
-  const hidden = !st.presentation && !st.detour && !TEAM_STEPS.includes(live.type);
-  return { ...o, role: 'team', cenas: null, words: [], hidden,
-    settings: { ...Object.fromEntries(TEAM_SETTINGS_VIEW.map(k => [k, o.settings[k]])), steps: o.settings.steps.filter(x => TEAM_STEPS.includes(x.type)) },
-    state: { ...st, block: hidden ? 'hidden' : st.block, step: TEAM_STEPS.includes(live.type) ? st.step : null, returnStep: null, message: st.detour === 'message' ? st.message : { title: '', body: '', emoji: '' } } };
+  const o = adminOverview(), live = engine.currentStep(), st = o.state, C = o.cenas;
+  const hidden = !st.presentation && !st.detour && !teamStep(live);
+  return { ...o, role: 'team', words: [], wordsCloud: null, feedback: null, hidden,
+    cenas: { team: true, kinds: TEAM_CENAS, open: C.open, meta: Object.fromEntries(TEAM_CENAS.map(k => [k, C.meta[k]])), state: {}, config: { ...Object.fromEntries(TEAM_CENAS.map(k => [k, C.config[k]])), anfitrioes: { sucesso: C.config.anfitrioes.sucesso } } },
+    settings: { ...Object.fromEntries(TEAM_SETTINGS_VIEW.map(k => [k, o.settings[k]])), steps: o.settings.steps.filter(teamStep) },
+    state: { ...st, block: hidden ? 'hidden' : st.block, step: teamStep(live) ? st.step : null, returnStep: null, message: st.detour === 'message' ? st.message : { title: '', body: '', emoji: '' } } };
 }
 const overviewFor = role => (role === 'master' ? adminOverview() : teamOverview());
 

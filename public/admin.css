@@ -428,3 +428,11 @@ body.team .brand .k{color:var(--cyan)}
 .login-box .muted b{color:var(--txt)}
 /* o topo ganhou o cadeado do modo confidencial: as etiquetas quebram de linha em vez de se sobreporem */
 .status{flex-wrap:wrap;row-gap:6px}
+
+/* encerramento: distribuição das notas do feedback */
+.fbdist{display:grid;gap:5px;margin:12px 0 4px;max-width:520px}
+.fbdist div{display:grid;grid-template-columns:96px 1fr 34px;align-items:center;gap:10px;font-size:12px}
+.fbdist span{letter-spacing:1px;text-align:right;white-space:nowrap}
+.fbdist i{display:block;height:10px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.fbdist i b{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--orange),var(--yellow))}
+.fbdist em{font-style:normal;font-weight:700;color:var(--muted)}

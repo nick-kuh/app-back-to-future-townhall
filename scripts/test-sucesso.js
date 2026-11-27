@@ -127,7 +127,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     let ov = (await call('GET', '/api/admin/overview')).json; let steps = ov.settings.steps;
     // roteiro padrão: a agenda do townhall em 4 atos (cenas do deck + Conexões, Reflexão e Sucesso)
     assert.deepEqual(steps.map(x => (x.type === 'cena' ? 'cena:' + x.cena : x.type === 'sucesso' ? x.activity : x.type)),
-      ['checkin', 'cena:abertura', 'cena:boasvindas', 'cena:agenda', 'connections', 'cena:almanaque', 'reflexao', 'cena:reconhecimento', 'cena:intervalo', 'cena:visao', 'd1', 'd2', 'd3', 'd4', 'doc', 'cena:mph', 'closing']);
+      ['checkin', 'cena:abertura', 'cena:boasvindas', 'cena:nuvem', 'cena:agenda', 'connections', 'cena:plano26', 'cena:almanaque', 'reflexao', 'cena:reconhecimento', 'cena:intervalo', 'cena:visao', 'cena:capasucesso', 'd1', 'd2', 'd3', 'd4', 'doc', 'cena:mph', 'closing']);
     const of = (type, activity) => steps.find(x => x.type === type && (!activity || x.activity === activity)).id;
     assert.equal(ov.state.step, of('connections'));                 // as viagens levaram o cursor para o passo Conexões
     assert.ok(ov.sucesso.roomId); assert.equal(ov.sucesso.acts.d3.responseCount, 3);
@@ -218,7 +218,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await call('POST', '/api/admin/action', { type: 'setScene', scene: 'auto' });
     // bipes do cronômetro e transições: ligados por padrão, o Doc pode desligar
     st = await state(); assert.equal(st.audio.beeps, true); assert.equal(st.settings.transitions, true);
-    assert.equal(st.settings.transitionSeconds, 15);                // transição longa por padrão; o Doc ajusta entre 3 e 30 s
+    assert.equal(st.settings.transitionSeconds, 8);                 // a sequência completa, em ritmo rápido, por padrão; o Doc ajusta entre 3 e 30 s
     r = await call('POST', '/api/admin/action', { type: 'settings', settings: { transitionSeconds: 99 } }); st = await state(); assert.equal(st.settings.transitionSeconds, 30);
     r = await call('POST', '/api/admin/action', { type: 'settings', settings: { transitionSeconds: 15 } }); st = await state(); assert.equal(st.settings.transitionSeconds, 15);
     r = await call('POST', '/api/admin/action', { type: 'setAudio', beeps: false }); r = await call('POST', '/api/admin/action', { type: 'settings', settings: { transitions: false } });
