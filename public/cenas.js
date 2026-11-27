@@ -183,7 +183,7 @@ window.Cenas = (() => {
   function vNuvem(c) {
     const q = c.perguntas || [];
     return `<div class="cn-top nv-top"><div>${head(c)}<h1 class="cn-h1">${fire(c.titulo)}</h1></div>
-        <div class="nv-side"><div class="nv-call"><span>📱</span><div><b>ANSWER ON YOUR PHONE</b><small>the two questions are in the app</small></div></div>
+        <div class="nv-side"><div class="nv-call"><span>📱</span><div><b>NOT ANSWERED YET?</b><small>answer now on your phone · it goes straight to the cloud</small></div></div>
           <div class="nv-n"><b id="nvCount">0</b><small>ANSWERS</small></div></div></div>
       <div class="nv-grid" id="nvGrid" data-foco="0">${q.map((t, i) => `<div class="nv-box" data-i="${i + 1}" style="--c:${i ? 'var(--orange)' : 'var(--cyan)'}">
         <div class="nv-q"><b>${i + 1}</b><span>${esc(t)}</span></div><canvas id="nvC${i}"></canvas></div>`).join('')}</div>`;

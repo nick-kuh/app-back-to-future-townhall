@@ -1,6 +1,7 @@
 /* ===== Back to the Future · app do participante =====
- * O app é em INGLÊS. As dinâmicas (Conexões, Reflexão e Sucesso) são em português e, para quem escolhe "Español"
- * no login, em espanhol. O login fica guardado no aparelho: apagar a tela, fechar a aba ou perder a rede não tira
+ * A primeira coisa que a pessoa faz é escolher o idioma (Português, Español ou English): o app inteiro passa para ele.
+ * As dinâmicas (Conexões, Reflexão e Sucesso) existem em português e em espanhol; quem escolhe English as vê em português.
+ * O conteúdo do deck (agenda, títulos das cenas, prêmios) fica como foi escrito, em inglês. O login fica guardado no aparelho: apagar a tela, fechar a aba ou perder a rede não tira
  * ninguém do evento, e a tela se atualiza sozinha quando o celular volta. */
 (() => {
   const $ = s => document.querySelector(s);
@@ -36,9 +37,9 @@
   const saveToken = t => { S.token = t; store.set('bttf.token', t); cookie.set('bttf_token', t); };
   const clearToken = () => { S.token = null; store.del('bttf.token'); cookie.del('bttf_token'); };
 
-  /* ---------------- idioma das dinâmicas ---------------- */
-  const LANGS = { pt: 'Português', es: 'Español' };
-  const startLang = () => { const l = store.get('bttf.lang'); return LANGS[l] ? l : (navigator.language || '').toLowerCase().startsWith('es') ? 'es' : 'pt'; };
+  /* ---------------- idioma ---------------- */
+  const LANGS = { pt: 'Português', es: 'Español', en: 'English' };
+  const startLang = () => { const l = store.get('bttf.lang'), n = (navigator.language || '').toLowerCase(); return LANGS[l] ? l : n.startsWith('es') ? 'es' : n.startsWith('en') ? 'en' : 'pt'; };
 
   const S = {
     token: savedToken(),
@@ -48,7 +49,7 @@
     lang: startLang(),                                                                  // idioma das dinâmicas: pt | es
     answerDraft: '', anon: false, another: false, sending: false, pendingAnswer: null, // resposta das dinâmicas do Sucesso
     rfProjects: null, rfRev: null, rfPick: null, rfQ: '', rfSending: false,             // Reflexão: lista de projetos e o voto em andamento
-    wordsDraft: ['', ''], wordsSending: false, wordsEdit: false,                        // nuvem de palavras: as respostas das duas perguntas
+    wordsDraft: ['', ''], wordsSending: false, wordsEdit: false, wordsSkip: false,      // nuvem de palavras: as respostas das duas perguntas (logo depois do login)
     fbDraft: { rating: 0, liked: '', improve: '', anonymous: false }, fbSending: false, fbEdit: false, // feedback do encerramento
     alertOn: 0,                                                                         // alerta de volta do intervalo que está na tela
     build: null, lastSync: 0, restoring: false, restored: false,
@@ -66,8 +67,16 @@
     return next && /^\/participar\/[0-9a-f-]{36}(\?d=d[1-4])?$/i.test(next) ? next : null;
   }
 
-  /* ---------------- textos das dinâmicas: português e espanhol ----------------
-   * (o resto do app é em inglês e está escrito direto nas telas) */
+  /* ---------------- idioma do app ----------------
+   * L(en, pt, es): o texto no idioma que a pessoa escolheu no login. Se o Doc fixar "sempre em inglês" (Preparar → Ajustes),
+   * o app fica em inglês e a escolha vale só para as dinâmicas e para as duas perguntas da nuvem de palavras. */
+  const fixedEn = () => !!(S.state && S.state.settings && S.state.settings.appLang === 'en');
+  const ui = () => (fixedEn() ? 'en' : S.lang);
+  const L = (en, pt, es) => { const u = ui(); return u === 'pt' ? pt : u === 'es' ? es : en; };
+  const dyn = () => (S.lang === 'es' ? 'es' : 'pt'); // idioma das dinâmicas (quem escolhe English as vê em português)
+  const langOpts = () => (fixedEn() ? ['pt', 'es'] : ['pt', 'es', 'en']);
+
+  /* ---------------- textos das dinâmicas: português e espanhol ---------------- */
   const D = {
     pt: {
       here: '📱 Esta dinâmica acontece aqui, no seu celular', langSet: 'Dinâmicas em português',
@@ -120,7 +129,7 @@
       docMsg: 'MENSAJE DEL DOC · DIRECTO DESDE 2027', gazette: 'GACETA DEL FUTURO · 1.º DE ENERO DE 2027', lookBig: 'MIRA LA PANTALLA', docComing: 'EL DOC ESTÁ LLEGANDO', docArrived: 'El Doc acaba de llegar de 2027 con un mensaje para ustedes.', docSignal: 'Una señal de 2027 está llegando a la pantalla.',
     },
   };
-  const t = (key, ...a) => { const v = (D[S.lang] || D.pt)[key] ?? D.pt[key]; return typeof v === 'function' ? v(...a) : v; };
+  const t = (key, ...a) => { const v = D[dyn()][key] ?? D.pt[key]; return typeof v === 'function' ? v(...a) : v; };
   const tx = (pt, es) => (S.lang === 'es' && es ? es : pt); // texto que vem do servidor com a versão em espanhol
   // Sucesso: as perguntas das quatro dinâmicas em espanhol (valem enquanto a pergunta for a original)
   const SUC_ES = {
@@ -132,7 +141,7 @@
   const sucQ = p => { const e = SUC_ES[p.activityId]; return S.lang === 'es' && e && e[0] === p.question ? e[1] : p.question; };
   const GUIDE_ES = { DESAFIO: 'DESAFÍO', 'COMO USOU IA': 'CÓMO USÓ IA', IMPACTO: 'IMPACTO' };
   const CAT_ES = { quebragelo: 'ROMPEHIELO', conexao: 'CONEXIÓN', alem: 'MÁS ALLÁ DE LO OBVIO' };
-  const LOOK = '👀 Look at the big screen.';
+  const look = () => L('👀 Look at the big screen.', '👀 Olhe para o telão.', '👀 Mira la pantalla.');
   const here = () => `<div class="phonechip">${esc(t('here'))}</div>`; // nas dinâmicas: o aviso de que é no celular
 
   /* ---------------- util ---------------- */
@@ -179,7 +188,8 @@
     if (at && String(at) !== store.get('bttf.alert')) {
       if (S.alertOn === at) return;
       const c = currentCena(); S.alertOn = at;
-      $('#eaTitle').textContent = c.alertaTitulo || 'Emergency alert'; $('#eaBody').textContent = c.alertaTexto || 'The break is over. Return to your seat now.'; $('#eaFrom').textContent = c.alertaOrigem || '';
+      $('#eaTitle').textContent = own(c.alertaTitulo || 'Emergency alert'); $('#eaBody').textContent = own(c.alertaTexto || 'The break is over. The DeLorean leaves for 2027 in a moment: return to your seat now.'); $('#eaFrom').textContent = own(c.alertaOrigem || '');
+      $('#eaOk').textContent = L('OK · I\'m on my way', 'OK · Estou voltando', 'OK · Ya voy');
       el.classList.add('on'); el.setAttribute('aria-hidden', 'false');
       siren(); buzz([700, 250, 700, 250, 700, 250, 1200]); flashSky();
       clearInterval(checkAlert._t); let n = 0; checkAlert._t = setInterval(() => { if (!S.alertOn || ++n > 2) return clearInterval(checkAlert._t); siren(); buzz([700, 250, 700]); }, 9000); // insiste mais duas vezes
@@ -193,7 +203,7 @@
     if (S.screen !== 'app' || !S.state || !S.me) return false;
     const pr = currentPresentation(); if (pr) return sucPhase(pr) === 'run';
     const rf = currentReflexao(); if (rf) return !!rf.cur && rfPhase(rf.cur) === 'run';
-    const cn = currentCena(); if (cn) return cn.kind === 'nuvem' && (!S.me.words || S.wordsEdit);            // respondendo as duas perguntas
+    if (needWords()) return true;                                                                             // respondendo as duas perguntas
     if (S.state.block === 'closing') return !S.me.feedback || S.fbEdit;                                       // respondendo o feedback
     return S.state.block === 'connections' && ['matching', 'talk'].includes(S.state.conn.phase);
   }
@@ -208,7 +218,7 @@
   function flashSky() { const f = $('#skyFlash'); f.classList.remove('on'); void f.offsetWidth; f.classList.add('on'); }
   // Viagem no tempo: o velocímetro sobe até 88 MPH em "ms" (pelo relógio, para durar o mesmo em qualquer celular) e vem o clarão.
   function warp(msg, cb, ms = 950) {
-    const w = $('#warp'); $('#warpMsg').textContent = msg || 'ACCELERATING...';
+    const w = $('#warp'); $('#warpMsg').textContent = msg || L('ACCELERATING...', 'ACELERANDO...', 'ACELERANDO...');
     w.classList.remove('go'); w.classList.add('on'); w.setAttribute('aria-hidden', 'false');
     const t0 = performance.now(); clearInterval(warp._t);
     warp._t = setInterval(() => {
@@ -220,7 +230,7 @@
       }
     }, 42);
   }
-  function setOffline(off) { S.offline = off; const b = $('#offline'); if (b) b.classList.toggle('on', !!off); }
+  function setOffline(off) { S.offline = off; const b = $('#offline'); if (b) { b.textContent = L('⚠ Lost connection to the timeline · reconnecting…', '⚠ Sem conexão com a linha do tempo · reconectando…', '⚠ Sin conexión con la línea del tiempo · reconectando…'); b.classList.toggle('on', !!off); } }
 
   /* ---------------- rede ----------------
    * O tempo real vem por WebSocket. Para ninguém ficar com a tela parada: quando o celular volta (tela acesa, aba de
@@ -234,18 +244,19 @@
     S.socket.on('state', st => { S.state = st; S.offset = st.now - Date.now(); checkBuild(st); maybeRender(); });
     S.socket.on('me', me => {
       if (me === null && S.token) { // check-in desfeito, evento reiniciado ou outro aparelho assumiu este nome
-        dropLogin(); toast('Your check-in was ended by the host. Pick your name again.', true); maybeRender(true); return;
+        dropLogin(); toast(L('Your check-in was ended by the host. Pick your name again.', 'O apresentador encerrou o seu check-in. Escolha o seu nome de novo.', 'El presentador cerró tu check-in. Elige tu nombre de nuevo.'), true); maybeRender(true); return;
       }
       S.me = me; if (me) rememberMe(me); maybeRender();
     });
     S.socket.on('group:update', ({ groupId, position }) => {
       if (S.me && S.me.group && S.me.group.id === groupId && S.me.group.position !== position) { S.me.group.position = position; patchQuestion(true); }
     });
-    S.socket.on('notify', n => { const x = S.lang === 'es' && n.es ? n.es : n; toast(`${x.title || ''}${x.body ? ' · ' + x.body : ''}`); });
+    // avisos das telas do townhall: em inglês, com versão em português e espanhol · avisos das dinâmicas: em português, com versão em espanhol
+    S.socket.on('notify', n => { const x = (ui() !== 'en' && n[ui()]) || (S.lang === 'es' && !n.pt && n.es) || n; toast(`${x.title || ''}${x.body ? ' · ' + x.body : ''}`); });
     // Reconhecimento: a carga do Flux Capacitor sobe com os toques de todo mundo
     S.socket.on('cena:pulse', p => { const c = currentCena(); if (c && p && p.kind === c.kind && c.live) { c.live.carga = p.carga; patchCharge(); } });
   }
-  function dropLogin() { clearToken(); rememberMe(null); S.me = null; S.wordsEdit = false; S.fbEdit = false; if (S.screen === 'app') S.screen = 'splash'; }
+  function dropLogin() { clearToken(); rememberMe(null); S.me = null; S.wordsEdit = false; S.wordsSkip = false; S.fbEdit = false; if (S.screen === 'app') S.screen = 'splash'; }
   // O que o servidor respondeu (pelo WebSocket ou por HTTP): o estado do evento e quem sou eu
   function applySync(res) {
     if (!res || !res.state) return false;
@@ -322,7 +333,7 @@
   async function api(path, body) {
     const r = await fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : undefined);
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw Object.assign(new Error(j.error || 'Network error'), { status: r.status });
+    if (!r.ok) throw Object.assign(new Error(j.error || L('Network error', 'Erro de rede', 'Error de red')), { status: r.status });
     return j;
   }
   async function loadPeople() { try { S.people = await api('/api/people'); S.peopleAt = Date.now(); } catch (e) { toast(e.message, true); } }
@@ -348,14 +359,23 @@
   function currentCena() {
     return (S.screen === 'app' && S.me && S.state && !currentPresentation() && S.state.block === 'cena' && S.state.cena) || null;
   }
-  // Nuvem de palavras: enquanto a cena está no ar, o celular mostra as duas perguntas (texto livre). Quem já respondeu vê as
-  // nuvens crescendo, mesmo entrando por outro aparelho: a resposta fica no servidor.
-  const wordsForm = () => !!S.me && (!S.me.words || S.wordsEdit);
+  // Nuvem de palavras: as duas perguntas (texto livre) são a primeira tela depois do login, do check-in até o passo da nuvem.
+  // Depois de responder, a pessoa entra na tela de sempre. Quem já respondeu não vê de novo, mesmo entrando por outro aparelho:
+  // a resposta fica no servidor. Quando o passo da nuvem entra no ar, quem ainda não respondeu vê as perguntas de novo (sem o
+  // "responder depois") e as nuvens crescem no telão; quem já respondeu vê as nuvens também no celular.
+  const wordsQ = () => { const q = (S.state && S.state.words && S.state.words.q) || {}; return q[S.lang] || q.en || ['', '']; };
+  const wordsTip = () => { const x = (S.state && S.state.words && S.state.words.tip) || {}; return x[S.lang] || x.en || ''; };
+  const wordsLive = () => !!(S.state && S.state.words && S.state.words.live);
+  function needWords() {
+    if (S.screen !== 'app' || !S.me || !S.state || !S.state.words || !S.state.words.open || currentPresentation() || currentReflexao()) return false;
+    return S.wordsEdit || (!S.me.words && (wordsLive() || !S.wordsSkip));
+  }
   const wordsSig = i => { const w = S.state && S.state.words; return w && w.clouds ? `${w.count}:${(w.clouds[i] || []).map(x => x[0] + x[1]).join('|')}` : ''; };
   // Quem coordena um bloco faz o login (conta presença), mas não participa dele: nada de dupla, voto ou resposta.
   const sitsOut = block => !!(S.me && S.me.skip && S.me.skip[block]);
   const coordinating = block => `<div class="panel glow msgbox"><div class="e">🎬</div><h2>${esc(t('coordTitle'))}</h2><p>${esc(t('coord', block))}</p></div>`;
   function viewKey() {
+    if (needWords()) return ['words', S.me.person.id, S.wordsSending ? 'env' : '', S.wordsEdit ? 'edit' : '', wordsLive() ? 'live' : '', S.lang, hash(JSON.stringify([S.state.words.q, S.state.words.tip, fixedEn()]))].join('|');
     const pr = currentPresentation();
     if (pr) {
       const su = S.me.sucesso || {}, d = pr.draw;
@@ -369,33 +389,35 @@
     const cn = currentCena();
     if (cn) { // o que muda a tela do celular em cada cena (o resto é atualizado por cima)
       const l = cn.live || {}, sub = cn.kind === 'reconhecimento' ? [l.fase, l.premio, l.passo, (l.feitos || []).join('.')].join(':') : cn.kind === 'intervalo' ? ivPhase(cn) : cn.kind === 'mph' ? (l.at ? (serverNow() - l.at >= MPH_MS ? 'chegou' : 'indo:' + l.at) : 'antes')
-        : cn.kind === 'almanaque' ? `${l.mes}:${l.pagina ? 1 : 0}` : cn.kind === 'agenda' ? cn.itens.map(x => x.estado[0] || '-').join('') : cn.kind === 'abertura' ? `${l.play ? 1 : 0}${l.fim ? 'f' : ''}` : cn.kind === 'nuvem' ? `${wordsForm() ? 'form' : 'ok'}${S.wordsSending ? ':env' : ''}${S.wordsEdit ? ':edit' : ''}` : cn.kind === 'visao' ? (l.aberta ? 'aberta' : 'capa') : '';
-      const content = JSON.stringify([cn.titulo, cn.kicker, cn.itens && cn.kind === 'agenda' ? cn.itens : '', cn.texto, cn.frase, cn.pessoas, cn.quem, cn.pergunta, cn.chegada, cn.premios, cn.carga, cn.hosts, cn.perguntas, cn.dica, cn.sub, S.me.person, S.me.words, S.lang]);
+        : cn.kind === 'almanaque' ? `${l.mes}:${l.pagina ? 1 : 0}` : cn.kind === 'agenda' ? cn.itens.map(x => x.estado[0] || '-').join('') : cn.kind === 'abertura' ? `${l.play ? 1 : 0}${l.fim ? 'f' : ''}` : cn.kind === 'visao' ? (l.aberta ? 'aberta' : 'capa') : '';
+      const content = JSON.stringify([cn.titulo, cn.kicker, cn.itens && cn.kind === 'agenda' ? cn.itens : '', cn.texto, cn.frase, cn.pessoas, cn.quem, cn.pergunta, cn.chegada, cn.premios, cn.carga, cn.hosts, cn.kind === 'nuvem' ? S.state.words.q : '', cn.sub, S.me.person, S.me.words, S.lang, fixedEn()]);
       return ['cena', cn.kind, sub, hash(content)].join('|');
     }
-    if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}|${S.lang}`;
+    if (S.screen !== 'app' || !S.state) return `${S.screen}|${S.pick ? S.pick.id : ''}|${S.lang}|${fixedEn() ? 'en' : ''}`;
     const c = S.state.conn, g = S.me && S.me.group, tm = c.timer;
     const dc = S.state.doc || {}, docKey = S.state.block === 'doc' ? [dc.status, !!dc.play, dc.phones, dc.phones ? dc.rev : 0] : ''; // Visão 2027: espera, cena no telão, mensagem no celular
     const fbKey = S.state.block === 'closing' ? [S.me && S.me.feedback, S.fbEdit, S.fbSending] : '';         // encerramento: o formulário de feedback
-    const content = JSON.stringify([docKey, fbKey, S.state.message, S.state.event, S.state.settings, S.state.block === 'stage' ? S.state.stage : '', S.me && S.me.person, S.me && S.me.skip, g && g.partners, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result, tm ? tm.kind : '', S.lang]);
+    const w = S.state.words || {}, wKey = S.state.block === 'welcome' ? [w.open, w.q, S.me && S.me.words] : '';   // check-in: as respostas das duas perguntas (ou o botão para responder)
+    const content = JSON.stringify([docKey, fbKey, wKey, S.state.message, S.state.event, S.state.settings, S.state.block === 'stage' ? S.state.stage : '', S.me && S.me.person, S.me && S.me.skip, g && g.partners, g && g.code, g && g.queue && g.queue.length, S.me && S.me.conversations, S.me && S.me.ranking, S.me && S.me.result, tm ? tm.kind : '', S.lang]);
     return ['app', S.state.block, c.phase, c.round, '', g ? g.id : '', g && g.missing ? 'miss' : '', S.me && S.me.ranking ? 'ranked' : '', S.editing ? 'edit' : '', S.me && S.me.result ? 'res' : '', hash(content)].join('|');
   }
   // O bloco que está no ar para este celular (depois do login). Quando ele muda, entra a transição
   // do filme: o velocímetro sobe até 88 MPH com o destino escrito embaixo. Avisos e "olhos no telão" entram direto.
   function blockNow() {
     if (S.screen !== 'app' || !S.me || !S.state) return null;
+    if (needWords()) return { id: 'words' };
     const st = S.state, pr = currentPresentation(), i = st.step ? st.step.index : 0;
     if (pr) return { id: 'sucesso:' + pr.activityId, msg: t('wDest', pr.title), dyn: true };
     if (st.reflexao) return { id: 'reflexao', msg: t('wFuel'), dyn: true };
     switch (st.block) {
-      case 'stage': return { id: 'stage:' + i, msg: `NEXT STOP: ${(st.stage && st.stage.title) || 'ON STAGE'}` };
+      case 'stage': return { id: 'stage:' + i, msg: `${L('NEXT STOP', 'PRÓXIMA PARADA', 'PRÓXIMA PARADA')}: ${(st.stage && st.stage.title) || L('ON STAGE', 'NO PALCO', 'EN EL ESCENARIO')}` };
       case 'connections': return { id: 'connections', msg: t('wConn'), dyn: true };
-      case 'closing': return { id: 'closing', msg: 'END OF THE JOURNEY · TO BE CONTINUED…' };
+      case 'closing': return { id: 'closing', msg: L('END OF THE JOURNEY · TO BE CONTINUED…', 'FIM DA VIAGEM · CONTINUA…', 'FIN DEL VIAJE · CONTINUARÁ…') };
       case 'doc': return { id: 'doc', msg: t('wDest', '2027'), dyn: true };
-      case 'cena': return st.cena ? { id: 'cena:' + st.cena.kind, msg: `DESTINATION: ${st.cena.name}` } : { id: 'cena' };
+      case 'cena': return st.cena ? { id: 'cena:' + st.cena.kind, msg: `${L('DESTINATION', 'DESTINO', 'DESTINO')}: ${st.cena.name}` } : { id: 'cena' };
       case 'message': return { id: 'message' };
       case 'standby': return { id: 'standby' };
-      default: return { id: 'welcome', msg: 'TIME CIRCUITS ON' };
+      default: return { id: 'welcome', msg: L('TIME CIRCUITS ON', 'CIRCUITOS DO TEMPO LIGADOS', 'CIRCUITOS DEL TIEMPO ENCENDIDOS') };
     }
   }
   function maybeRender(force) {
@@ -403,14 +425,15 @@
     if (!force && k === S.lastKey) { patch(); return; }
     const prev = S.lastKey; S.lastKey = k;
     const p = prev.split('|'), n = k.split('|');
-    const blk = blockNow(), moved = !!(prev && blk && blk.msg && S.blk && S.blk !== blk.id && S.state.settings.transitions !== false && (!S.state.step || S.state.step.transition !== false));
+    // (sair da tela das duas perguntas não é troca de bloco: a entrada no app tem a sua própria animação)
+    const blk = blockNow(), moved = !!(prev && blk && blk.msg && S.blk && S.blk !== 'words' && S.blk !== blk.id && S.state.settings.transitions !== false && (!S.state.step || S.state.step.transition !== false));
     // chegou um bloco que entra direto (sem transição) enquanto a transição do bloco anterior ainda passava: ela sai da frente
     if (prev && blk && S.blk && S.blk !== blk.id && !moved && warp._hold) { warp._hold = false; clearInterval(warp._t); const w = $('#warp'); w.classList.remove('on', 'go'); w.setAttribute('aria-hidden', 'true'); }
     S.blk = blk ? blk.id : null;
     // a transição de bloco não é interrompida por atualizações que chegam logo em seguida: a tela nova entra por baixo
     // dura o mesmo que a transição do telão (8 s por padrão), pedindo para a pessoa olhar para lá
     const secs = Number(S.state && S.state.settings.transitionSeconds) || 8, long = secs >= 7;
-    const show = () => { if (!moved) return render(); warp._hold = true; warp(`${long ? (blk.dyn ? t('lookWarp') : '👀 LOOK AT THE BIG SCREEN') + '\n\n' : ''}${blk.msg.toUpperCase()}`, () => { warp._hold = false; render(); }, long ? secs * 1000 - 700 : 1500); };
+    const show = () => { if (!moved) return render(); warp._hold = true; warp(`${long ? (blk.dyn ? t('lookWarp') : L('👀 LOOK AT THE BIG SCREEN', '👀 OLHE PARA O TELÃO', '👀 MIRA LA PANTALLA')) + '\n\n' : ''}${blk.msg.toUpperCase()}`, () => { warp._hold = false; render(); }, long ? secs * 1000 - 700 : 1500); };
     const stopWarp = () => { if (warp._hold) return; clearInterval(warp._t); $('#warp').classList.remove('on', 'go'); };
     S.jump = !prev || p.slice(0, 4).join('|') !== n.slice(0, 4).join('|');
     if (n[0] === 'presentation' || p[0] === 'presentation') {
@@ -439,7 +462,7 @@
         const [, kind, sub] = n, was = p[0] === 'cena' && p[1] === kind ? p[2] : '';
         if (kind === 'mph' && sub.startsWith('indo') && sub !== was) { // o Doc acelerou: o celular também vai a 88 MPH
           const c = currentCena(), left = MPH_MS - (serverNow() - c.live.at);
-          beep('ok'); buzz([80, 40, 80]); if (left > 900) return warp('ACCELERATING TO 2027…', render, left);
+          beep('ok'); buzz([80, 40, 80]); if (left > 900) return warp(L('ACCELERATING TO 2027…', 'ACELERANDO PARA 2027…', 'ACELERANDO HACIA 2027…'), render, left);
         }
         if (kind === 'mph' && sub === 'chegou' && was !== 'chegou') { beep('result'); buzz([120, 60, 120, 60, 240]); flashSky(); }
         if (kind === 'reconhecimento' && sub !== was) {
@@ -466,9 +489,11 @@
   }
   function render() {
     const app = $('#app');
-    const presentation = currentPresentation(), reflexao = currentReflexao(), cena = currentCena();
+    const words = needWords(), presentation = currentPresentation(), reflexao = currentReflexao(), cena = currentCena();
     const ae = document.activeElement, typing = ae && ae.id === 'ans', searching = ae && ae.id === 'rfQ', writing = ae && ['w1', 'w2', 'fbLiked', 'fbImprove'].includes(ae.id) ? ae.id : null;
-    if (presentation) app.innerHTML = vPresentation(presentation);
+    document.documentElement.lang = { pt: 'pt-BR', es: 'es', en: 'en' }[ui()];
+    if (words) app.innerHTML = vWords();
+    else if (presentation) app.innerHTML = vPresentation(presentation);
     else if (reflexao) app.innerHTML = vReflexao(reflexao);
     else if (cena) app.innerHTML = vCena(cena);
     else if (S.screen === 'splash') app.innerHTML = vSplash();
@@ -479,7 +504,7 @@
       app.innerHTML = b === 'standby' ? vStandby() : b === 'stage' ? vStage() : b === 'welcome' ? vWelcome() : b === 'message' ? vMessage() : b === 'closing' ? vClosing() : b === 'doc' ? vDoc() : vConnections();
     }
     // "olhos no telão" e blocos de fala: tela calma, com o fundo mais apagado (mas sempre rodando: parado, parecia travado)
-    const calm = !presentation && S.screen === 'app' && !!S.state && !!S.me && (['standby', 'stage'].includes(S.state.block) || (!!cena && CENA_CALM.includes(cena.kind)));
+    const calm = !words && !presentation && S.screen === 'app' && !!S.state && !!S.me && (['standby', 'stage'].includes(S.state.block) || (!!cena && CENA_CALM.includes(cena.kind)));
     document.body.classList.toggle('off', calm);
     if (window.Delorean3D) Delorean3D.pause(false);
     const ans = $('#ans'); if (ans) { ans.value = S.answerDraft; countAnswer(); if (typing && !ans.disabled) { ans.focus(); ans.setSelectionRange(ans.value.length, ans.value.length); } }
@@ -504,6 +529,7 @@
     [0, 1].forEach(i => { const wc = $('#wcloud' + i); if (wc && wc.dataset.sig !== wordsSig(i)) { wc.innerHTML = cloudHtml(i); wc.dataset.sig = wordsSig(i); } });
     const wn = $('#wcN'); if (wn && S.state.words) wn.textContent = S.state.words.count;
     const fn = $('#fbN'); if (fn && S.state.feedback) fn.textContent = S.state.feedback.count;
+    if (needWords()) return;
     const pr = currentPresentation();
     if (pr) { const n = $('#sucCount'); if (n && pr.live) n.textContent = pr.live.responseCount; return; }
     const rf = currentReflexao();
@@ -663,8 +689,8 @@
       <div class="stage">
         <div class="kicker">${esc(actLine(c))}</div><i class="st-arrow"></i>
         <div class="st-theme ${title.length > 22 || /\S{12,}/.test(title) ? 'long' : ''}"><span>${esc(title)}</span></div>
-        ${hostFaces(c)}${who ? `<p class="st-speaker">with ${esc(who)}</p>` : ''}
-        <p class="muted">${note || LOOK}</p>
+        ${hostFaces(c)}${who ? `<p class="st-speaker">${L('with', 'com', 'con')} ${esc(who)}</p>` : ''}
+        <p class="muted">${note || look()}</p>
       </div>
       <div class="spacer"></div>`;
   const cenaCard = (c, kicker, title, extra = '', col = 'var(--yellow)') => `<section class="panel glow presentation-card compact" style="--c:${col}"><div class="kicker">${esc(kicker)}</div><h1>${esc(title)}</h1>${extra}</section>`;
@@ -678,26 +704,15 @@
     if (c.kind === 'agenda') { // o plano de voo: os horários de cada item (sem a duração) e, com 📱, o que acontece no celular
       return `${vHeader()}${cenaCard(c, c.kicker, plain(c.titulo), `<p class="small center">${esc(c.data)} · ${esc(c.inicio)} – ${esc(c.fim)}</p>`, 'var(--cyan)')}
         ${c.atos.map((a, k) => `<div class="panel ag" style="--c:${ACT_C[k]}"><div class="ag-h"><b>${esc(a.n)} · ${esc(a.nome)}</b><span>${esc(a.de)} – ${esc(a.ate)}</span></div>
-          ${c.itens.filter(x => x.ato === k + 1).map(x => `<div class="ag-it"><b>${esc(x.hora)}</b><span>${esc(x.t)}<small>${esc(x.d)}</small></span>${x.fone ? '<i title="On your phone">📱</i>' : ''}</div>`).join('')}</div>`).join('')}
-        <p class="small center">📱 = this one happens on your phone, in this app</p>`;
+          ${c.itens.filter(x => x.ato === k + 1).map(x => `<div class="ag-it"><b>${esc(x.hora)}</b><span>${esc(x.t)}<small>${esc(x.d)}</small></span>${x.fone ? '<i>📱</i>' : ''}</div>`).join('')}</div>`).join('')}
+        <p class="small center">${esc(L('📱 = this one happens on your phone, in this app', '📱 = acontece no seu celular, neste app', '📱 = ocurre en tu celular, en esta app'))}</p>`;
     }
-    if (c.kind === 'nuvem') { // nuvem de palavras: duas perguntas, cada uma com um campo de texto livre; depois de responder, as nuvens crescendo
-      const q = c.perguntas || [], mine = S.me.words, w = S.state.words || { count: 0 };
-      if (wordsForm()) return `${vHeader()}${cenaCard(c, c.kicker, plain(c.titulo), '<div class="phonechip" style="margin-top:10px">📱 This one happens here, on your phone</div>', 'var(--cyan)')}
-        <div class="panel wq">
-          ${q.map((text, i) => `<label class="wq-q" for="w${i + 1}"><b>${i + 1}</b><span>${esc(text)}</span></label>
-          <textarea class="input short" id="w${i + 1}" maxlength="80" rows="2" enterkeyhint="${i ? 'send' : 'next'}" placeholder="Write your answer here…" ${S.wordsSending ? 'disabled' : ''}></textarea>
-          <div class="ansmeta"><span></span><span id="w${i + 1}c">0 / 80</span></div>`).join('')}
-          ${c.dica ? `<p class="small" style="margin-bottom:12px">💡 ${esc(c.dica)}</p>` : ''}
-          <button class="btn" data-action="sendWords" ${S.wordsSending ? 'disabled' : ''}>${S.wordsSending ? 'Sending…' : '⚡ Send my answers'}</button>
-          ${S.wordsEdit ? '<button class="linkbtn" data-action="cancelWords" style="display:block;margin:8px auto 0">← keep my answers</button>' : ''}
-        </div>`;
-      return `${vHeader()}${cenaCard(c, c.kicker, plain(c.titulo), '', 'var(--cyan)')}
-        <div class="panel glow center"><div class="kicker" style="color:var(--green)">✓ YOUR ANSWERS ARE IN</div>
-          ${q.map((text, i) => `<div class="rf-drawn" style="text-align:left"><small>${esc(text)}</small><b>${esc((mine || [])[i] || '')}</b></div>`).join('')}
-          <button type="button" class="linkbtn" data-action="editWords" style="margin-top:10px">change my answers</button></div>
+    if (c.kind === 'nuvem') { // o passo da nuvem: as respostas da pessoa e as duas nuvens crescendo (quem ainda não respondeu vê as perguntas antes)
+      const q = wordsQ(), w = S.state.words || { count: 0 };
+      return `${vHeader()}${cenaCard(c, L('Word cloud', 'Nuvem de palavras', 'Nube de palabras'), L('The crew, in your own words', 'A tripulação, com as suas palavras', 'La tripulación, con tus palabras'), '', 'var(--cyan)')}
+        <div class="panel glow center"><div class="kicker" style="color:var(--green)">${esc(L('✓ Your answers are in', '✓ Suas respostas chegaram', '✓ Tus respuestas llegaron'))}</div>${myWords()}</div>
         ${q.map((text, i) => `<div class="panel wc"><div class="kicker">${esc(text)}</div><div class="wcloud" id="wcloud${i}">${cloudHtml(i)}</div></div>`).join('')}
-        <p class="small center"><b id="wcN">${w.count}</b> travelers answered · 👀 the word clouds are on the big screen</p>`;
+        <p class="small center"><b id="wcN">${w.count}</b> ${esc(L('travelers answered · 👀 the word clouds are on the big screen', 'viajantes responderam · 👀 as nuvens de palavras estão no telão', 'viajeros respondieron · 👀 las nubes de palabras están en la pantalla'))}</p>`;
     }
     if (c.kind === 'capasucesso') { // capa do bloco Sucesso (em português ou espanhol, como a dinâmica)
       return `<div class="spacer"></div>${logo(true, 'dim')}
@@ -710,50 +725,51 @@
         </div><div class="spacer"></div>`;
     }
     if (c.kind === 'plano26') return cenaLook(c, plain(c.titulo), (c.lideres || []).map(x => x.nome).join(', '));
-    if (c.kind === 'abertura') return cenaLook(c, c.name, '', l.play ? '🎬 Now playing · look at the big screen.' : l.fim ? '🍿 That was the opening.' : '🎬 The opening video is about to start.<br>' + LOOK);
+    if (c.kind === 'abertura') return cenaLook(c, c.name, '', l.play ? L('🎬 Now playing · look at the big screen.', '🎬 Passando agora · olhe para o telão.', '🎬 En pantalla ahora · mira la pantalla.') : l.fim ? L('🍿 That was the opening.', '🍿 Essa foi a abertura.', '🍿 Esa fue la apertura.') : L('🎬 The opening video is about to start.', '🎬 O vídeo de abertura já vai começar.', '🎬 El video de apertura está por comenzar.') + '<br>' + look());
     if (c.kind === 'intervalo') {
-      const ph = ivPhase(c), msg = { idle: 'The break is about to start.', run: 'Be back before the clock hits zero. Your phone will ring the alarm when it is time.', paused: '❚❚ Timer paused by the host.', done: '🚨 The break is over. Back to your seat!' }[ph];
+      const ph = ivPhase(c), msg = { idle: L('The break is about to start.', 'O intervalo já vai começar.', 'El receso está por comenzar.'), run: L('Be back before the clock hits zero. Your phone will ring the alarm when it is time.', 'Volte antes de o relógio zerar. O celular toca o alarme quando for a hora.', 'Vuelve antes de que el reloj llegue a cero. Tu celular sonará la alarma cuando sea la hora.'),
+        paused: L('❚❚ Timer paused by the host.', '❚❚ Cronômetro pausado pelo apresentador.', '❚❚ Cronómetro pausado por el presentador.'), done: L('🚨 The break is over. Back to your seat!', '🚨 O intervalo acabou. De volta para o seu lugar!', '🚨 El receso terminó. ¡De vuelta a tu lugar!') }[ph];
       return `${vHeader()}${cenaCard(c, actLine(c), plain(c.titulo), '', 'var(--green)')}
         <div class="panel center"><div class="countdown green ${ph === 'done' ? 'hurry' : ''}" id="ivCd">${fmt(ivLeft(c))}</div><p class="muted" style="margin-top:12px">${esc(msg)}</p></div>
-        <div class="panel"><p class="myans" style="margin-top:0">☕ ${esc(c.texto)}</p></div>`;
+        <div class="panel"><p class="myans" style="margin-top:0">☕ ${esc(own(c.texto))}</p></div>`;
     }
     if (c.kind === 'mph') {
       const arrived = l.at && serverNow() - l.at >= MPH_MS;
       return arrived ? `${vHeader()}<div class="panel glow msgbox"><div class="e">🏁</div><h2>${esc(c.chegada)}</h2><p>${esc(c.depois)}</p><div class="docyear">2027</div></div>`
-        : cenaLook(c, '88 MPH', '', l.at ? '⚡ Accelerating…' : `${esc(c.antes)}<br>${LOOK}`);
+        : cenaLook(c, '88 MPH', '', l.at ? L('⚡ Accelerating…', '⚡ Acelerando…', '⚡ Acelerando…') : `${esc(c.antes)}<br>${look()}`);
     }
     if (c.kind === 'reconhecimento') {
       const win = p => (p.vencedor === undefined ? null : p.indicados[p.vencedor]);
       if (l.fase === 'cerimonia' && c.premios[l.premio]) {
-        const p = c.premios[l.premio], w = win(p), head = cenaCard(c, `THE 2026 AWARD FOR ${p.k}`, p.n, l.passo === 'categoria' ? `<p class="small center">${esc(p.porque)}</p>` : '');
+        const p = c.premios[l.premio], w = win(p), head = cenaCard(c, `${L('THE 2026 AWARD FOR', 'PRÊMIO 2026 ·', 'PREMIO 2026 ·')} ${p.k}`, p.n, l.passo === 'categoria' ? `<p class="small center">${esc(p.porque)}</p>` : '');
         if (l.passo === 'carga') { // o Flux Capacitor carrega com os aplausos da sala (microfone), com os toques no celular, ou com os dois
           const mic = c.carga !== 'toques', tap = c.carga !== 'mic';
           return `${vHeader()}${head}
-          <div class="panel glow center"><div class="kicker">MAKE SOME NOISE!</div>
-            ${mic ? `<div class="clap">👏</div><p class="muted">${tap ? 'Clap and tap the button: both charge the flux capacitor on the big screen.' : 'Put your phone down and clap! The louder the room, the faster the flux capacitor charges.'}</p>` : '<p class="muted">Every tap charges the flux capacitor on the big screen.</p>'}
-            ${tap ? '<button class="btn charge" data-action="tapCharge">⚡ CHARGE</button>' : ''}
+          <div class="panel glow center"><div class="kicker">${esc(L('MAKE SOME NOISE!', 'FAÇAM BARULHO!', '¡HAGAN RUIDO!'))}</div>
+            ${mic ? `<div class="clap">👏</div><p class="muted">${esc(tap ? L('Clap and tap the button: both charge the flux capacitor on the big screen.', 'Bata palmas e toque no botão: os dois carregam o Flux Capacitor no telão.', 'Aplaude y toca el botón: los dos cargan el Flux Capacitor en la pantalla.') : L('Put your phone down and clap! The louder the room, the faster the flux capacitor charges.', 'Largue o celular e bata palmas! Quanto mais barulho na sala, mais rápido o Flux Capacitor carrega.', '¡Deja el celular y aplaude! Cuanto más ruido en la sala, más rápido se carga el Flux Capacitor.'))}</p>` : `<p class="muted">${esc(L('Every tap charges the flux capacitor on the big screen.', 'Cada toque carrega o Flux Capacitor no telão.', 'Cada toque carga el Flux Capacitor en la pantalla.'))}</p>`}
+            ${tap ? `<button class="btn charge" data-action="tapCharge">⚡ ${L('CHARGE', 'CARREGAR', 'CARGAR')}</button>` : ''}
             <div class="ebar" style="margin-top:14px"><i id="cgBar" style="width:${((l.carga || 0) * 100).toFixed(1)}%"></i></div><p class="small" id="cgNum" style="margin-top:6px"></p></div>`;
         }
         if (l.passo === 'vencedor' && w) return `${vHeader()}${head}
-          <div class="panel glow center"><div class="kicker">AND THE AWARD GOES TO…</div><div class="polaroids"><div class="polaroid"><div class="photo">${av({ name: w.nome, photo: (w.fotos || [])[0] })}</div><div class="cap">${esc(first(w.nome))} · 2026</div></div></div>
+          <div class="panel glow center"><div class="kicker">${esc(L('AND THE AWARD GOES TO…', 'E O PRÊMIO VAI PARA…', 'Y EL PREMIO ES PARA…'))}</div><div class="polaroids"><div class="polaroid"><div class="photo">${av({ name: w.nome, photo: (w.fotos || [])[0] })}</div><div class="cap">${esc(first(w.nome))} · 2026</div></div></div>
             <div class="pname">${esc(w.nome)}</div><p class="small" style="margin-top:6px;color:var(--cyan)">${esc(w.projeto)}</p><p class="myans">“${esc(p.citacao)}”</p></div>`;
-        const list = l.passo === 'categoria' ? '' : `<div class="panel"><div class="kicker">Nominees</div>${p.indicados.map(x => `<div class="rf-drawn"><b>${esc(x.nome)}</b><span>${esc(x.projeto)}</span></div>`).join('')}</div>`;
-        return `${vHeader()}${head}${list}<div class="panel center"><p class="muted">${l.passo === 'sorteio' ? '🥁 The lightning is about to strike… eyes on the big screen!' : LOOK}</p></div>`;
+        const list = l.passo === 'categoria' ? '' : `<div class="panel"><div class="kicker">${L('Nominees', 'Indicados', 'Nominados')}</div>${p.indicados.map(x => `<div class="rf-drawn"><b>${esc(x.nome)}</b><span>${esc(x.projeto)}</span></div>`).join('')}</div>`;
+        return `${vHeader()}${head}${list}<div class="panel center"><p class="muted">${l.passo === 'sorteio' ? esc(L('🥁 The lightning is about to strike… eyes on the big screen!', '🥁 O raio já vai cair… olhos no telão!', '🥁 El rayo está por caer… ¡ojos en la pantalla!')) : look()}</p></div>`;
       }
       if (l.fase === 'premios' || l.fase === 'hall') {
         return `${vHeader()}${cenaCard(c, actLine(c), l.fase === 'hall' ? c.hallTitulo : plain(c.premiosTitulo))}
           <div class="panel"><div class="rf-list">${c.premios.map(p => { const w = p.feito && win(p); return `<div class="rf-item ${w ? 'ok' : ''}" style="--c:var(--yellow)"><b>${w ? '🏆' : '✉️'}</b><span>${esc(p.n)}<small>${w ? `${esc(w.nome)} · ${esc(w.projeto)}` : esc(p.k)}</small></span></div>`; }).join('')}</div></div>
-          <div class="panel center"><p class="muted">${LOOK}</p></div>`;
+          <div class="panel center"><p class="muted">${look()}</p></div>`;
       }
-      return cenaLook(c, c.name, l.fase === 'tributo' ? c.fala : c.quem, l.fase === 'tributo' ? '🎬 Tribute · look at the big screen.' : '');
+      return cenaLook(c, c.name, l.fase === 'tributo' ? c.fala : c.quem, l.fase === 'tributo' ? L('🎬 Tribute · look at the big screen.', '🎬 Tributo · olhe para o telão.', '🎬 Tributo · mira la pantalla.') : '');
     }
     if (c.kind === 'boasvindas') {
       const faces = { ...c, hosts: (c.pessoas || []).map(p => ({ nome: p.nome, foto: (p.fotos || [])[0] })) };
       return cenaLook(faces, c.name, (c.pessoas || []).map(p => p.nome).join(', '));
     }
-    if (c.kind === 'almanaque') return cenaLook(c, c.name, c.quem, l.pagina ? `📄 ${c.stats.entregues} deliveries · ${esc(c.stats.beneficiosTxt)} in benefits<br>${LOOK}` : l.mes >= 0 ? `📅 ${esc(c.meses[l.mes])} 2026<br>${LOOK}` : '');
-    if (c.kind === 'visao') return cenaLook(c, plain(c.titulo), c.quem, l.aberta ? '🔭 The 2027 strategy is on the big screen.' : '');
-    if (c.kind === 'manifesto') return cenaLook(c, c.name, c.quem, `${esc(c.titulo)} <b style="color:var(--yellow)">${esc(c.pergunta)}</b><br>${LOOK}`);
+    if (c.kind === 'almanaque') return cenaLook(c, c.name, c.quem, l.pagina ? `📄 ${c.stats.entregues} ${L('deliveries', 'entregas', 'entregas')} · ${esc(c.stats.beneficiosTxt)} ${L('in benefits', 'em benefícios', 'en beneficios')}<br>${look()}` : l.mes >= 0 ? `📅 ${esc(c.meses[l.mes])} 2026<br>${look()}` : '');
+    if (c.kind === 'visao') return cenaLook(c, plain(c.titulo), c.quem, l.aberta ? L('🔭 The 2027 strategy is on the big screen.', '🔭 A estratégia 2027 está no telão.', '🔭 La estrategia 2027 está en la pantalla.') : '');
+    if (c.kind === 'manifesto') return cenaLook(c, c.name, c.quem, `${esc(c.titulo)} <b style="color:var(--yellow)">${esc(c.pergunta)}</b><br>${look()}`);
     return cenaLook(c, plain(c.titulo || c.name), c.quem);
   }
   // Bloco de fala: o celular mostra o nome e o tema do bloco e fica quieto.
@@ -762,10 +778,10 @@
     return `<div class="spacer"></div>
       ${logo(true, 'dim')}
       <div class="stage">
-        <div class="kicker">${esc(theme ? st.title : 'On stage now')}</div><i class="st-arrow"></i>
-        <div class="st-theme ${(theme || st.title || '').length > 22 ? 'long' : ''}"><span>${esc(theme || st.title || 'On stage')}</span></div>
-        ${st.speaker ? `<p class="st-speaker">with ${esc(st.speaker)}</p>` : ''}
-        <p class="muted">${esc(S.state.event.stageText || 'All eyes on the stage.')}</p>
+        <div class="kicker">${esc(theme ? st.title : L('On stage now', 'No palco agora', 'En el escenario ahora'))}</div><i class="st-arrow"></i>
+        <div class="st-theme ${(theme || st.title || '').length > 22 ? 'long' : ''}"><span>${esc(theme || st.title || L('On stage', 'No palco', 'En el escenario'))}</span></div>
+        ${st.speaker ? `<p class="st-speaker">${L('with', 'com', 'con')} ${esc(st.speaker)}</p>` : ''}
+        <p class="muted">${esc(own(S.state.event.stageText || 'All eyes on the stage.'))}</p>
       </div>
       <div class="spacer"></div>`;
   }
@@ -773,16 +789,20 @@
   // o logo do evento, no estilo do logo do filme
   const logo = (sm = false, cls = '') => `<div class="logo ${sm ? 'sm' : ''} ${cls}"><div class="l1">BACK TO THE</div><div class="l2">FUTURE</div><div class="bar"></div>${sm ? '' : '<div class="l3">TOWNHALL · 2026</div>'}</div>`;
 
+  // Primeira tela: a pessoa escolhe o idioma. O toque já configura o app nesse idioma e segue para o login.
   function vSplash() {
     return `<div class="spacer"></div>${logo()}
       <p class="muted center" style="margin-top:18px">CDIO HC + BPC · 2026 Townhall</p>
       <div class="spacer"></div>
-      <button class="btn" data-action="start">⚡ Board the DeLorean</button>`;
+      <div class="langstart">
+        <div class="kicker">${fixedEn() ? 'Language for the activities · Idioma de las dinámicas' : 'Choose your language<br>Escolha o seu idioma<br>Elige tu idioma'}</div>
+        ${langOpts().map(k => `<button class="btn ghost ${(fixedEn() ? dyn() : S.lang) === k ? 'sug' : ''}" data-action="start" data-lang="${k}">${LANGS[k]}</button>`).join('')}
+      </div>`;
   }
   function vPeopleList() {
     const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const q = norm(S.q.trim());
-    if (!q) return `<p class="muted center plist-hint">Start typing your name and it will show up here.</p>`;
+    if (!q) return `<p class="muted center plist-hint">${esc(L('Start typing your name and it will show up here.', 'Comece a digitar o seu nome e ele aparece aqui.', 'Empieza a escribir tu nombre y aparecerá aquí.'))}</p>`;
     // Só aparece quem tem o nome ou um sobrenome COMEÇANDO com o que foi digitado ("ni" acha Nicolas, não Vinicius).
     // Dá para digitar mais de uma palavra ("nico ku"): cada uma tem de ser o começo de uma palavra do nome.
     // Primeiro vêm os que batem pelo primeiro nome; quem já embarcou aparece marcado (para quem está voltando).
@@ -794,100 +814,137 @@
       return real.some(w => w.startsWith(q)) ? 1 : 9;
     };
     const list = S.people.map(p => ({ p, r: rank(p) })).filter(x => x.r < 9).sort((a, b) => a.r - b.r || a.p.name.localeCompare(b.p.name)).map(x => x.p);
-    if (!list.length) return `<p class="muted center plist-hint">No name found. Check the spelling or ask the host.</p>`;
+    if (!list.length) return `<p class="muted center plist-hint">${esc(L('No name found. Check the spelling or ask the host.', 'Nenhum nome encontrado. Confira como escreveu ou fale com o apresentador.', 'No se encontró ningún nombre. Revisa cómo lo escribiste o habla con el presentador.'))}</p>`;
     const shown = list.slice(0, 8);
-    return shown.map(p => `<button class="pitem" data-action="pick" data-id="${p.id}">${av(p)}<div><div class="n">${esc(p.name)}</div>${p.checkedIn ? '<div class="m">already aboard · tap if this is you</div>' : ''}</div>${p.checkedIn ? '<span class="in">ABOARD</span>' : ''}</button>`).join('')
-      + (list.length > shown.length ? `<p class="small center" style="padding-top:6px">Keep typing to find your name.</p>` : '');
+    return shown.map(p => `<button class="pitem" data-action="pick" data-id="${p.id}">${av(p)}<div><div class="n">${esc(p.name)}</div>${p.checkedIn ? `<div class="m">${esc(L('already aboard · tap if this is you', 'já embarcou · toque se for você', 'ya está a bordo · toca si eres tú'))}</div>` : ''}</div>${p.checkedIn ? `<span class="in">${L('ABOARD', 'A BORDO', 'A BORDO')}</span>` : ''}</button>`).join('')
+      + (list.length > shown.length ? `<p class="small center" style="padding-top:6px">${esc(L('Keep typing to find your name.', 'Continue digitando para achar o seu nome.', 'Sigue escribiendo para encontrar tu nombre.'))}</p>` : '');
   }
   function vIdentify() {
     return `${logo(true)}
-      <h2>Who are you?</h2>
-      <input class="input" id="q" placeholder="Type your name…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+      <h2>${esc(L('Who are you?', 'Quem é você?', '¿Quién eres?'))}</h2>
+      <input class="input" id="q" placeholder="${esc(L('Type your name…', 'Digite o seu nome…', 'Escribe tu nombre…'))}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
       <div class="plist" id="plist">${vPeopleList()}</div>
       <div class="spacer"></div>
-      <button class="linkbtn" data-action="back">← back</button>`;
+      <button class="linkbtn" data-action="back">🌐 ${esc(LANGS[fixedEn() ? dyn() : S.lang])} · ${esc(L('change language', 'trocar o idioma', 'cambiar el idioma'))}</button>`;
   }
-  // escolha do idioma das dinâmicas (o app é em inglês; Conexões, Reflexão e Sucesso são em português ou em espanhol)
-  const langPick = () => `<div class="langpick"><div class="kicker">Language for the activities</div>
-      <div class="seg">${Object.entries(LANGS).map(([k, l]) => `<button type="button" class="${S.lang === k ? 'on' : ''}" data-action="lang" data-lang="${k}">${l}</button>`).join('')}</div>
-      <p class="small">The app is in English. The three activities on your phone (Connection, Reflection and Success) will be in ${LANGS[S.lang]}.</p></div>`;
+  // o que o idioma escolhido muda (aparece na confirmação do nome)
+  const langNote = () => (fixedEn() ? `The app is in English. The three activities on your phone (Connection, Reflection and Success) and the two opening questions will be in ${LANGS[dyn()]}.`
+    : L('The three group activities (Connection, Reflection and Success) run in Portuguese.', '', ''));
   function vConfirm() {
-    const p = S.pick;
+    const p = S.pick, note = langNote();
     return `${logo(true)}
       <div class="panel glow match">
         <div class="who" style="display:flex;justify-content:center;margin:14px 0 8px">${av(p, 'xl')}</div>
         <div class="pname">${esc(p.name)}</div>
-        ${p.checkedIn ? '<p class="small" style="margin-top:12px;color:var(--amber)">This name is already checked in on another phone. If it\'s you, go ahead.</p>' : ''}
+        ${p.checkedIn ? `<p class="small" style="margin-top:12px;color:var(--amber)">${esc(L('This name is already checked in on another phone. If it\'s you, go ahead.', 'Este nome já fez check-in em outro celular. Se for você, pode seguir.', 'Este nombre ya hizo check-in en otro celular. Si eres tú, continúa.'))}</p>` : ''}
+        <p class="small" style="margin-top:12px">🌐 ${esc(LANGS[fixedEn() ? dyn() : S.lang])}${note ? ` · ${esc(note)}` : ''}</p>
       </div>
-      <div class="panel">${langPick()}</div>
-      <button class="btn" data-action="checkin">⚡ That's me, let's go</button>
-      <button class="btn ghost" data-action="unpick">Not me</button>`;
+      <button class="btn" data-action="checkin">⚡ ${esc(L('That\'s me, let\'s go', 'Sou eu, vamos lá', 'Soy yo, vamos'))}</button>
+      <button class="btn ghost" data-action="unpick">${esc(L('Not me', 'Não sou eu', 'No soy yo'))}</button>`;
   }
-  function vLoading() { return `${logo()}<div class="wait"><div class="flux"><i></i><i></i><i></i><b></b></div><p class="muted">Syncing with the timeline…</p></div>`; }
+  function vLoading() { return `${logo()}<div class="wait"><div class="flux"><i></i><i></i><i></i><b></b></div><p class="muted">${esc(L('Syncing with the timeline…', 'Sincronizando com a linha do tempo…', 'Sincronizando con la línea del tiempo…'))}</p></div>`; }
 
+  // cabeçalho: o logo, o idioma (um toque troca) e o nome
   function vHeader() {
-    const me = S.me.person;
-    return `<div class="trip">${logo(true)}<div class="hdr"><button type="button" class="langchip" data-action="langToggle" title="Language for the activities: ${LANGS[S.lang]}" aria-label="Language for the activities: ${LANGS[S.lang]}. Tap to change."><b class="${S.lang === 'pt' ? 'on' : ''}">PT</b><b class="${S.lang === 'es' ? 'on' : ''}">ES</b></button><div class="small">${esc(first(me.name))}</div></div></div>`;
+    const me = S.me.person, cur = fixedEn() ? dyn() : S.lang, tip = L('Language', 'Idioma', 'Idioma');
+    return `<div class="trip">${logo(true)}<div class="hdr"><button type="button" class="langchip" data-action="langToggle" title="${tip}: ${LANGS[cur]}" aria-label="${tip}: ${LANGS[cur]}">${langOpts().map(k => `<b class="${cur === k ? 'on' : ''}">${k.toUpperCase()}</b>`).join('')}</button><div class="small">${esc(first(me.name))}</div></div></div>`;
   }
+  /* ---- As duas perguntas da nuvem de palavras: a primeira tela depois do login ----
+   * Cada pergunta tem um campo de texto livre. Depois de enviar, a pessoa entra na tela de sempre. */
+  function vWords() {
+    const me = S.me.person, q = wordsQ(), tip = wordsTip(), live = wordsLive(), has = !!S.me.words;
+    return `${vHeader()}
+      <section class="panel glow presentation-card compact" style="--c:var(--cyan)"><div class="kicker">${esc(L('Before we take off · word cloud', 'Antes de decolar · nuvem de palavras', 'Antes de despegar · nube de palabras'))}</div>
+        <h1>${esc(L(`Two quick questions, ${first(me.name)}`, `Duas perguntas rápidas, ${first(me.name)}`, `Dos preguntas rápidas, ${first(me.name)}`))}</h1>
+        <p class="small center">${esc(live ? L('Your answers go straight to the word clouds on the big screen.', 'As suas respostas vão direto para as nuvens de palavras no telão.', 'Tus respuestas van directo a las nubes de palabras en la pantalla.')
+          : L('Your answers will form the word clouds on the big screen.', 'As suas respostas vão formar as nuvens de palavras no telão.', 'Tus respuestas formarán las nubes de palabras en la pantalla.'))}</p></section>
+      <div class="panel wq">
+        ${q.map((text, i) => `<label class="wq-q" for="w${i + 1}"><b>${i + 1}</b><span>${esc(text)}</span></label>
+        <textarea class="input short" id="w${i + 1}" maxlength="80" rows="2" enterkeyhint="${i ? 'send' : 'next'}" placeholder="${esc(L('Write your answer here…', 'Escreva a sua resposta aqui…', 'Escribe tu respuesta aquí…'))}" ${S.wordsSending ? 'disabled' : ''}></textarea>
+        <div class="ansmeta"><span></span><span id="w${i + 1}c">0 / 80</span></div>`).join('')}
+        ${tip ? `<p class="small" style="margin-bottom:12px">💡 ${esc(tip)}</p>` : ''}
+        <button class="btn" data-action="sendWords" ${S.wordsSending ? 'disabled' : ''}>${esc(S.wordsSending ? L('Sending…', 'Enviando…', 'Enviando…') : L('⚡ Send my answers', '⚡ Enviar minhas respostas', '⚡ Enviar mis respuestas'))}</button>
+        ${has ? `<button class="linkbtn" data-action="cancelWords" style="display:block;margin:8px auto 0">${esc(L('← keep my answers', '← manter minhas respostas', '← mantener mis respuestas'))}</button>`
+          : live ? '' : `<button class="linkbtn" data-action="skipWords" style="display:block;margin:8px auto 0">${esc(L('answer later', 'responder depois', 'responder después'))}</button>`}
+      </div>`;
+  }
+  // as respostas da pessoa (check-in e passo da nuvem), com o link para trocar
+  const myWords = () => { const q = wordsQ(), mine = S.me.words || []; return `${q.map((text, i) => `<div class="rf-drawn" style="text-align:left"><small>${esc(text)}</small><b>${esc(mine[i] || '')}</b></div>`).join('')}
+      <button type="button" class="linkbtn" data-action="editWords" style="margin-top:10px">${esc(L('change my answers', 'trocar minhas respostas', 'cambiar mis respuestas'))}</button>`; };
   // uma nuvem no celular (i = qual pergunta): cada termo no tamanho de quantas pessoas o escreveram; a minha resposta fica marcada
   function cloudHtml(i) {
     const w = (S.state && S.state.words) || {}, top = (w.clouds && w.clouds[i]) || [], ans = String(((S.me && S.me.words) || [])[i] || '').replace(/[.,;:!?¡¿()“”…]+/g, ' ').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
     const mine = new Set(ans.length <= 24 && ans.split(' ').length <= 3 ? [ans] : ans.split(' ')); // resposta curta entra inteira; frase vira palavras (como no servidor)
-    if (!top.length) return '<p class="muted center wc-empty">Waiting for the first answers…</p>';
+    if (!top.length) return `<p class="muted center wc-empty">${esc(L('Waiting for the first answers…', 'Aguardando as primeiras respostas…', 'Esperando las primeras respuestas…'))}</p>`;
     const max = Math.max(...top.map(x => x[1]));
     return top.slice(0, 50).sort((a, b) => hash(a[0]) % 97 - hash(b[0]) % 97)
       .map(([word, n]) => `<span class="${mine.has(word.toLocaleLowerCase()) ? 'me' : ''}" style="--s:${(max > 1 ? .85 + 1.15 * Math.sqrt(n / max) : 1.15).toFixed(2)};--c:${color(word)};--d:${(hash(word) % 40) / 10}s">${esc(word)}</span>`).join('');
   }
   function countField(el) { const c = $('#' + el.id + 'c'); if (c) c.textContent = `${el.value.length} / ${el.maxLength}`; }
+  // textos padrão que o Doc pode trocar em Ajustes: enquanto forem os originais (em inglês), aparecem no idioma da pessoa
+  const DEF_TEXT = {
+    'Hang tight: the journey is about to begin.': ['Aguarde: a viagem começa em breve.', 'Espera: el viaje está por comenzar.'],
+    'Thank you for travelling with us. Now go grab that coffee with your connection!': ['Obrigado por viajar com a gente. Agora marque aquele café com a sua conexão!', 'Gracias por viajar con nosotros. ¡Ahora agenda ese café con tu conexión!'],
+    'You don\'t need your phone right now.': ['Agora você não precisa do celular.', 'Ahora no necesitas el celular.'],
+    'All eyes on the stage.': ['Agora a atenção é no palco.', 'Ahora la atención está en el escenario.'],
+    'Emergency alert': ['Alerta de emergência', 'Alerta de emergencia'],
+    'The break is over. The DeLorean leaves for 2027 in a moment: return to your seat now.': ['O intervalo acabou. A DeLorean parte para 2027 em instantes: volte para o seu lugar agora.', 'El receso terminó. La DeLorean sale hacia 2027 en un momento: vuelve a tu lugar ahora.'],
+    'Hill Valley Civil Defense · Time Travel Division': ['Defesa Civil de Hill Valley · Divisão de Viagens no Tempo', 'Defensa Civil de Hill Valley · División de Viajes en el Tiempo'],
+    'Mr. Fusion is recharging. Grab a coffee, meet someone new, and be back before the clock hits zero.': ['O Mr. Fusion está recarregando. Pegue um café, conheça alguém novo e volte antes de o relógio zerar.', 'El Mr. Fusion se está recargando. Toma un café, conoce a alguien nuevo y vuelve antes de que el reloj llegue a cero.'],
+  };
+  const own = text => { const d = DEF_TEXT[String(text || '').trim()]; return d ? L(text, d[0], d[1]) : text; };
   function vWelcome() {
-    const st = S.state, me = S.me.person;
+    const st = S.state, me = S.me.person, w = st.words || {};
     return `${vHeader()}
       <div class="panel glow match">
         <div class="polaroids"><div class="polaroid"><div class="photo">${av(me)}</div><div class="cap">${esc(first(me.name))} · Hill Valley</div></div></div>
-        <div class="pname">Welcome aboard, ${esc(first(me.name))}!</div>
-        <p class="muted" style="margin-top:12px">${esc(st.event.welcomeText)}</p>
+        <div class="pname">${esc(L(`Welcome aboard, ${first(me.name)}!`, `Bem-vindo(a) a bordo, ${first(me.name)}!`, `¡Bienvenido(a) a bordo, ${first(me.name)}!`))}</div>
+        <p class="muted" style="margin-top:12px">${esc(own(st.event.welcomeText))}</p>
       </div>
+      ${!w.open ? '' : S.me.words ? `<div class="panel center"><div class="kicker" style="color:var(--green)">${esc(L('✓ Your answers for the word cloud', '✓ Suas respostas para a nuvem de palavras', '✓ Tus respuestas para la nube de palabras'))}</div>${myWords()}</div>`
+        : `<button type="button" class="btn ghost" data-action="editWords">✍️ ${esc(L('Answer the two questions', 'Responder as duas perguntas', 'Responder las dos preguntas'))}</button>`}
       <div class="panel center">
-        <div class="kicker">Aboard</div>
+        <div class="kicker">${esc(L('Aboard', 'A bordo', 'A bordo'))}</div>
         <div class="big"><span id="count">${st.counts.checkedIn}</span><span style="font-size:18px;color:var(--muted)"> / ${st.counts.total}</span></div>
         ${carBox()}
       </div>
       <div class="spacer"></div>
-      <button class="linkbtn" data-action="checkout">Not ${esc(first(me.name))}? Switch</button>`;
+      <button class="linkbtn" data-action="checkout">${esc(L(`Not ${first(me.name)}? Switch`, `Não é ${first(me.name)}? Trocar`, `¿No eres ${first(me.name)}? Cambiar`))}</button>`;
   }
   function vMessage() {
     const m = S.state.message;
     return `${vHeader()}<div class="panel glow msgbox"><div class="e">${esc(m.emoji || '📣')}</div><h2>${esc(m.title)}</h2><p>${linkify(m.body)}</p></div>`;
   }
   // Encerramento: a mensagem final e o formulário de feedback (nota de 1 a 5 e dois textos livres, opcionais).
-  const FB_LABEL = ['', 'Great Scott… not good', 'Could be better', 'Good', 'Great', '1.21 gigawatts! Loved it'];
+  const fbLabel = n => [L('Tap to rate: 1 (low) to 5 (high)', 'Toque para dar a nota: 1 (baixa) a 5 (alta)', 'Toca para calificar: 1 (baja) a 5 (alta)'), L('Great Scott… not good', 'Great Scott… não foi bom', 'Great Scott… no estuvo bien'), L('Could be better', 'Podia ser melhor', 'Podría ser mejor'),
+    L('Good', 'Bom', 'Bueno'), L('Great', 'Ótimo', 'Muy bueno'), L('1.21 gigawatts! Loved it', '1,21 gigawatts! Amei', '¡1,21 gigawatts! Me encantó')][n] || '';
   function vFeedback() {
-    const f = S.me.feedback, d = S.fbDraft, n = (S.state.feedback || {}).count || 0;
-    if (f && !S.fbEdit) return `<div class="panel glow center fb"><div class="kicker" style="color:var(--green)">✓ FEEDBACK RECEIVED</div>
+    const f = S.me.feedback, d = S.fbDraft, n = (S.state.feedback || {}).count || 0, opt = L('Optional · any language', 'Opcional', 'Opcional');
+    if (f && !S.fbEdit) return `<div class="panel glow center fb"><div class="kicker" style="color:var(--green)">${esc(L('✓ FEEDBACK RECEIVED', '✓ FEEDBACK RECEBIDO', '✓ FEEDBACK RECIBIDO'))}</div>
         <div class="fb-stars done">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= f.rating ? 'on' : ''}">⚡</i>`).join('')}</div>
-        <p class="muted">Thank you! Your feedback helps us build the next Townhall.</p>
-        <button type="button" class="linkbtn" data-action="fbEdit" style="margin-top:8px">change my feedback</button>
-        <p class="small" style="margin-top:8px"><b id="fbN">${n}</b> travelers already answered</p></div>`;
+        <p class="muted">${esc(L('Thank you! Your feedback helps us build the next Townhall.', 'Obrigado! O seu feedback ajuda a construir o próximo Townhall.', '¡Gracias! Tu feedback nos ayuda a construir el próximo Townhall.'))}</p>
+        <button type="button" class="linkbtn" data-action="fbEdit" style="margin-top:8px">${esc(L('change my feedback', 'trocar meu feedback', 'cambiar mi feedback'))}</button>
+        <p class="small" style="margin-top:8px"><b id="fbN">${n}</b> ${esc(L('travelers already answered', 'viajantes já responderam', 'viajeros ya respondieron'))}</p></div>`;
     return `<div class="panel glow fb">
-        <div class="phonechip">📱 One last thing · 1 minute</div>
-        <h2 class="fb-h">How was the Townhall for you?</h2>
-        <div class="fb-stars" role="radiogroup" aria-label="Rating from 1 to 5">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="${i <= d.rating ? 'on' : ''}" data-action="fbRate" data-n="${i}" role="radio" aria-checked="${i === d.rating}" aria-label="${i} of 5">⚡</button>`).join('')}</div>
-        <p class="fb-label" id="fbLabel">${esc(FB_LABEL[d.rating] || 'Tap to rate: 1 (low) to 5 (high)')}</p>
-        <label class="wq-q" for="fbLiked"><span>What did you like the most?</span></label>
-        <textarea class="input short" id="fbLiked" maxlength="600" rows="3" placeholder="Optional · any language" ${S.fbSending ? 'disabled' : ''}></textarea>
-        <label class="wq-q" for="fbImprove" style="margin-top:12px"><span>What should we do better next time?</span></label>
-        <textarea class="input short" id="fbImprove" maxlength="600" rows="3" placeholder="Optional · any language" ${S.fbSending ? 'disabled' : ''}></textarea>
-        <label class="sw" style="margin-top:12px"><input type="checkbox" id="fbAnon" ${d.anonymous ? 'checked' : ''}> Send without my name</label>
-        <button class="btn" data-action="fbSend" ${S.fbSending ? 'disabled' : ''}>${S.fbSending ? 'Sending…' : '⚡ Send feedback'}</button>
-        ${S.fbEdit ? '<button class="linkbtn" data-action="fbCancel" style="display:block;margin:8px auto 0">← keep my feedback</button>' : ''}
+        <div class="phonechip">${esc(L('📱 One last thing · 1 minute', '📱 Só mais uma coisa · 1 minuto', '📱 Una última cosa · 1 minuto'))}</div>
+        <h2 class="fb-h">${esc(L('How was the Townhall for you?', 'Como foi o Townhall para você?', '¿Cómo estuvo el Townhall para ti?'))}</h2>
+        <div class="fb-stars" role="radiogroup" aria-label="1–5">${[1, 2, 3, 4, 5].map(i => `<button type="button" class="${i <= d.rating ? 'on' : ''}" data-action="fbRate" data-n="${i}" role="radio" aria-checked="${i === d.rating}" aria-label="${i} / 5">⚡</button>`).join('')}</div>
+        <p class="fb-label" id="fbLabel">${esc(fbLabel(d.rating))}</p>
+        <label class="wq-q" for="fbLiked"><span>${esc(L('What did you like the most?', 'Do que você mais gostou?', '¿Qué fue lo que más te gustó?'))}</span></label>
+        <textarea class="input short" id="fbLiked" maxlength="600" rows="3" placeholder="${esc(opt)}" ${S.fbSending ? 'disabled' : ''}></textarea>
+        <label class="wq-q" for="fbImprove" style="margin-top:12px"><span>${esc(L('What should we do better next time?', 'O que podemos fazer melhor na próxima?', '¿Qué podemos hacer mejor la próxima vez?'))}</span></label>
+        <textarea class="input short" id="fbImprove" maxlength="600" rows="3" placeholder="${esc(opt)}" ${S.fbSending ? 'disabled' : ''}></textarea>
+        <label class="sw" style="margin-top:12px"><input type="checkbox" id="fbAnon" ${d.anonymous ? 'checked' : ''}> ${esc(L('Send without my name', 'Enviar sem o meu nome', 'Enviar sin mi nombre'))}</label>
+        <button class="btn" data-action="fbSend" ${S.fbSending ? 'disabled' : ''}>${esc(S.fbSending ? L('Sending…', 'Enviando…', 'Enviando…') : L('⚡ Send feedback', '⚡ Enviar feedback', '⚡ Enviar feedback'))}</button>
+        ${S.fbEdit ? `<button class="linkbtn" data-action="fbCancel" style="display:block;margin:8px auto 0">${esc(L('← keep my feedback', '← manter meu feedback', '← mantener mi feedback'))}</button>` : ''}
       </div>`;
   }
   function vClosing() {
     const r = S.me.result;
     return `${vHeader()}
-      <div class="panel glow msgbox slim"><div class="e">🕰️</div><h2>End of the journey</h2><p>${esc(S.state.event.closingText)}</p></div>
+      <div class="panel glow msgbox slim"><div class="e">🕰️</div><h2>${esc(L('End of the journey', 'Fim da viagem', 'Fin del viaje'))}</h2><p>${esc(own(S.state.event.closingText))}</p></div>
       ${vFeedback()}
-      ${r && r.match ? `<div class="panel center"><div class="kicker">Your connection</div><div class="polaroids"><div class="polaroid"><div class="photo">${av(r.match)}</div><div class="cap">${esc(first(r.match.name))}</div></div></div><div class="pname" style="font-size:18px">${esc(r.match.name)}</div></div>` : ''}`;
+      ${r && r.match ? `<div class="panel center"><div class="kicker">${esc(L('Your connection', 'Sua conexão', 'Tu conexión'))}</div><div class="polaroids"><div class="polaroid"><div class="photo">${av(r.match)}</div><div class="cap">${esc(first(r.match.name))}</div></div></div><div class="pname" style="font-size:18px">${esc(r.match.name)}</div></div>` : ''}`;
   }
   // Visão 2027: enquanto o Doc fala no telão, o celular pede para olhar para lá; depois, a mensagem fica no celular.
   const DOC_C = { d1: 'var(--cyan)', d2: 'var(--yellow)', d3: 'var(--magenta)', d4: 'var(--orange)' };
@@ -916,8 +973,8 @@
       ${logo(true, 'dim')}
       <div class="standby">
         <div class="power">📺</div>
-        <div class="st-title">EYES ON THE BIG SCREEN</div>
-        <p class="muted">${esc(S.state.event.standbyText || 'You don\'t need your phone right now.')}</p>
+        <div class="st-title">${esc(L('EYES ON THE BIG SCREEN', 'OLHOS NO TELÃO', 'OJOS EN LA PANTALLA'))}</div>
+        <p class="muted">${esc(own(S.state.event.standbyText || 'You don\'t need your phone right now.'))}</p>
       </div>
       <div class="spacer"></div>`;
   }
@@ -1080,6 +1137,7 @@
     checkAlert();
     const led = $('#ledNow'); if (led) led.textContent = ledNow();
     const osdNow = $('#osdNow'); if (osdNow) osdNow.textContent = ledNow();
+    if (needWords()) return;
     const pr = currentPresentation();
     if (pr) { // dinâmica do Sucesso: prazo de recebimento e tempo de fala do sorteado
       const l = pr.live, st = $('#sucTimer');
@@ -1131,10 +1189,13 @@
   async function act(action, el) {
     try {
       switch (action) {
-        case 'start': unlockAudio(); S.screen = 'identify'; S.q = ''; await loadPeople(); maybeRender(true); break;
-        case 'back': S.screen = 'splash'; maybeRender(true); break;
-        case 'lang': setLang(el.dataset.lang); maybeRender(true); break;
-        case 'langToggle': setLang(S.lang === 'pt' ? 'es' : 'pt'); toast(t('langSet')); buzz(20); S.jump = false; maybeRender(true); break;
+        // o toque no idioma já configura o app e segue para o login
+        case 'start': unlockAudio(); setLang(el.dataset.lang); S.screen = 'identify'; S.q = ''; maybeRender(true); await loadPeople(); maybeRender(true); break;
+        case 'back': S.screen = 'splash'; S.pick = null; maybeRender(true); break;
+        case 'langToggle': { // o chip do cabeçalho passa para o próximo idioma
+          const o = langOpts(), cur = fixedEn() ? dyn() : S.lang; setLang(o[(o.indexOf(cur) + 1) % o.length]);
+          toast(fixedEn() ? t('langSet') : L('App in English', 'App em português', 'App en español')); buzz(20); S.jump = false; maybeRender(true); break;
+        }
         case 'anotherAnswer': S.another = true; maybeRender(true); { const a = $('#ans'); if (a) a.focus(); } break;
         case 'sendAnswer': {
           const text = (S.answerDraft || '').trim();
@@ -1175,37 +1236,42 @@
           S.socket.emit('cena:tap', { token: S.token });
           break;
         }
-        // --- nuvem de palavras: as duas respostas ---
+        // --- as duas perguntas da nuvem de palavras ---
         case 'sendWords': {
           const list = S.wordsDraft.map(w => String(w || '').replace(/\s+/g, ' ').trim());
           const miss = list.findIndex(x => !x);
-          if (miss >= 0) { toast('Answer both questions.', true); const f = $('#w' + (miss + 1)); if (f) f.focus(); break; }
+          if (miss >= 0) { toast(L('Answer both questions.', 'Responda as duas perguntas.', 'Responde las dos preguntas.'), true); const f = $('#w' + (miss + 1)); if (f) f.focus(); break; }
           S.wordsSending = true; maybeRender(true);
           try {
             const r = await api('/api/words', { token: S.token, words: list });
-            S.wordsSending = false; S.wordsEdit = false; if (r.me) S.me = r.me;
+            S.wordsSending = false; S.wordsEdit = false; S.wordsSkip = false; if (r.me) S.me = r.me;
             store.set('bttf.words', JSON.stringify((r.me && r.me.words) || list));
-            buzz([40, 30, 90]); beep('result'); flashSky(); toast('Answers received ⚡ Watch the big screen.'); maybeRender(true);
-          } catch (e) { S.wordsSending = false; toast(e.status ? e.message : 'No connection. Tap send again.', true); maybeRender(true); }
+            buzz([40, 30, 90]); beep('result'); flashSky();
+            if (wordsLive()) { toast(L('Answers received ⚡ Watch the big screen.', 'Respostas recebidas ⚡ Olhe para o telão.', 'Respuestas recibidas ⚡ Mira la pantalla.')); maybeRender(true); break; }
+            // entra na tela de sempre com uma viagem curta (não é troca de bloco: a tela nova já fica registrada)
+            S.lastKey = viewKey(); const b = blockNow(); S.blk = b ? b.id : null;
+            warp(L('ANSWERS RECEIVED ⚡\n\nWELCOME ABOARD', 'RESPOSTAS RECEBIDAS ⚡\n\nBEM-VINDO(A) A BORDO', 'RESPUESTAS RECIBIDAS ⚡\n\nBIENVENIDO(A) A BORDO'), render, 1100);
+          } catch (e) { S.wordsSending = false; toast(e.status ? e.message : L('No connection. Tap send again.', 'Sem conexão. Toque em enviar de novo.', 'Sin conexión. Toca enviar de nuevo.'), true); maybeRender(true); }
           break;
         }
+        case 'skipWords': S.wordsSkip = true; S.wordsEdit = false; maybeRender(true); break;
         case 'cancelWords': S.wordsEdit = false; maybeRender(true); break;
-        case 'editWords': S.wordsEdit = true; S.wordsDraft = [...((S.me && S.me.words) || []), '', ''].slice(0, 2); maybeRender(true); { const f = $('#w1'); if (f) f.focus(); } break;
+        case 'editWords': S.wordsEdit = true; S.wordsSkip = false; S.wordsDraft = [...((S.me && S.me.words) || []), '', ''].slice(0, 2); maybeRender(true); { const f = $('#w1'); if (f) f.focus(); } break;
         // --- feedback do encerramento ---
         case 'fbRate': { // a nota muda na hora, sem redesenhar (para não mexer no que a pessoa está escrevendo)
           S.fbDraft.rating = +el.dataset.n || 0; buzz(15);
           document.querySelectorAll('.fb-stars button').forEach(b => { const on = +b.dataset.n <= S.fbDraft.rating; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(+b.dataset.n === S.fbDraft.rating)); });
-          const lb = $('#fbLabel'); if (lb) lb.textContent = FB_LABEL[S.fbDraft.rating] || '';
+          const lb = $('#fbLabel'); if (lb) lb.textContent = fbLabel(S.fbDraft.rating);
           break;
         }
         case 'fbSend': {
-          if (!S.fbDraft.rating) { toast('Tap a rating from 1 to 5 first.', true); break; }
+          if (!S.fbDraft.rating) { toast(L('Tap a rating from 1 to 5 first.', 'Toque em uma nota de 1 a 5 antes.', 'Toca una calificación de 1 a 5 primero.'), true); break; }
           S.fbSending = true; maybeRender(true);
           try {
             const r = await api('/api/feedback', { token: S.token, ...S.fbDraft });
             S.fbSending = false; S.fbEdit = false; if (r.me) S.me = r.me;
-            buzz([40, 30, 90]); beep('result'); flashSky(); toast('Thank you! ⚡'); maybeRender(true);
-          } catch (e) { S.fbSending = false; toast(e.status ? e.message : 'No connection. Tap send again.', true); maybeRender(true); }
+            buzz([40, 30, 90]); beep('result'); flashSky(); toast(L('Thank you! ⚡', 'Obrigado! ⚡', '¡Gracias! ⚡')); maybeRender(true);
+          } catch (e) { S.fbSending = false; toast(e.status ? e.message : L('No connection. Tap send again.', 'Sem conexão. Toque em enviar de novo.', 'Sin conexión. Toca enviar de nuevo.'), true); maybeRender(true); }
           break;
         }
         case 'fbEdit': { const f = S.me && S.me.feedback; if (f) S.fbDraft = { rating: f.rating, liked: f.liked, improve: f.improve, anonymous: f.anonymous }; S.fbEdit = true; maybeRender(true); break; }
@@ -1218,16 +1284,16 @@
           unlockAudio(); el.disabled = true;
           const r = await api('/api/checkin', { personId: S.pick.id, token: S.token });
           saveToken(r.token); if (r.epoch) store.set('bttf.epoch', r.epoch); store.set('bttf.lang', S.lang);
-          S.pick = null; S.q = ''; S.screen = 'app'; S.me = null; S.wordsEdit = false; S.wordsDraft = ['', '']; S.fbEdit = false; S.fbDraft = { rating: 0, liked: '', improve: '', anonymous: false };
-          maybeRender(true); hello(); toast(`Welcome aboard, ${first(r.person.name)}! ⚡`); buzz(60);
+          S.pick = null; S.q = ''; S.screen = 'app'; S.me = null; S.wordsEdit = false; S.wordsSkip = false; S.wordsDraft = ['', '']; S.fbEdit = false; S.fbDraft = { rating: 0, liked: '', improve: '', anonymous: false };
+          maybeRender(true); hello(); toast(L(`Welcome aboard, ${first(r.person.name)}! ⚡`, `A bordo, ${first(r.person.name)}! ⚡`, `¡A bordo, ${first(r.person.name)}! ⚡`)); buzz(60);
           break;
         }
         case 'checkout': {
-          if (!confirm('Go back to the list and pick another name?')) break;
+          if (!confirm(L('Go back to the list and pick another name?', 'Voltar para a lista e escolher outro nome?', '¿Volver a la lista y elegir otro nombre?'))) break;
           el.disabled = true;
           await api('/api/checkout', { token: S.token });
           clearToken(); rememberMe(null); S.me = null; S.screen = 'identify'; S.q = ''; S.pick = null;
-          await loadPeople(); maybeRender(true); hello(); toast('Check-in undone. Pick your name.');
+          await loadPeople(); maybeRender(true); hello(); toast(L('Check-in undone. Pick your name.', 'Check-in desfeito. Escolha o seu nome.', 'Check-in deshecho. Elige tu nombre.'));
           break;
         }
         case 'next': case 'prev': {

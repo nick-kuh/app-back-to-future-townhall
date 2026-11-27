@@ -251,7 +251,7 @@
   // Passo aberto no painel, mas ainda fora do ar: mostra o que ele é e o botão para colocar no telão e nos celulares
   function panelPreview(x, n, total, live, detour) {
     const ed = editing(x), O = A.O;
-    const what = { checkin: 'Celulares: cada pessoa digita o nome e embarca · Telão: QR do app e o carro carregando a cada check-in', stage: 'Celulares: nome e tema do bloco · Telão calmo, com o título do bloco', connections: 'Celulares: dupla, perguntas e avaliação · Telão: cronômetros',
+    const what = { checkin: 'Celulares: cada pessoa escolhe o idioma, digita o nome, embarca e responde as duas perguntas · Telão: QR do app e o carro carregando a cada check-in', stage: 'Celulares: nome e tema do bloco · Telão calmo, com o título do bloco', connections: 'Celulares: dupla, perguntas e avaliação · Telão: cronômetros',
       reflexao: 'Celulares: escolher 1 projeto por parada · Telão: Flux Capacitor e os 2 mais votados', doc: 'Celulares: "olhe para o telão" e, depois, a mensagem · Telão: o Doc chega de 2027 e lê o resumo das 4 dinâmicas', sucesso: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar', message: 'Celulares e telão: este aviso', standby: 'Celulares em pausa · Telão: logo', closing: 'Celulares: agradecimento e o formulário de feedback (nota de 1 a 5 e dois textos) · Telão: as frases finais e os créditos', cena: x.type === 'cena' ? CENA_AIR[x.cena] : '' }[x.type];
     let body = `<p class="lead">${esc(what)}</p>`;
     if (x.type === 'stage') body += ed ? `<div class="form editstep">${editField('Nome do bloco', 'title', ed.title)}${editField('Tema (aparece no celular e no telão)', 'theme', ed.theme)}${editField('Quem fala (opcional)', 'speaker', ed.speaker)}${editActions}</div>`
@@ -321,10 +321,12 @@
   }
   function pCheckin() {
     const O = A.O, missing = O.people.filter(p => p.active && !p.checkedInAt);
-    return { onair: 'Celulares: cada pessoa digita o nome e embarca · Telão: QR do app e o carro carregando a cada check-in',
+    const n = (O.words || []).length, hasCloud = O.settings.steps.some(x => x.type === 'cena' && x.cena === 'nuvem');
+    return { onair: 'Celulares: cada pessoa escolhe o idioma, digita o nome, embarca e responde as duas perguntas · Telão: QR do app e o carro carregando a cada check-in',
       body: `<div class="bigstat"><b>${O.counts.checkedIn}</b><span>de ${O.counts.total} a bordo</span></div>
         <div class="bar"><i style="width:${Math.round(100 * O.counts.checkedIn / Math.max(1, O.counts.total))}%"></i></div>
-        ${missing.length ? det('missing', `Quem ainda não entrou (${missing.length})`, `<p class="small" style="margin-top:6px">${esc(missing.map(p => p.name).join(' · '))}</p>`) : '<p class="ok">✔ Todo mundo a bordo</p>'}` };
+        ${missing.length ? det('missing', `Quem ainda não entrou (${missing.length})`, `<p class="small" style="margin-top:6px">${esc(missing.map(p => p.name).join(' · '))}</p>`) : '<p class="ok">✔ Todo mundo a bordo</p>'}
+        ${team() || !hasCloud ? '' : `<p style="margin-top:12px">☁️ <b>Duas perguntas</b> · ${n} de ${O.counts.checkedIn} a bordo já responderam <span class="small">(é a primeira tela depois do login; as palavras só aparecem no telão quando você colocar o passo <b>Nuvem de palavras</b> no ar)</span></p>${wordsBox()}`}` };
   }
   // edição rápida do passo que está no ar (tema do bloco, texto do aviso)
   const editing = step => (A.edit && A.edit.id === step.id ? A.edit : null);
@@ -359,7 +361,7 @@
   }
   /* ---------- cenas do deck do townhall: o que cada uma mostra e os comandos do Doc ---------- */
   const CENA_AIR = { abertura: 'Celulares: "olhe para o telão" · Telão: o vídeo de abertura em tela cheia', agenda: 'Celulares: a agenda do dia · Telão: o plano de voo em 4 atos', boasvindas: 'Celulares: "olhe para o telão" · Telão: a frase de abertura e quem fala',
-    nuvem: 'Celulares: as duas perguntas, com um campo de texto para cada · Telão: uma nuvem de palavras por pergunta, crescendo ao vivo',
+    nuvem: 'Celulares: as nuvens (e as duas perguntas para quem ainda não respondeu) · Telão: uma nuvem de palavras por pergunta, já com tudo o que chegou desde o check-in',
     plano26: 'Celulares: "olhe para o telão" · Telão: o plano estratégico LATAM GDT 2026, no visual do filme',
     capasucesso: 'Celulares: a capa do bloco Sucesso · Telão: o nome do bloco e quem conduz',
     almanaque: 'Celulares: "olhe para o telão" · Telão: o almanaque 2026, de dezembro para janeiro (a DeLorean vai de ré)', ia: 'Celulares: "olhe para o telão" · Telão: abertura da Frente 2 e o QR do app',
@@ -596,9 +598,9 @@
         <div class="bigstat"><b>${n}</b><span>de ${O.counts.checkedIn} a bordo já responderam</span></div>
         <div class="bar"><i style="width:${Math.round(100 * n / Math.max(1, O.counts.checkedIn))}%"></i></div>
         ${q.map((t, i) => `<p style="margin-top:10px"><b>${i + 1} · ${esc(t)}</b><br><span class="small">${top(i) || 'ainda sem respostas'}</span></p>`).join('')}
-        <p class="small" style="margin-top:8px">Cada pessoa responde as duas perguntas em um campo de texto, no celular. Quem já respondeu não vê o formulário de novo, mesmo entrando por outro aparelho (dá para trocar a resposta enquanto este passo estiver no ar). As respostas param de chegar quando você avança no roteiro.</p>${wordsBox()}`;
+        <p class="small" style="margin-top:8px">As respostas vêm chegando desde o check-in: as duas perguntas são a primeira tela do celular depois do login, no idioma que a pessoa escolheu. Agora o telão mostra tudo o que chegou; quem ainda não respondeu vê as perguntas de novo e a nuvem vai crescendo. Quem já respondeu não vê o formulário de novo, mesmo entrando por outro aparelho (dá para trocar a resposta até este passo). As respostas param de chegar quando você avança no roteiro.</p>${wordsBox()}`;
       out.secondary = [cenaBtn('☁️☁️ As duas nuvens', k, 'foco', { cls: f === 0 ? 'sm' : 'ghost sm', data: { n: 0 } }), cenaBtn('1 · Destacar a pergunta 1', k, 'foco', { cls: f === 1 ? 'sm' : 'ghost sm', data: { n: 1 } }), cenaBtn('2 · Destacar a pergunta 2', k, 'foco', { cls: f === 2 ? 'sm' : 'ghost sm', data: { n: 2 } })];
-      if (!n) out.warn = 'Ainda não chegou nenhuma resposta: os celulares precisam estar com o app aberto e o check-in feito.';
+      if (!n) out.warn = 'Ainda não chegou nenhuma resposta: as perguntas aparecem no celular logo depois do login (e agora, para quem ainda não respondeu).';
       out.more = note;
     } else if (k === 'plano26') { // o plano estratégico 2026: tudo de uma vez, ou uma parte em destaque
       const f = st.foco || 0, parts = P26_PART(cfg);
@@ -1098,8 +1100,11 @@
     agenda: ['🗺️ Plano de voo (agenda)', 'Os horários são calculados a partir do início e dos minutos de cada item. Os minutos servem só para essa conta: na tela aparecem os horários, não a duração de cada bloco.',
       [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('inicio', 'Início (HH:MM)'), LINES('itens', 'Itens, um por linha: ato (1 a 4) | título | detalhe | minutos (só para calcular os horários)', ['ato', 't', 'd', 'min'])]],
     boasvindas: ['👋 Boas-vindas e jornada', '', [T('kicker', 'Linha de cima'), AREA('frase', 'Frase de abertura'), LINES('pessoas', 'Quem fala, um por linha: nome | papel', ['nome', 'papel']), T('faixa', 'Faixa de baixo')]],
-    nuvem: ['☁️ Nuvem de palavras · duas perguntas', 'Logo depois das boas-vindas: as duas perguntas aparecem nos celulares, cada uma com um campo de texto, e as respostas formam uma nuvem por pergunta no telão. Respostas curtas (uma ou duas palavras) deixam a nuvem mais bonita; frases longas são quebradas em palavras.',
-      [T('kicker', 'Linha de cima'), T('titulo', 'Título no telão'), T('perguntas.0', 'Pergunta 1'), T('perguntas.1', 'Pergunta 2'), T('dica', 'Dica embaixo dos campos, no celular')]],
+    nuvem: ['☁️ Nuvem de palavras · duas perguntas', 'As duas perguntas são a primeira tela do celular depois do login, cada uma com um campo de texto, no idioma que a pessoa escolheu (por isso as três versões). Quando este passo entra no ar, o telão mostra uma nuvem por pergunta (com as perguntas em inglês), já com tudo o que chegou. Respostas curtas (uma ou duas palavras) deixam a nuvem mais bonita; frases longas são quebradas em palavras.',
+      [T('kicker', 'Linha de cima (telão)'), T('titulo', 'Título no telão'),
+        T('perguntas.0', 'Pergunta 1 · English (também aparece no telão)'), T('perguntasPt.0', 'Pergunta 1 · Português'), T('perguntasEs.0', 'Pergunta 1 · Español'),
+        T('perguntas.1', 'Pergunta 2 · English (também aparece no telão)'), T('perguntasPt.1', 'Pergunta 2 · Português'), T('perguntasEs.1', 'Pergunta 2 · Español'),
+        T('dica', 'Dica embaixo dos campos · English'), T('dicaPt', 'Dica embaixo dos campos · Português'), T('dicaEs', 'Dica embaixo dos campos · Español')]],
     plano26: ['🧭 Estratégia 2026', 'O plano estratégico LATAM GDT 2026 no visual do filme: o destino em cima, os três motores no meio e a estrada embaixo. Nas listas, um item por linha: título | detalhe. A foto dos líderes aparece quando o nome está escrito como na lista de pessoas.',
       [T('kicker', 'Linha de cima'), T('titulo', 'Título'), LINES('lideres', 'Líderes, um por linha: nome | cargo', ['nome', 'papel']),
         T('topo.t', 'Destino (faixa de cima) · título'), T('topo.s', 'Destino · frase'), LINES('topo.itens', 'Destino · itens (até 4): título | detalhe', ['t', 'd']),
@@ -1154,7 +1159,7 @@
       cfSet(out, f.k, f.t === 'check' ? el.checked : f.t === 'num' ? +el.value : f.t === 'list' ? el.value.split('\n').map(x => x.trim()).filter(Boolean) : f.t === 'lines' ? linesIn(el.value, f) : el.value);
     }
     const patch = { [sec]: out };
-    if (sec === 'nuvem' && out.perguntas) out.perguntas = [out.perguntas[0] || '', out.perguntas[1] || '']; // as duas perguntas vão como lista
+    if (sec === 'nuvem') for (const k of ['perguntas', 'perguntasPt', 'perguntasEs']) if (out[k]) out[k] = [out[k][0] || '', out[k][1] || '']; // as duas perguntas (em cada idioma) vão como lista
     if (sec === 'agenda') patch.atos = [0, 1, 2, 3].map(i => ($(`#cf-ato${i}`) || {}).value || '');
     if (sec === 'reconhecimento') out.premios = A.O.cenas.config.reconhecimento.premios.map((p, i) => { const g = k => ($(`#pf-${i}-${k}`) || {}).value ?? '';
       return { ic: g('ic'), n: g('n'), k: g('k'), porque: g('porque'), criterios: g('criterios').split('\n').map(x => x.trim()).filter(Boolean), indicados: linesIn(g('indicados'), { cols: ['nome', 'projeto'] }), vencedor: +g('vencedor') || 1, citacao: g('citacao') }; });
@@ -1355,6 +1360,7 @@
           <label class="sw"><input type="checkbox" id="cfgStageMutes" ${s.stageMutes ? 'checked' : ''}> Desligar o som ao exibir um bloco de fala</label>
           <label class="sw"><input type="checkbox" id="cfgTransitions" ${s.transitions !== false ? 'checked' : ''}> Transições do filme ao trocar de bloco (alguns segundos, no telão e nos celulares)</label>
           <p class="small">Com isto ligado, cada passo decide se entra com a transição ou direto: escolha em <a href="#" data-go="roteiro">Roteiro</a> (botão ⚡ transição / ⏭ direto).</p>
+          <label class="f">Idioma do app no celular<select class="input" id="cfgAppLang"><option value="pessoa" ${s.appLang === 'en' ? '' : 'selected'}>O que cada pessoa escolhe na entrada: Português, Español ou English</option><option value="en" ${s.appLang === 'en' ? 'selected' : ''}>Sempre em inglês (a escolha vale só para as dinâmicas e para as duas perguntas)</option></select><span class="small">A escolha do idioma é a primeira tela do app. As dinâmicas (Conexões, Reflexão e Sucesso) existem em português e espanhol: quem escolhe English as vê em português. O telão e o conteúdo do deck continuam em inglês.</span></label>
           <label class="f">Duração da transição entre blocos (segundos)<input class="input" id="cfgTransSecs" type="number" min="3" max="30" value="${s.transitionSeconds || 8}"><span class="small">8 = sequência completa, em ritmo rápido (programar o destino, Flux Capacitor, 88 MPH, raios); 15 = a mesma sequência, mais lenta. Menos de 7 = versão curta. Avisos e "olhos no telão" entram sempre em 3 s. No telão, a tecla Esc pula a transição.</span></label>
           <div class="actions"><button class="btn" data-act="saveSettings">Salvar</button></div>
         </div></div>
@@ -1516,7 +1522,7 @@
         const spId = $('#cfgSpotifyId').value.trim();
         if (spId && !/^[0-9a-zA-Z]{20,64}$/.test(spId)) return toast('O Client ID do Spotify tem 32 letras e números, sem espaços. Copie de novo da página do app.', true);
         if (!spId) { A.spRestored = true; try { localStorage.removeItem('bttf.spotify.cid'); } catch { /* segue */ } } // apagou de propósito: o navegador não devolve
-        return run(async () => { await act('settings', { settings: { spotifyClientId: spId, spotifyBreak: $('#cfgSpotifyBreak').checked, autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, stageText: $('#cfgStageText').value, stageMutes: $('#cfgStageMutes').checked, transitions: $('#cfgTransitions').checked, transitionSeconds: +$('#cfgTransSecs').value || 15, musicUrl: $('#cfgMusicUrl').value, ambientUrl: $('#cfgAmbientUrl').value } }); await act('setAudio', { out: $('#cfgAudioOut').value }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
+        return run(async () => { await act('settings', { settings: { spotifyClientId: spId, spotifyBreak: $('#cfgSpotifyBreak').checked, autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, eventName: $('#cfgName').value, showFormHints: $('#cfgHints').checked, welcomeText: $('#cfgWelcome').value, closingText: $('#cfgClosing').value, standbyText: $('#cfgStandby').value, stageText: $('#cfgStageText').value, stageMutes: $('#cfgStageMutes').checked, transitions: $('#cfgTransitions').checked, transitionSeconds: +$('#cfgTransSecs').value || 8, appLang: $('#cfgAppLang').value, musicUrl: $('#cfgMusicUrl').value, ambientUrl: $('#cfgAmbientUrl').value } }); await act('setAudio', { out: $('#cfgAudioOut').value }); setTimeout(() => render(true), 600); }, 'Configurações salvas');
       }
       case 'saveMessage': case 'showMessage': return run(() => act('setMessage', { message: { emoji: $('#msgEmoji').value, title: $('#msgTitle').value, body: $('#msgBody').value }, show: act_ === 'showMessage' }), act_ === 'showMessage' ? 'Mensagem exibida nos celulares' : 'Mensagem salva');
       case 'logout': localStorage.removeItem('bttf.admin'); api('POST', '/api/admin/logout').finally(() => location.reload()); return;
@@ -1557,7 +1563,7 @@
         if (!on && !confirm('Liberar o conteúdo do townhall para todos? A partir de agora, quando uma cena entrar no ar, todos os celulares e telões vão ver (é o que se quer no dia do evento).')) return;
         return run(async () => { await act('settings', { settings: { confidencial: on } }); if ($('#dlg').open) closeDialog(); setTimeout(() => render(true), 600); }, on ? '🔒 Modo confidencial ligado' : '🔓 Conteúdo liberado para todos'); }
       case 'wordsRemove': return run(() => api('POST', '/api/admin/words', { action: 'remove', id: +id }), 'Respostas removidas das nuvens');
-      case 'wordsClear': return confirmRun('Apagar as respostas das duas perguntas de todo mundo? Cada pessoa volta a ver as perguntas no celular (enquanto a nuvem de palavras estiver no ar).', () => api('POST', '/api/admin/words', { action: 'clear' }), 'Respostas apagadas');
+      case 'wordsClear': return confirmRun('Apagar as respostas das duas perguntas de todo mundo? Cada pessoa volta a ver as perguntas no celular (do check-in até o passo da nuvem de palavras).', () => api('POST', '/api/admin/words', { action: 'clear' }), 'Respostas apagadas');
       case 'goStep': { // coloca o passo no ar: é aqui (e só aqui) que o telão e os celulares mudam
         if (el.dataset.guard && !confirm(el.dataset.guard)) return;
         { // modo confidencial: este passo é conteúdo do townhall. Antes de pôr no ar, pergunta se é ensaio ou o evento.

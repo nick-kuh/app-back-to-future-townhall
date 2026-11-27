@@ -109,6 +109,7 @@ function fullState() {
   s.reflexao = reflexaoOnAir() ? reflexao.publicState() : null;
   const kind = cenaOnAir();
   s.cena = kind ? withPhotos(cenas.publicState(kind, { steps: engine.settings.steps, index: s.step.index })) : null;
+  s.words = { ...s.words, ...cenas.nuvemTexts() };                    // as duas perguntas da nuvem de palavras (inglês, português e espanhol)
   s.evento = cenas.evento();                                         // nome do evento e circuitos de tempo (check-in, créditos)
   // quem conduz o bloco que está no ar, com a foto de perfil (Conexões, Reflexão, Sucesso e as cenas que têm anfitrião)
   const hk = s.presentation || s.block === 'doc' ? 'sucesso' : kind || s.block, names = cenas.hosts(hk);
@@ -161,13 +162,13 @@ app.get('/api/photo/:id', (req, res) => {
 });
 // name (opcional): o celular que refaz o check-in sozinho depois de o servidor reiniciar manda o nome guardado
 app.post('/api/checkin', wrap(req => ({ ...engine.checkin(req.body.personId, req.body.token, req.body.name), epoch: engine.epoch })));
-// Nuvem de palavras: as respostas das duas perguntas (texto livre), enquanto a cena está no ar. Vale uma resposta por pessoa; enviar de novo troca.
+// Nuvem de palavras: as respostas das duas perguntas (texto livre), do check-in até o passo da nuvem. Vale uma resposta por pessoa; enviar de novo troca.
 // restore: o celular que refez o check-in sozinho (servidor reiniciado) devolve as respostas que tinha guardado.
 const gone = () => Object.assign(new Error('Your check-in is no longer active. Pick your name again.'), { status: 401 });
 app.post('/api/words', wrap(req => {
   const b = req.body || {}, person = engine.personByToken(b.token);
   if (!person || !person.checkedInAt || !person.active) throw gone();
-  if (!engine.wordsOpen() && !(b.restore && !engine.wordsOf(person.id))) throw Object.assign(new Error('The word cloud is closed right now.'), { status: 409 });
+  if (!engine.wordsOpen() && !(b.restore && !engine.wordsOf(person.id))) throw Object.assign(new Error('The word cloud is already closed.'), { status: 409 });
   engine.setWords(person.id, b.words);
   return { ok: true, me: meState(person.id) };
 }));

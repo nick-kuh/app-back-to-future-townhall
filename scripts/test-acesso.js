@@ -26,23 +26,30 @@ const { createReflexao } = require('../server/reflexao');
   assert.equal(e.settings.transitionSeconds, 8, 'a transição entre blocos ficou mais rápida'); assert.equal(e.publicState().settings.transitionSeconds, 8);
   const id = k => e.settings.steps.find(x => kind(x) === k).id;
 
-  // nuvem de palavras: duas perguntas, texto livre; uma resposta por pessoa; as nuvens não levam nomes
+  // nuvem de palavras: duas perguntas, texto livre, respondidas logo depois do login; uma resposta por pessoa; as nuvens não levam nomes
   const t1 = e.checkin(1).token; e.checkin(2); e.checkin(3);
-  assert.equal(e.wordsOf(1), null); assert.equal(e.meState(1).words, null); assert.equal(e.publicState().words.open, false, 'no check-in o celular ainda não pergunta');
+  assert.equal(e.wordsOf(1), null); assert.equal(e.meState(1).words, null);
+  let w0 = e.publicState().words; assert.equal(w0.open, true, 'desde o check-in o celular pede as duas respostas'); assert.equal(w0.live, false, 'mas as palavras só vão para todos no passo da nuvem'); assert.deepEqual(w0.clouds, [[], []]);
   assert.throws(() => e.setWords(1, ['Animado', '   ']), /both questions/); assert.throws(() => e.setWords(1, 'Animado'), /both questions/);
   assert.deepEqual(e.setWords(1, ['  Muito   animado ', '<b>Entregas</b>', 'terceira']), ['Muito animado', 'b Entregas /b'], 'duas respostas, sem símbolos soltos');
   assert.deepEqual(e.setWords(1, ['Animado', 'x'.repeat(120)]), ['Animado', 'x'.repeat(80)], 'responder de novo troca; cada resposta tem até 80 letras');
   e.setWords(1, ['Animado', 'Transformação']); e.setWords(2, ['animado', 'Foi um ano de muito aprendizado e entregas para o time']); e.setWords(3, ['ANIMADO!', 'transformação']);
   e.applyStep(id('nuvem'));
   let w = e.publicState().words;
-  assert.equal(w.open, true, 'com a nuvem de palavras no ar, o celular pergunta'); assert.equal(w.count, 3);
+  assert.equal(w.open, true); assert.equal(w.live, true, 'com o passo da nuvem no ar, as palavras de todo mundo aparecem'); assert.equal(w.count, 3);
   assert.deepEqual(w.clouds[0], [['Animado', 3]], 'maiúsculas, minúsculas e pontuação contam juntas'); assert.deepEqual(w.clouds[1][0], ['Transformação', 2]);
   const terms = w.clouds[1].map(x => x[0]); assert.deepEqual(terms.slice(1), ['ano', 'aprendizado', 'entregas', 'time'], 'uma frase vira palavras, sem os conectivos');
   assert.ok(!JSON.stringify(w).includes('Claudia'), 'as nuvens não levam nomes');
   assert.deepEqual(e.meState(1).words, ['Animado', 'Transformação']); assert.equal(e.wordsList().length, 3); assert.equal(e.adminOverview().words[0].name, e.personById(1).name); assert.equal(e.adminOverview().wordsCloud.count, 3);
   e.removeWords(1); assert.equal(e.wordsOf(1), null); assert.equal(e.publicState().words.count, 2);
-  // as perguntas só ficam abertas com a cena da nuvem no ar (antes e depois, não)
-  for (const k of ['checkin', 'abertura', 'boasvindas', 'agenda', 'connections', 'almanaque']) { e.applyStep(id(k)); const x = e.publicState().words; assert.equal(x.open, false, k); assert.deepEqual(x.clouds, [[], []]); assert.equal(x.count, 2); }
+  // as respostas são aceitas do check-in até o passo da nuvem; as nuvens só aparecem nesse passo; depois dele, fecha
+  for (const k of ['checkin', 'abertura', 'boasvindas']) { e.applyStep(id(k)); const x = e.publicState().words; assert.equal(x.open, true, k); assert.equal(x.live, false, k); assert.deepEqual(x.clouds, [[], []], k); assert.equal(x.count, 2); }
+  for (const k of ['agenda', 'connections', 'almanaque', 'closing']) { e.applyStep(id(k)); const x = e.publicState().words; assert.equal(x.open, false, k); assert.equal(x.live, false, k); assert.deepEqual(x.clouds, [[], []]); assert.equal(x.count, 2); }
+  // sem o passo da nuvem no roteiro, as perguntas não aparecem
+  const full = e.settings.steps.map(x => ({ ...x })); e.updateSettings({ steps: full.filter(x => x.cena !== 'nuvem') }); e.applyStep(e.settings.steps[0].id); assert.equal(e.publicState().words.open, false);
+  e.updateSettings({ steps: full }); assert.ok(e.settings.steps.some(x => x.cena === 'nuvem')); e.applyStep(id('checkin')); assert.equal(e.publicState().words.open, true);
+  // idioma do app no celular: o que cada pessoa escolhe (padrão) ou sempre em inglês
+  assert.equal(e.publicState().settings.appLang, 'pessoa'); e.updateSettings({ appLang: 'en' }); assert.equal(e.publicState().settings.appLang, 'en'); e.updateSettings({ appLang: 'xx' }); assert.equal(e.publicState().settings.appLang, 'pessoa');
 
   // feedback do encerramento: nota de 1 a 5 e dois textos opcionais; uma resposta por pessoa; "sem o meu nome" não mostra o nome
   assert.equal(e.publicState().feedback.open, false); assert.equal(e.meState(2).feedback, null);
@@ -87,13 +94,14 @@ const { createReflexao } = require('../server/reflexao');
   const notes = []; e.onChange(n => { if (n) notes.push(n); });
   e.applyStep(id('connections')); assert.equal(notes.at(-1).title, 'Conexões'); assert.equal(notes.at(-1).es.title, 'Conexiones'); assert.match(notes.at(-1).body, /📱/);
   e.applyStep(id('reflexao')); assert.equal(notes.at(-1).es.title, 'Reflexión');
-  e.applyStep(id('agenda')); assert.deepEqual(notes.at(-1), { title: 'Flight plan', body: 'Look at the big screen.', secret: true });
-  e.applyStep(id('visao')); assert.equal(notes.at(-1).secret, true); e.applyStep(id('plano26')); assert.deepEqual(notes.at(-1), { title: '2026 Strategy', body: 'Look at the big screen.', secret: true });
+  // os avisos das telas do townhall são em inglês, com a versão em português e em espanhol (o celular mostra no idioma da pessoa)
+  e.applyStep(id('agenda')); assert.deepEqual(notes.at(-1), { title: 'Flight plan', body: 'Look at the big screen.', pt: { title: 'Flight plan', body: 'Olhe para o telão.' }, es: { title: 'Flight plan', body: 'Mira la pantalla.' }, secret: true });
+  e.applyStep(id('visao')); assert.equal(notes.at(-1).secret, true); e.applyStep(id('plano26')); assert.equal(notes.at(-1).title, '2026 Strategy'); assert.equal(notes.at(-1).secret, true);
   // nuvem de palavras, intervalo, capa do Sucesso e encerramento não são confidenciais: o aviso vai para todos
-  e.applyStep(id('nuvem')); assert.deepEqual(notes.at(-1), { title: 'Word cloud', body: '📱 Grab your phone: two quick questions.' });
+  e.applyStep(id('nuvem')); assert.equal(notes.at(-1).title, 'Word cloud'); assert.equal(notes.at(-1).pt.title, 'Nuvem de palavras'); assert.match(notes.at(-1).es.body, /pantalla/); assert.equal(notes.at(-1).secret, undefined);
   e.applyStep(id('intervalo')); assert.equal(notes.at(-1).title, 'Break'); assert.equal(notes.at(-1).secret, false);
   e.applyStep(id('capasucesso')); assert.equal(notes.at(-1).title, 'De Volta para o Sucesso'); assert.equal(notes.at(-1).es.title, 'De Vuelta al Éxito'); assert.equal(notes.at(-1).secret, undefined);
-  e.applyStep(id('closing')); assert.equal(notes.at(-1).title, 'End of the journey'); assert.match(notes.at(-1).body, /📱/); assert.equal(notes.at(-1).secret, undefined);
+  e.applyStep(id('closing')); assert.equal(notes.at(-1).title, 'End of the journey'); assert.match(notes.at(-1).body, /📱/); assert.equal(notes.at(-1).pt.title, 'Fim da viagem'); assert.equal(notes.at(-1).secret, undefined);
 
   // roteiro e textos guardados antes destas mudanças: o vídeo de abertura entra depois do check-in, a agenda vai para depois das
   // boas-vindas, entram a nuvem de palavras (depois das boas-vindas), a Estratégia 2026 (antes da Jornada 2026, que passa a entrar
@@ -192,17 +200,24 @@ function sock({ cookie } = {}) {
     assert.equal((await call('GET', '/api/admin/overview', undefined, T)).json.questions.at(-1).es, '¿Pregunta del equipo?');
     r = await call('POST', '/api/admin/reset', { scope: 'checkin' }, M); assert.equal(r.status, 200); r = await call('POST', '/api/admin/step', { id: id('checkin') }, M);
 
-    /* ----- nuvem de palavras pelo app: as duas perguntas, só com a cena no ar ----- */
+    /* ----- nuvem de palavras pelo app: as duas perguntas logo depois do login; as nuvens só no passo da nuvem ----- */
     r = await call('POST', '/api/checkin', { personId: 1 }); const tok = r.json.token, epoch = r.json.epoch; assert.ok(tok); assert.ok(epoch);
     r = await call('POST', '/api/words', { token: 'não-existe', words: ['a', 'b'] }); assert.equal(r.status, 401);
-    r = await call('POST', '/api/words', { token: tok, words: ['Curioso', 'Entregas'] }); assert.equal(r.status, 409, 'fora da cena, as perguntas estão fechadas');
-    r = await call('POST', '/api/admin/step', { id: id('nuvem') }, M); assert.equal(r.status, 200);
+    // logo depois do login (ainda no check-in) o celular já manda as duas respostas; as perguntas vêm nos três idiomas
+    let st = (await call('GET', '/api/state')).json; assert.equal(st.block, 'welcome'); assert.equal(st.words.open, true); assert.equal(st.words.live, false);
+    assert.deepEqual(Object.keys(st.words.q), ['en', 'pt', 'es']); assert.equal(st.words.q.en.length, 2); assert.match(st.words.q.pt[0], /Townhall/); assert.match(st.words.q.es[1], /2026/); assert.ok(st.words.tip.pt);
     r = await call('POST', '/api/words', { token: tok, words: ['Curioso'] }); assert.equal(r.status, 400, 'as duas respostas são obrigatórias');
     r = await call('POST', '/api/words', { token: tok, words: ['Curioso', 'Entregas'] }); assert.equal(r.status, 200); assert.deepEqual(r.json.me.words, ['Curioso', 'Entregas']);
     r = await call('POST', '/api/checkin', { personId: 3 }); const tokB = r.json.token; await call('POST', '/api/words', { token: tokB, words: ['CURIOSO', 'Foi um ano de muitas entregas'] });
-    // mesmo no modo confidencial, a nuvem chega a todos (é ela que pede o celular)
-    let st = (await call('GET', '/api/state')).json; assert.equal(st.block, 'cena'); assert.equal(st.cena.kind, 'nuvem'); assert.equal(st.cena.perguntas.length, 2);
-    assert.deepEqual(st.words, { open: true, count: 2, clouds: [[['Curioso', 2]], [['Entregas', 2], ['ano', 1]]] }); assert.ok(st.build); assert.equal(st.epoch, epoch);
+    st = (await call('GET', '/api/state')).json; assert.equal(st.words.count, 2); assert.deepEqual(st.words.clouds, [[], []], 'antes do passo da nuvem, as palavras não vão para ninguém');
+    // o passo da nuvem entra: o telão (e os celulares) já recebem tudo o que chegou; mesmo no modo confidencial, chega a todos
+    r = await call('POST', '/api/admin/step', { id: id('nuvem') }, M); assert.equal(r.status, 200);
+    st = (await call('GET', '/api/state')).json; assert.equal(st.block, 'cena'); assert.equal(st.cena.kind, 'nuvem'); assert.equal(st.cena.perguntas.length, 2); assert.equal(st.cena.perguntasPt.length, 2);
+    assert.equal(st.words.open, true); assert.equal(st.words.live, true); assert.equal(st.words.count, 2); assert.deepEqual(st.words.clouds, [[['Curioso', 2]], [['Entregas', 2], ['ano', 1]]]); assert.ok(st.build); assert.equal(st.epoch, epoch);
+    // quem ainda não respondeu responde na hora e a nuvem cresce
+    r = await call('POST', '/api/checkin', { personId: 4 }); const tokC = r.json.token; r = await call('POST', '/api/words', { token: tokC, words: ['Feliz', 'Entregas'] }); assert.equal(r.status, 200);
+    st = (await call('GET', '/api/state')).json; assert.equal(st.words.count, 3); assert.deepEqual(st.words.clouds[1][0], ['Entregas', 3]); assert.deepEqual(st.words.clouds[0], [['Curioso', 2], ['Feliz', 1]]);
+    r = await call('POST', '/api/admin/words', { action: 'remove', id: 4 }, M); assert.equal(r.status, 200);
     // quem entra de novo (outro celular) não responde de novo: a resposta é da pessoa
     r = await call('POST', '/api/checkin', { personId: 1 }); const tok2 = r.json.token; assert.notEqual(tok2, tok);
     r = await call('GET', `/api/me?token=${tok2}`); assert.equal(r.json.ok, true); assert.deepEqual(r.json.me.words, ['Curioso', 'Entregas']); assert.equal(r.json.epoch, epoch);
@@ -213,10 +228,18 @@ function sock({ cookie } = {}) {
     const ovW = (await call('GET', '/api/admin/overview', undefined, M)).json; assert.deepEqual(ovW.words.map(x => x.words.join('+')), ['Curioso+Entregas', 'CURIOSO+Foi um ano de muitas entregas']); assert.equal(ovW.wordsCloud.clouds[0][0][1], 2);
     r = await call('POST', '/api/admin/cena', { kind: 'nuvem', action: 'foco', n: 2 }, M); assert.equal(r.status, 200); assert.equal((await call('GET', '/api/state')).json.cena.live.foco, 2);
     r = await call('POST', '/api/admin/words', { action: 'remove', id: 3 }, M); assert.equal(r.status, 200); assert.equal((await call('GET', '/api/state')).json.words.count, 1);
-    // fora da cena as perguntas fecham; só o celular que refez o check-in sozinho devolve as respostas que tinha guardado (se o servidor não as tem)
-    r = await call('POST', '/api/admin/step', { id: id('checkin') }, M); st = (await call('GET', '/api/state')).json; assert.deepEqual(st.words, { open: false, count: 1, clouds: [[], []] });
+    // depois do passo da nuvem as perguntas fecham; só o celular que refez o check-in sozinho devolve as respostas que tinha guardado (se o servidor não as tem)
+    r = await call('POST', '/api/admin/step', { id: id('agenda') }, M); st = (await call('GET', '/api/state')).json; assert.equal(st.words.open, false); assert.equal(st.words.live, false); assert.equal(st.words.count, 1); assert.deepEqual(st.words.clouds, [[], []]);
+    r = await call('POST', '/api/words', { token: tok2, words: ['Outra', 'Coisa'] }); assert.equal(r.status, 409, 'depois do passo da nuvem, as perguntas estão fechadas');
     r = await call('POST', '/api/words', { token: tokB, words: ['Curioso', 'Entregas'], restore: true }); assert.equal(r.status, 200);
     r = await call('POST', '/api/words', { token: tokB, words: ['Outra', 'Coisa'], restore: true }); assert.equal(r.status, 409);
+    // o conteúdo das três versões das perguntas é editável; o idioma do app é um ajuste só da senha mestra
+    r = await call('POST', '/api/admin/cena', { action: 'config', config: { nuvem: { perguntasPt: ['Como você chega hoje?', 'Uma palavra para 2026?'] } } }, M); assert.equal(r.status, 200);
+    st = (await call('GET', '/api/state')).json; assert.deepEqual(st.words.q.pt, ['Como você chega hoje?', 'Uma palavra para 2026?']); assert.equal(st.words.q.en.length, 2);
+    r = await call('POST', '/api/admin/cena', { action: 'config', config: { nuvem: { perguntasEs: ['Solo una', ''] } } }, M); assert.equal(r.status, 400);
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { appLang: 'en' } }, T); assert.equal((await call('GET', '/api/state')).json.settings.appLang, 'pessoa', 'a senha das dinâmicas não muda o idioma do app');
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { appLang: 'en' } }, M); assert.equal((await call('GET', '/api/state')).json.settings.appLang, 'en');
+    r = await call('POST', '/api/admin/action', { type: 'settings', settings: { appLang: 'pessoa' } }, M);
     // reiniciar a nuvem apaga as respostas e tira o destaque
     r = await call('POST', '/api/admin/reset', { scope: 'words' }, M); assert.equal(r.status, 200); const ovR = (await call('GET', '/api/admin/overview', undefined, M)).json; assert.deepEqual(ovR.words, []); assert.equal(ovR.cenas.state.nuvem.foco, 0);
     r = await call('POST', '/api/words', { token: tok2, words: ['Curioso', 'Entregas'], restore: true }); assert.equal(r.status, 200);

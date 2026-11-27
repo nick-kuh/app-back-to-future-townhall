@@ -417,3 +417,6 @@ body.dim .sky{filter:brightness(.56) saturate(.85);transition:filter 1.2s}
 .fbcall b{font:900 clamp(12px,1.25vw,22px) var(--display);letter-spacing:2px;color:var(--cyan)}
 .fbcall i{font:600 clamp(11px,1.05vw,18px) Inter;font-style:normal;color:var(--muted)}
 .fbcall em{font-style:normal;font-weight:800;color:var(--yellow)}
+/* check-in: quantas pessoas já responderam as duas perguntas da nuvem de palavras */
+.wcount{margin-top:1.2vh;font:600 clamp(11px,1.05vw,18px) Inter;color:var(--muted)}
+.wcount b{font:700 clamp(15px,1.5vw,26px) var(--led);color:var(--yellow);margin:0 .2em}

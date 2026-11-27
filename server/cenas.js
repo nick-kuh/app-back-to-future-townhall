@@ -17,7 +17,7 @@ const OPEN_KINDS = ['nuvem', 'intervalo', 'capasucesso'];
 const META = {
   abertura: { name: 'Opening video', label: 'Vídeo de abertura', icon: '🎬', act: 0, hint: 'o vídeo que abre o townhall, em tela cheia', tr: 'Roads? Where we\'re going, we don\'t need roads' },
   boasvindas: { name: 'Welcome', label: 'Boas-vindas e jornada', icon: '👋', act: 0, hint: 'abertura com Monserrat, William e Luciano', tr: 'Doc gathers the crew' },
-  nuvem: { name: 'Word cloud', label: 'Nuvem de palavras', icon: '☁️', act: 0, hint: 'duas perguntas no celular; as respostas formam as nuvens no telão', tr: 'The crew has something to say' },
+  nuvem: { name: 'Word cloud', label: 'Nuvem de palavras', icon: '☁️', act: 0, hint: 'as duas perguntas que cada pessoa responde logo depois do login viram as nuvens no telão', tr: 'The crew has something to say' },
   agenda: { name: 'Flight plan', label: 'Plano de voo (agenda)', icon: '🗺️', act: -1, hint: 'a agenda do dia em 4 atos', tr: 'Set the time circuits' },
   plano26: { name: '2026 Strategy', label: 'Estratégia 2026', icon: '🧭', act: 1, hint: 'o plano estratégico LATAM GDT 2026, no visual do filme (antes da Jornada 2026)', tr: 'First, where we said we would go' },
   almanaque: { name: '2026 Journey', label: 'Jornada 2026', icon: '📅', act: 1, hint: 'o almanaque do ano, de dezembro para janeiro (o carro vai de ré), e o resumo em uma página', tr: 'Our year, month by month' },
@@ -119,12 +119,17 @@ const DEFAULT_CONFIG = () => ({
     pessoas: [{ nome: 'Monserrat Diaz', papel: 'WELCOME & JOURNEY' }, { nome: 'William Manganeli', papel: 'WELCOME & JOURNEY' }, { nome: 'Luciano Barbosa', papel: 'LEADERSHIP CONTEXT' }],
     faixa: 'WELCOME · BACK TO THE FUTURE · 2026 → 2027',
   },
-  // Nuvem de palavras: logo depois das boas-vindas o Doc lança duas perguntas; cada pessoa responde no celular (texto livre)
-  // e as respostas formam uma nuvem por pergunta no telão.
+  // Nuvem de palavras: cada pessoa responde duas perguntas no celular (texto livre) logo depois do login, no idioma que escolheu.
+  // Quando o Doc coloca este passo no ar (depois das boas-vindas), o telão mostra uma nuvem por pergunta, já com tudo o que chegou;
+  // quem ainda não respondeu responde na hora e a nuvem vai crescendo. No telão as perguntas aparecem em inglês.
   nuvem: {
     kicker: 'Two questions · word cloud', titulo: 'The crew, in *your own words*',
     perguntas: ['How are you arriving at the Townhall today?', 'Which word best describes your 2026?'],
-    dica: 'Short answers work best: one or two words. Any language.',
+    perguntasPt: ['Como você está chegando ao Townhall hoje?', 'Que palavra descreve melhor o seu 2026?'],
+    perguntasEs: ['¿Cómo llegas hoy al Townhall?', '¿Qué palabra describe mejor tu 2026?'],
+    dica: 'Short answers work best: one or two words.',
+    dicaPt: 'Respostas curtas funcionam melhor: uma ou duas palavras.',
+    dicaEs: 'Las respuestas cortas funcionan mejor: una o dos palabras.',
   },
   // Estratégia 2026 (o slide "LATAM GDT 2026 Strategic Plan"), antes da Jornada 2026: uma faixa de cima, três pilares e a base.
   plano26: {
@@ -278,8 +283,8 @@ function cleanSection(key, cur, p) {
       if (Array.isArray(p.pessoas)) out.pessoas = p.pessoas.slice(0, 6).map(x => ({ nome: clip(x && x.nome, 60), papel: clip(x && x.papel, 60) })).filter(x => x.nome);
       break;
     case 'nuvem':
-      txt('kicker', 80); txt('titulo', 100); txt('dica', 160);
-      if (Array.isArray(p.perguntas)) { const q = p.perguntas.slice(0, 2).map(x => clip(x, 140)); if (q.length < 2 || q.some(x => !x)) fail('A nuvem de palavras precisa das duas perguntas.', 400); out.perguntas = q; }
+      txt('kicker', 80); txt('titulo', 100); txt('dica', 160); txt('dicaPt', 160); txt('dicaEs', 160);
+      for (const k of ['perguntas', 'perguntasPt', 'perguntasEs']) if (Array.isArray(p[k])) { const q = p[k].slice(0, 2).map(x => clip(x, 140)); if (q.length < 2 || q.some(x => !x)) fail('A nuvem de palavras precisa das duas perguntas (em inglês, português e espanhol).', 400); out[k] = q; }
       break;
     case 'plano26': {
       txt('kicker', 80); txt('titulo', 100);
@@ -449,6 +454,8 @@ function createCenas() {
   }
   // quem conduz um bloco (nomes): o servidor junta a foto de perfil de cada um
   const hosts = key => { const k = key === 'capasucesso' ? 'sucesso' : key; return HOST_KEYS.includes(k) ? (config.anfitrioes[k] || []).slice() : []; }; // a capa do Sucesso mostra quem conduz o Sucesso
+  // as duas perguntas (e a dica) em cada idioma: os celulares precisam delas desde o check-in, antes de a cena entrar no ar
+  const nuvemTexts = () => { const n = config.nuvem; return { q: { en: n.perguntas, pt: n.perguntasPt, es: n.perguntasEs }, tip: { en: n.dica, pt: n.dicaPt, es: n.dicaEs } }; };
   const especial = () => ({ nomes: (config.anfitrioes.especial || []).slice(), nota: config.anfitrioes.especialNota || '' }); // participação especial (Conexões)
   const names = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} & ${list[list.length - 1]}` : list[0] || '');
   const evento = () => ({ ...config.evento });
@@ -669,7 +676,7 @@ function createCenas() {
   }
 
   armBreak();
-  return { publicState, adminState, evento, creditos, hosts, especial, command, tap, mic, enter, sync, setConfig, resetConfig, resetState, resetKind,
+  return { publicState, adminState, evento, creditos, hosts, especial, nuvemTexts, command, tap, mic, enter, sync, setConfig, resetConfig, resetState, resetKind,
     onChange: fn => listeners.push(fn), onPulse: fn => pulses.push(fn), agendaView, config: () => config };
 }
 

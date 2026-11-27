@@ -47,31 +47,36 @@ Painel do Doc e ao **telão aberto no navegador logado com a senha mestra**. Os 
 
 ## 🌎 Idiomas
 
-- **O app é em inglês**: check-in, a nuvem de palavras, o feedback, o telão, as cenas do deck (com os textos originais do deck, incluindo
-  os blocos da Claudia e do Fermín: Jornada 2026 e Visão 2027), as transições e os créditos.
-- **As dinâmicas são em português**: Conexões, Reflexão e Sucesso (e a mensagem do Doc), no telão e no celular.
-- **Português ou Español no celular**: no login, cada pessoa escolhe o idioma das dinâmicas (dá para trocar depois pela
-  chave **PT | ES** no topo do app). Quem escolhe Español vê em espanhol as perguntas das Conexões (a dupla continua vendo
-  a **mesma** pergunta, cada um no seu idioma), as paradas da Reflexão, as perguntas do Sucesso e todos os botões e avisos.
-  O telão das dinâmicas fica em português.
+- **A primeira tela do app é a escolha do idioma: Português, Español ou English.** O toque já configura o app e segue para
+  o login; tudo o que a pessoa lê no celular passa para esse idioma (login, as duas perguntas, telas de espera, intervalo,
+  prêmios, alerta, feedback, avisos). Dá para trocar depois pela chave **PT | ES | EN** no topo do app.
+- **As dinâmicas** (Conexões, Reflexão, Sucesso e a mensagem do Doc) existem em **português e espanhol**: quem escolhe
+  English as vê em português. Nas Conexões a dupla vê a **mesma** pergunta, cada um no seu idioma.
+- **O conteúdo do deck fica em inglês**, como foi escrito: a agenda, os títulos das cenas, os prêmios e os blocos da
+  Claudia e do Fermín (Estratégia 2026, Jornada 2026 e Visão 2027). **O telão** também: em inglês, com as dinâmicas em português.
+- Os textos padrão que o Doc pode trocar em Ajustes (boas-vindas, encerramento, "olhos no telão", alerta do intervalo)
+  aparecem traduzidos enquanto forem os originais; um texto escrito à mão aparece como foi escrito.
+- **Sempre em inglês (opcional):** em Preparar → Ajustes → "Idioma do app no celular" dá para fixar o app em inglês; aí a
+  escolha da entrada vale só para as dinâmicas e para as duas perguntas (Português ou Español).
 - **O Painel do Doc é em português.** Os textos das cenas ficam em Preparar → Agenda e cenas (em inglês; edite à vontade).
   Cada pergunta das Conexões tem o campo "em espanhol" (Preparar → Perguntas); sem ele, a pergunta aparece em português.
 
-## ☁️ Nuvem de palavras: duas perguntas, texto livre
+## ☁️ Nuvem de palavras: duas perguntas logo depois do login
 
-É um passo do roteiro, **logo depois das Boas-vindas e antes do Plano de voo**. Quando o Doc coloca no ar:
+1. **No login:** depois de escolher o idioma e o nome, a primeira tela do celular são as **duas perguntas**, cada uma com
+   um **campo de texto** (até 80 letras; as duas são obrigatórias), no idioma da pessoa. Ao enviar, ela entra na tela de
+   sempre, que mostra as respostas dela (com "trocar minhas respostas"). Há um "responder depois" discreto.
+2. **Enquanto isso, as palavras ficam guardadas:** o telão do check-in mostra só quantas pessoas já responderam.
+3. **No passo ☁️ Nuvem de palavras** (logo depois das Boas-vindas e antes do Plano de voo): o telão mostra uma **nuvem por
+   pergunta, já com tudo o que chegou**. Quem ainda não respondeu vê as perguntas de novo e a nuvem **vai crescendo ao
+   vivo**; quem já respondeu vê as nuvens também no celular. No painel dá para **destacar uma pergunta por vez**.
+4. **Depois desse passo** as respostas fecham: quem chega atrasado vai direto para o que está no ar.
 
-- nos **celulares** aparecem as **duas perguntas**, cada uma com um **campo de texto** para a pessoa escrever (até 80
-  letras; as duas são obrigatórias). Depois de enviar, o celular mostra as respostas da pessoa e as duas nuvens crescendo;
-- no **telão**, cada pergunta forma a sua **nuvem de palavras**, lado a lado, ao vivo, com o contador de respostas.
-  Respostas curtas entram inteiras; frases são quebradas em palavras (sem os conectivos). No painel dá para **destacar
-  uma pergunta por vez** (a nuvem dela ocupa a tela).
-
-As perguntas são editáveis em **Preparar → Agenda e cenas → ☁️ Nuvem de palavras** (padrão: "How are you arriving at the
-Townhall today?" e "Which word best describes your 2026?"). Quem já respondeu **não vê o formulário de novo**, mesmo
-entrando por outro celular: a resposta fica ligada à pessoa no servidor (dá para trocar a resposta enquanto o passo está
-no ar). As respostas param de chegar quando o Doc avança no roteiro. No passo, o Doc vê quem respondeu o quê, **remove**
-alguma resposta que não deva aparecer ou apaga todas; a extração fica em 📊 Dados → Nuvem de palavras (só a senha mestra).
+Respostas curtas entram inteiras na nuvem; frases são quebradas em palavras (sem os conectivos). As perguntas são
+editáveis nos três idiomas em **Preparar → Agenda e cenas → ☁️ Nuvem de palavras** (no telão aparece a versão em inglês).
+Quem já respondeu **não vê o formulário de novo**, mesmo entrando por outro celular: a resposta fica ligada à pessoa no
+servidor. No passo do Check-in e no da Nuvem, o Doc vê quem respondeu o quê, **remove** alguma resposta que não deva
+aparecer ou apaga todas; a extração fica em 📊 Dados → Nuvem de palavras (só a senha mestra).
 
 ## 📝 Feedback no encerramento
 
@@ -126,10 +131,10 @@ bloco **Sucesso**: cada um é um passo só no roteiro e um item só na agenda.
 
 | Ato | Passo do roteiro | O que é |
 |---|---|---|
-| I · Reconectar | 🚪 Chegada · Check-in | QR do app e o carro carregando a cada check-in |
+| I · Reconectar | 🚪 Chegada · Check-in 📱 | QR do app e o carro carregando a cada check-in; no celular: idioma, nome e as duas perguntas da nuvem de palavras |
 | | 🎬 Vídeo de abertura | o vídeo que abre o evento, em tela cheia (veja abaixo) |
 | | 👋 Boas-vindas e jornada | "Close 2026 with pride. Leave with a clear 2027 destination." e quem fala |
-| | ☁️ Nuvem de palavras 📱 | duas perguntas no celular (texto livre); cada uma forma uma nuvem no telão |
+| | ☁️ Nuvem de palavras 📱 | o telão mostra uma nuvem por pergunta, já com as respostas dadas desde o login; quem falta responde na hora |
 | | 🗺️ Plano de voo | a agenda do dia em 4 atos, com os horários; no telão, um destaque suave passeia por todos os itens |
 | | ⚡ Conexões 📱 | bloco interativo (em português/espanhol) |
 | II · Rebobinar 2026 | 🧭 Estratégia 2026 | o **plano estratégico LATAM GDT 2026** no visual do filme: o destino (Desire at Scale), os três motores (Growth, Operational Effectiveness, Net Productivity) e a estrada (Governance & Culture) |
@@ -162,7 +167,7 @@ Como conduzir cada cena (no **Ao vivo**, um botão principal por vez):
   `⏹ Encerrar`. No fim, o telão volta para o cartão do evento e o painel oferece o próximo passo. O vídeo toca com som
   depois de um clique na tela do telão (o mesmo que libera o som). Também dá para informar um endereço direto do arquivo
   (.mp4/.webm) em Preparar → Agenda e cenas → Vídeo de abertura.
-- **Nuvem de palavras:** ao entrar no ar, os celulares recebem as duas perguntas. `☁️☁️ As duas nuvens`, `1 · Destacar a
+- **Nuvem de palavras:** ao entrar no ar, o telão já mostra tudo o que foi respondido desde o login e quem ainda não respondeu recebe as duas perguntas. `☁️☁️ As duas nuvens`, `1 · Destacar a
   pergunta 1` e `2 · Destacar a pergunta 2` escolhem o que o telão mostra.
 - **Estratégia 2026:** o plano inteiro aparece de uma vez; os botões `1 · Desire at Scale` … `5 · Governance & Culture`
   (ou `Destacar a próxima parte →`) deixam uma parte em destaque e apagam as outras. O conteúdo (inclusive os líderes, com
@@ -633,8 +638,8 @@ O que cada passo faz:
 
 | Passo | Celulares | Telão | Você faz |
 |---|---|---|---|
-| Check-in | cada pessoa digita o nome, escolhe Português ou Español e embarca | QR do app + carro carregando | acompanha quem falta |
-| Nuvem de palavras | as duas perguntas, com um campo de texto para cada | uma nuvem por pergunta, ao vivo | acompanha as respostas, destaca uma pergunta, modera |
+| Check-in | cada pessoa escolhe o idioma, digita o nome, embarca e responde as duas perguntas | QR do app + carro carregando + quantos já responderam | acompanha quem falta e as respostas |
+| Nuvem de palavras | as nuvens (e as duas perguntas para quem ainda não respondeu) | uma nuvem por pergunta, já com tudo o que chegou | destaca uma pergunta, modera |
 | Cena do townhall | "olhe para o telão" (agenda, cronômetro, prêmios e 88 MPH aparecem no celular) | a cena do deck | os botões da cena (ver "Roteiro em 4 atos") |
 | Bloco de fala (opcional) | nome e tema do bloco, no estilo do logo do filme | modo calmo: título no estilo do logo (seta, rastros de fogo, placa com quem fala, circuitos de tempo) | nada (som desliga sozinho) |
 | Conexões | dupla, perguntas, avaliação e resultado | cronômetros e "88 MPH" | **Iniciar viagens**; o resto anda sozinho |

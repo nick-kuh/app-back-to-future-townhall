@@ -100,6 +100,9 @@ const DEFAULT_SETTINGS = {
   // quem entrou com a senha mestra (Painel do Doc e o telão aberto nesse navegador). Os celulares e os outros telões veem
   // "olhe para o telão". No dia do evento o Doc libera para todos (Painel do Doc → 🔒 Confidencial).
   confidencial: true,
+  // Idioma do app no celular: 'pessoa' = o que cada pessoa escolhe no login (português, espanhol ou inglês) · 'en' = sempre em inglês
+  // (aí a escolha vale só para as dinâmicas e para as duas perguntas da nuvem de palavras)
+  appLang: 'pessoa',
   // quem não participa de cada bloco (ex.: quem coordena): faz o login e conta presença, mas fica fora das duplas, da votação ou das respostas
   skip: { connections: [], reflexao: [], sucesso: [] },
   musicUrl: '',           // opcional: arquivo de áudio próprio para "Música" (senão, toca a trilha gerada no navegador)
@@ -123,6 +126,15 @@ const DEFAULT_MESSAGE = { title: 'Break', body: 'Back in 15 minutes.', emoji: '�
 const OLD_TEXTS = { welcomeText: 'Aguarde: a viagem começa em breve.', closingText: 'Obrigado por viajar com a gente. Marque aquele café com a sua conexão!', standbyText: 'Agora você não precisa do celular.', stageText: 'Agora a atenção é no palco.' };
 // Passos do roteiro com conteúdo do townhall (confidencial até o Doc liberar): as cenas do deck e os blocos de fala. Ficam de fora
 // as cenas que não contam nada do townhall (nuvem de palavras, intervalo e a capa do Sucesso) e o encerramento (só os créditos são guardados).
+// Avisos das telas do townhall: em inglês, com a versão em português e em espanhol (o celular mostra no idioma que a pessoa escolheu).
+// Os avisos das dinâmicas são em português, com a versão em espanhol.
+const tri = (en, pt, es, extra = {}) => ({ title: en[0], body: en[1], pt: { title: pt[0], body: pt[1] }, es: { title: es[0], body: es[1] }, ...extra });
+const lookNotice = (name, secret) => tri([name, 'Look at the big screen.'], [name, 'Olhe para o telão.'], [name, 'Mira la pantalla.'], { secret });
+const NOTICES = {
+  closing: () => tri(['End of the journey', '📱 One last thing: tell us how the Townhall was.'], ['Fim da viagem', '📱 Só mais uma coisa: conte como foi o Townhall.'], ['Fin del viaje', '📱 Una última cosa: cuéntanos cómo estuvo el Townhall.']),
+  back: () => tri(['Time circuits on', 'We are back. Check your phone.'], ['Circuitos do tempo ligados', 'Voltamos. Olhe o celular.'], ['Circuitos del tiempo encendidos', 'Volvimos. Mira tu celular.']),
+  nuvem: () => tri(['Word cloud', '👀 The answers are on the big screen. Not answered yet? Do it now on your phone.'], ['Nuvem de palavras', '👀 As respostas estão no telão. Ainda não respondeu? Responda agora no celular.'], ['Nube de palabras', '👀 Las respuestas están en la pantalla. ¿Aún no respondiste? Hazlo ahora en tu celular.']),
+};
 const confidentialStep = step => !!step && (step.type === 'stage' || (step.type === 'cena' && !OPEN_KINDS.includes(step.cena)));
 // Nuvem de palavras: a resposta de cada pergunta é um texto livre curto (sem quebras de linha nem símbolos soltos, até 80 letras)
 const cleanAnswer = v => String(v ?? '').normalize('NFC').replace(/[\u0000-\u001f<>"`{}\[\]\\|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
@@ -374,10 +386,16 @@ class Engine {
   }
 
   /* ---------------- nuvem de palavras: duas perguntas, texto livre ---------------- */
-  // Logo depois das boas-vindas o Doc coloca a cena "nuvem" no ar: os celulares mostram as duas perguntas (o texto vem do conteúdo
-  // da cena) e cada pessoa responde as duas, em texto livre. A resposta fica ligada à pessoa: quem entrar de novo (outro celular,
-  // navegador limpo) não responde de novo. Cada pergunta forma uma nuvem no telão.
-  wordsOpen() { const st = this.currentStep(); return this.state.block === 'cena' && !this.state.presentation && st.type === 'cena' && st.cena === 'nuvem'; }
+  // Cada pessoa responde as duas perguntas (o texto vem do conteúdo da cena "nuvem") logo depois do login, em texto livre. A
+  // resposta fica ligada à pessoa: quem entrar de novo (outro celular, navegador limpo) não responde de novo. As respostas são
+  // aceitas do começo do roteiro até o passo da nuvem (inclusive): é nele que o telão mostra uma nuvem por pergunta, já com tudo
+  // o que chegou, e quem ainda não respondeu responde na hora. Depois dele, quem chega atrasado vai direto para o que está no ar.
+  wordsOpen() {
+    const steps = this.settings.steps, at = steps.findIndex(x => x.type === 'cena' && x.cena === 'nuvem'), cur = steps.findIndex(x => x.id === this.state.step);
+    return at >= 0 && cur <= at && !this.state.presentation;
+  }
+  // as nuvens estão no telão (o passo da nuvem está no ar): só aí as palavras de todo mundo aparecem
+  wordsLive() { const st = this.currentStep(); return this.state.block === 'cena' && !this.state.presentation && st.type === 'cena' && st.cena === 'nuvem'; }
   wordsOf(personId) { const r = db.prepare('SELECT w1, w2 FROM words WHERE person_id = ?').get(Number(personId)); return r ? [r.w1, r.w2 || ''] : null; }
   setWords(personId, answers) {
     const list = [0, 1].map(i => cleanAnswer(Array.isArray(answers) ? answers[i] : ''));
@@ -853,9 +871,9 @@ class Engine {
     else { this.state.detour = null; this.syncCursor({ welcome: 'checkin', connections: 'connections', closing: 'closing', stage: 'stage', reflexao: 'reflexao', doc: 'doc' }[block]); if (block === 'connections') this.releaseJourney(); else this.holdJourney(); }
     const notices = {
       message: { title: this.state.message.title, body: this.state.message.body },
-      welcome: wasOff ? { title: 'Time circuits on', body: 'We are back. Check your phone.' } : null,
+      welcome: wasOff ? NOTICES.back() : null,
       connections: wasOff ? { title: 'Circuitos ligados', body: 'O bloco Conexões está começando.', es: { title: 'Circuitos encendidos', body: 'El bloque Conexiones está por comenzar.' } } : null,
-      closing: { title: 'End of the journey', body: '📱 One last thing: tell us how the Townhall was.' },
+      closing: NOTICES.closing(),
     };
     this.commit(notices[block] || null);
   }
@@ -877,6 +895,7 @@ class Engine {
     for (const k of ['eventName', 'welcomeText', 'closingText', 'standbyText', 'stageText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
     if (partial.stageMutes !== undefined) s.stageMutes = !!partial.stageMutes;
     if (partial.confidencial !== undefined) s.confidencial = !!partial.confidencial; // modo confidencial (só a senha mestra muda)
+    if (partial.appLang !== undefined) s.appLang = partial.appLang === 'en' ? 'en' : 'pessoa';
     if (partial.transitions !== undefined) s.transitions = !!partial.transitions;
     if (partial.transitionSeconds !== undefined) s.transitionSeconds = Math.max(3, Math.min(30, Math.round(Number(partial.transitionSeconds) || 8)));
     if (partial.skip !== undefined) s.skip = this.cleanSkip({ ...s.skip, ...(partial.skip && typeof partial.skip === 'object' ? partial.skip : {}) });
@@ -1090,15 +1109,15 @@ class Engine {
       case 'connections': this.state.block = 'connections'; notice = { title: 'Conexões', body: '📱 Pegue o celular: esta dinâmica acontece no app.', es: { title: 'Conexiones', body: '📱 Toma tu celular: esta dinámica ocurre en la app.' } }; break;
       case 'message': this.state.message = { title: step.title, body: step.body, emoji: step.emoji }; this.state.block = 'message'; notice = { title: step.title, body: step.body }; break;
       case 'standby': this.state.block = 'standby'; break;
-      case 'closing': this.state.block = 'closing'; notice = { title: 'End of the journey', body: '📱 One last thing: tell us how the Townhall was.' }; break;
+      case 'closing': this.state.block = 'closing'; notice = NOTICES.closing(); break;
       case 'reflexao': this.state.block = 'reflexao'; notice = { title: 'Reflexão', body: '📱 Pegue o celular: esta dinâmica acontece no app.', es: { title: 'Reflexión', body: '📱 Toma tu celular: esta dinámica ocurre en la app.' } }; break;
       case 'doc': this.state.block = 'doc'; notice = { title: 'Visão 2027', body: 'Olhe para o telão: o Doc está chegando de 2027.', es: { title: 'Visión 2027', body: 'Mira la pantalla: el Doc está llegando de 2027.' } }; break;
       case 'cena': // cena do deck: atenção no telão; o som segue a regra dos blocos de fala (no intervalo, a música entra)
         this.state.block = 'cena';
         if (this.settings.stageMutes) this.state.audio.mode = step.cena === 'intervalo' ? (this.settings.spotifyBreak ? 'spotify' : 'music') : 'off';
-        notice = step.cena === 'nuvem' ? { title: 'Word cloud', body: '📱 Grab your phone: two quick questions.' }
+        notice = step.cena === 'nuvem' ? NOTICES.nuvem()
           : step.cena === 'capasucesso' ? { title: 'De Volta para o Sucesso', body: 'Olhe para o telão: o bloco Sucesso vai começar.', es: { title: 'De Vuelta al Éxito', body: 'Mira la pantalla: el bloque Éxito va a comenzar.' } }
-          : { title: CENA_META[step.cena].name, body: 'Look at the big screen.', secret: confidentialStep(step) }; // secret: no modo confidencial, só quem tem a senha mestra recebe
+          : lookNotice(CENA_META[step.cena].name, confidentialStep(step)); // secret: no modo confidencial, só quem tem a senha mestra recebe
         break;
       default: break; // sucesso: a apresentação entra em seguida
     }
@@ -1147,14 +1166,15 @@ class Engine {
       presentation: this.presentation(),
       doc: this.docPublic(),
       stage: this.stageInfo(),
-      // nuvem de palavras: aberta enquanto a cena está no ar (os celulares mostram as duas perguntas); cada nuvem = [termo, quantas pessoas]
-      words: this.wordsOpen() ? { open: true, ...this.wordsCloud() } : { open: false, count: db.prepare('SELECT COUNT(*) AS n FROM words').get().n, clouds: [[], []] },
+      // nuvem de palavras: open = os celulares pedem as duas respostas a quem ainda não respondeu (do check-in até o passo da nuvem) ·
+      // live = as nuvens estão no telão (só aí as palavras vão para todos); cada nuvem = [termo, quantas pessoas]
+      words: this.wordsLive() ? { open: true, live: true, ...this.wordsCloud() } : { open: this.wordsOpen(), live: false, count: db.prepare('SELECT COUNT(*) AS n FROM words').get().n, clouds: [[], []] },
       // feedback do encerramento: aberto enquanto o encerramento está no ar; o telão mostra só quantas pessoas já responderam
       feedback: { open: this.feedbackOpen(), count: db.prepare('SELECT COUNT(*) AS n FROM feedback').get().n },
       epoch: this.epoch,
       step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length, type: this.currentStep().type, cena: this.currentStep().cena || null, transition: this.currentStep().transition !== false },
       audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', beeps: this.state.audio.beeps !== false, musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
-      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, questionMode: this.settings.questionMode, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 8,
+      settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, questionMode: this.settings.questionMode, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 8, appLang: this.settings.appLang === 'en' ? 'en' : 'pessoa',
         docVoice: this.settings.docVoice !== false, docVoiceName: this.settings.docVoiceName || '', docRate: this.settings.docRate || 1, docVideoUrl: this.settings.docVideoUrl || '', docVideoFull: !!this.settings.docVideoFull },
       now: now(),
     };
