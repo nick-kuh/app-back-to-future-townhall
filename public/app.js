@@ -1,7 +1,7 @@
 /* ===== Back to the Future · app do participante =====
- * A primeira coisa que a pessoa faz é escolher o idioma (Português, Español ou English): o app inteiro passa para ele.
- * As dinâmicas (Conexões, Reflexão e Sucesso) existem em português e em espanhol; quem escolhe English as vê em português.
- * O conteúdo do deck (agenda, títulos das cenas, prêmios) fica como foi escrito, em inglês. O login fica guardado no aparelho: apagar a tela, fechar a aba ou perder a rede não tira
+ * A primeira coisa que a pessoa faz é escolher o idioma (Português ou Español): o app inteiro passa para ele, inclusive
+ * as dinâmicas (Conexões, Reflexão e Sucesso). O conteúdo do deck (agenda, títulos das cenas, prêmios) fica como foi
+ * escrito, em inglês. O login fica guardado no aparelho: apagar a tela, fechar a aba ou perder a rede não tira
  * ninguém do evento, e a tela se atualiza sozinha quando o celular volta. */
 (() => {
   const $ = s => document.querySelector(s);
@@ -38,8 +38,8 @@
   const clearToken = () => { S.token = null; store.del('bttf.token'); cookie.del('bttf_token'); };
 
   /* ---------------- idioma ---------------- */
-  const LANGS = { pt: 'Português', es: 'Español', en: 'English' };
-  const startLang = () => { const l = store.get('bttf.lang'), n = (navigator.language || '').toLowerCase(); return LANGS[l] ? l : n.startsWith('es') ? 'es' : n.startsWith('en') ? 'en' : 'pt'; };
+  const LANGS = { pt: 'Português', es: 'Español' };
+  const startLang = () => { const l = store.get('bttf.lang'); return LANGS[l] ? l : (navigator.language || '').toLowerCase().startsWith('es') ? 'es' : 'pt'; };
 
   const S = {
     token: savedToken(),
@@ -50,7 +50,7 @@
     answerDraft: '', anon: false, another: false, sending: false, pendingAnswer: null, // resposta das dinâmicas do Sucesso
     rfProjects: null, rfRev: null, rfPick: null, rfQ: '', rfSending: false,             // Reflexão: lista de projetos e o voto em andamento
     wordsDraft: ['', ''], wordsSending: false, wordsEdit: false, wordsSkip: false,      // nuvem de palavras: as respostas das duas perguntas (logo depois do login)
-    fbDraft: { rating: 0, liked: '', improve: '', anonymous: false }, fbSending: false, fbEdit: false, // feedback do encerramento
+    fbDraft: { rating: 0, liked: '', improve: '' }, fbSending: false, fbEdit: false,                   // feedback do encerramento
     alertOn: 0,                                                                         // alerta de volta do intervalo que está na tela
     build: null, lastSync: 0, restoring: false, restored: false,
   };
@@ -68,13 +68,14 @@
   }
 
   /* ---------------- idioma do app ----------------
-   * L(en, pt, es): o texto no idioma que a pessoa escolheu no login. Se o Doc fixar "sempre em inglês" (Preparar → Ajustes),
-   * o app fica em inglês e a escolha vale só para as dinâmicas e para as duas perguntas da nuvem de palavras. */
+   * L(en, pt, es): o texto no idioma que a pessoa escolheu no login (português ou espanhol). O texto em inglês só aparece se o
+   * Doc fixar "sempre em inglês" (Preparar → Ajustes): aí o app fica em inglês e a escolha vale só para as dinâmicas e para
+   * as duas perguntas da nuvem de palavras. */
   const fixedEn = () => !!(S.state && S.state.settings && S.state.settings.appLang === 'en');
   const ui = () => (fixedEn() ? 'en' : S.lang);
   const L = (en, pt, es) => { const u = ui(); return u === 'pt' ? pt : u === 'es' ? es : en; };
-  const dyn = () => (S.lang === 'es' ? 'es' : 'pt'); // idioma das dinâmicas (quem escolhe English as vê em português)
-  const langOpts = () => (fixedEn() ? ['pt', 'es'] : ['pt', 'es', 'en']);
+  const dyn = () => (S.lang === 'es' ? 'es' : 'pt'); // idioma das dinâmicas
+  const langOpts = () => ['pt', 'es'];
 
   /* ---------------- textos das dinâmicas: português e espanhol ---------------- */
   const D = {
@@ -363,8 +364,8 @@
   // Depois de responder, a pessoa entra na tela de sempre. Quem já respondeu não vê de novo, mesmo entrando por outro aparelho:
   // a resposta fica no servidor. Quando o passo da nuvem entra no ar, quem ainda não respondeu vê as perguntas de novo (sem o
   // "responder depois") e as nuvens crescem no telão; quem já respondeu vê as nuvens também no celular.
-  const wordsQ = () => { const q = (S.state && S.state.words && S.state.words.q) || {}; return q[S.lang] || q.en || ['', '']; };
-  const wordsTip = () => { const x = (S.state && S.state.words && S.state.words.tip) || {}; return x[S.lang] || x.en || ''; };
+  const wordsQ = () => { const q = (S.state && S.state.words && S.state.words.q) || {}; return q[S.lang] || q.pt || q.en || ['', '']; };
+  const wordsTip = () => { const x = (S.state && S.state.words && S.state.words.tip) || {}; return x[S.lang] || x.pt || x.en || ''; };
   const wordsLive = () => !!(S.state && S.state.words && S.state.words.live);
   function needWords() {
     if (S.screen !== 'app' || !S.me || !S.state || !S.state.words || !S.state.words.open || currentPresentation() || currentReflexao()) return false;
@@ -725,6 +726,7 @@
         </div><div class="spacer"></div>`;
     }
     if (c.kind === 'plano26') return cenaLook(c, plain(c.titulo), (c.lideres || []).map(x => x.nome).join(', '));
+    if (c.kind === 'capajornada') return cenaLook(c, plain(c.titulo), c.quem);
     if (c.kind === 'abertura') return cenaLook(c, c.name, '', l.play ? L('🎬 Now playing · look at the big screen.', '🎬 Passando agora · olhe para o telão.', '🎬 En pantalla ahora · mira la pantalla.') : l.fim ? L('🍿 That was the opening.', '🍿 Essa foi a abertura.', '🍿 Esa fue la apertura.') : L('🎬 The opening video is about to start.', '🎬 O vídeo de abertura já vai começar.', '🎬 El video de apertura está por comenzar.') + '<br>' + look());
     if (c.kind === 'intervalo') {
       const ph = ivPhase(c), msg = { idle: L('The break is about to start.', 'O intervalo já vai começar.', 'El receso está por comenzar.'), run: L('Be back before the clock hits zero. Your phone will ring the alarm when it is time.', 'Volte antes de o relógio zerar. O celular toca o alarme quando for a hora.', 'Vuelve antes de que el reloj llegue a cero. Tu celular sonará la alarma cuando sea la hora.'),
@@ -795,8 +797,8 @@
       <p class="muted center" style="margin-top:18px">CDIO HC + BPC · 2026 Townhall</p>
       <div class="spacer"></div>
       <div class="langstart">
-        <div class="kicker">${fixedEn() ? 'Language for the activities · Idioma de las dinámicas' : 'Choose your language<br>Escolha o seu idioma<br>Elige tu idioma'}</div>
-        ${langOpts().map(k => `<button class="btn ghost ${(fixedEn() ? dyn() : S.lang) === k ? 'sug' : ''}" data-action="start" data-lang="${k}">${LANGS[k]}</button>`).join('')}
+        <div class="kicker">${fixedEn() ? 'Language for the activities<br>Idioma das dinâmicas · Idioma de las dinámicas' : 'Escolha o seu idioma<br>Elige tu idioma'}</div>
+        ${langOpts().map(k => `<button class="btn ghost ${S.lang === k ? 'sug' : ''}" data-action="start" data-lang="${k}">${LANGS[k]}</button>`).join('')}
       </div>`;
   }
   function vPeopleList() {
@@ -825,11 +827,10 @@
       <input class="input" id="q" placeholder="${esc(L('Type your name…', 'Digite o seu nome…', 'Escribe tu nombre…'))}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
       <div class="plist" id="plist">${vPeopleList()}</div>
       <div class="spacer"></div>
-      <button class="linkbtn" data-action="back">🌐 ${esc(LANGS[fixedEn() ? dyn() : S.lang])} · ${esc(L('change language', 'trocar o idioma', 'cambiar el idioma'))}</button>`;
+      <button class="linkbtn" data-action="back">🌐 ${esc(LANGS[S.lang])} · ${esc(L('change language', 'trocar o idioma', 'cambiar el idioma'))}</button>`;
   }
   // o que o idioma escolhido muda (aparece na confirmação do nome)
-  const langNote = () => (fixedEn() ? `The app is in English. The three activities on your phone (Connection, Reflection and Success) and the two opening questions will be in ${LANGS[dyn()]}.`
-    : L('The three group activities (Connection, Reflection and Success) run in Portuguese.', '', ''));
+  const langNote = () => (fixedEn() ? `The app is in English. The three activities on your phone (Connection, Reflection and Success) and the two opening questions will be in ${LANGS[S.lang]}.` : '');
   function vConfirm() {
     const p = S.pick, note = langNote();
     return `${logo(true)}
@@ -837,7 +838,7 @@
         <div class="who" style="display:flex;justify-content:center;margin:14px 0 8px">${av(p, 'xl')}</div>
         <div class="pname">${esc(p.name)}</div>
         ${p.checkedIn ? `<p class="small" style="margin-top:12px;color:var(--amber)">${esc(L('This name is already checked in on another phone. If it\'s you, go ahead.', 'Este nome já fez check-in em outro celular. Se for você, pode seguir.', 'Este nombre ya hizo check-in en otro celular. Si eres tú, continúa.'))}</p>` : ''}
-        <p class="small" style="margin-top:12px">🌐 ${esc(LANGS[fixedEn() ? dyn() : S.lang])}${note ? ` · ${esc(note)}` : ''}</p>
+        <p class="small" style="margin-top:12px">🌐 ${esc(LANGS[S.lang])}${note ? ` · ${esc(note)}` : ''}</p>
       </div>
       <button class="btn" data-action="checkin">⚡ ${esc(L('That\'s me, let\'s go', 'Sou eu, vamos lá', 'Soy yo, vamos'))}</button>
       <button class="btn ghost" data-action="unpick">${esc(L('Not me', 'Não sou eu', 'No soy yo'))}</button>`;
@@ -846,8 +847,8 @@
 
   // cabeçalho: o logo, o idioma (um toque troca) e o nome
   function vHeader() {
-    const me = S.me.person, cur = fixedEn() ? dyn() : S.lang, tip = L('Language', 'Idioma', 'Idioma');
-    return `<div class="trip">${logo(true)}<div class="hdr"><button type="button" class="langchip" data-action="langToggle" title="${tip}: ${LANGS[cur]}" aria-label="${tip}: ${LANGS[cur]}">${langOpts().map(k => `<b class="${cur === k ? 'on' : ''}">${k.toUpperCase()}</b>`).join('')}</button><div class="small">${esc(first(me.name))}</div></div></div>`;
+    const me = S.me.person, tip = L('Language', 'Idioma', 'Idioma');
+    return `<div class="trip">${logo(true)}<div class="hdr"><button type="button" class="langchip" data-action="langToggle" title="${tip}: ${LANGS[S.lang]}" aria-label="${tip}: ${LANGS[S.lang]}">${langOpts().map(k => `<b class="${S.lang === k ? 'on' : ''}">${k.toUpperCase()}</b>`).join('')}</button><div class="small">${esc(first(me.name))}</div></div></div>`;
   }
   /* ---- As duas perguntas da nuvem de palavras: a primeira tela depois do login ----
    * Cada pergunta tem um campo de texto livre. Depois de enviar, a pessoa entra na tela de sempre. */
@@ -934,8 +935,7 @@
         <textarea class="input short" id="fbLiked" maxlength="600" rows="3" placeholder="${esc(opt)}" ${S.fbSending ? 'disabled' : ''}></textarea>
         <label class="wq-q" for="fbImprove" style="margin-top:12px"><span>${esc(L('What should we do better next time?', 'O que podemos fazer melhor na próxima?', '¿Qué podemos hacer mejor la próxima vez?'))}</span></label>
         <textarea class="input short" id="fbImprove" maxlength="600" rows="3" placeholder="${esc(opt)}" ${S.fbSending ? 'disabled' : ''}></textarea>
-        <label class="sw" style="margin-top:12px"><input type="checkbox" id="fbAnon" ${d.anonymous ? 'checked' : ''}> ${esc(L('Send without my name', 'Enviar sem o meu nome', 'Enviar sin mi nombre'))}</label>
-        <button class="btn" data-action="fbSend" ${S.fbSending ? 'disabled' : ''}>${esc(S.fbSending ? L('Sending…', 'Enviando…', 'Enviando…') : L('⚡ Send feedback', '⚡ Enviar feedback', '⚡ Enviar feedback'))}</button>
+        <button class="btn" data-action="fbSend" style="margin-top:14px" ${S.fbSending ? 'disabled' : ''}>${esc(S.fbSending ? L('Sending…', 'Enviando…', 'Enviando…') : L('⚡ Send feedback', '⚡ Enviar feedback', '⚡ Enviar feedback'))}</button>
         ${S.fbEdit ? `<button class="linkbtn" data-action="fbCancel" style="display:block;margin:8px auto 0">${esc(L('← keep my feedback', '← manter meu feedback', '← mantener mi feedback'))}</button>` : ''}
       </div>`;
   }
@@ -1192,10 +1192,8 @@
         // o toque no idioma já configura o app e segue para o login
         case 'start': unlockAudio(); setLang(el.dataset.lang); S.screen = 'identify'; S.q = ''; maybeRender(true); await loadPeople(); maybeRender(true); break;
         case 'back': S.screen = 'splash'; S.pick = null; maybeRender(true); break;
-        case 'langToggle': { // o chip do cabeçalho passa para o próximo idioma
-          const o = langOpts(), cur = fixedEn() ? dyn() : S.lang; setLang(o[(o.indexOf(cur) + 1) % o.length]);
-          toast(fixedEn() ? t('langSet') : L('App in English', 'App em português', 'App en español')); buzz(20); S.jump = false; maybeRender(true); break;
-        }
+        case 'langToggle': // o chip do cabeçalho troca entre português e espanhol
+          setLang(S.lang === 'pt' ? 'es' : 'pt'); toast(fixedEn() ? t('langSet') : L('', 'App em português', 'App en español')); buzz(20); S.jump = false; maybeRender(true); break;
         case 'anotherAnswer': S.another = true; maybeRender(true); { const a = $('#ans'); if (a) a.focus(); } break;
         case 'sendAnswer': {
           const text = (S.answerDraft || '').trim();
@@ -1274,7 +1272,7 @@
           } catch (e) { S.fbSending = false; toast(e.status ? e.message : L('No connection. Tap send again.', 'Sem conexão. Toque em enviar de novo.', 'Sin conexión. Toca enviar de nuevo.'), true); maybeRender(true); }
           break;
         }
-        case 'fbEdit': { const f = S.me && S.me.feedback; if (f) S.fbDraft = { rating: f.rating, liked: f.liked, improve: f.improve, anonymous: f.anonymous }; S.fbEdit = true; maybeRender(true); break; }
+        case 'fbEdit': { const f = S.me && S.me.feedback; if (f) S.fbDraft = { rating: f.rating, liked: f.liked, improve: f.improve }; S.fbEdit = true; maybeRender(true); break; }
         case 'fbCancel': S.fbEdit = false; maybeRender(true); break;
         // --- alerta de volta do intervalo ---
         case 'alertOk': dismissAlert(); break;
@@ -1284,7 +1282,7 @@
           unlockAudio(); el.disabled = true;
           const r = await api('/api/checkin', { personId: S.pick.id, token: S.token });
           saveToken(r.token); if (r.epoch) store.set('bttf.epoch', r.epoch); store.set('bttf.lang', S.lang);
-          S.pick = null; S.q = ''; S.screen = 'app'; S.me = null; S.wordsEdit = false; S.wordsSkip = false; S.wordsDraft = ['', '']; S.fbEdit = false; S.fbDraft = { rating: 0, liked: '', improve: '', anonymous: false };
+          S.pick = null; S.q = ''; S.screen = 'app'; S.me = null; S.wordsEdit = false; S.wordsSkip = false; S.wordsDraft = ['', '']; S.fbEdit = false; S.fbDraft = { rating: 0, liked: '', improve: '' };
           maybeRender(true); hello(); toast(L(`Welcome aboard, ${first(r.person.name)}! ⚡`, `A bordo, ${first(r.person.name)}! ⚡`, `¡A bordo, ${first(r.person.name)}! ⚡`)); buzz(60);
           break;
         }
@@ -1340,7 +1338,7 @@
     if (e.target.id === 'w1') { e.preventDefault(); const f = $('#w2'); if (f) f.focus(); }
     if (e.target.id === 'w2') { e.preventDefault(); e.target.blur(); act('sendWords', e.target); }
   });
-  document.addEventListener('change', e => { if (e.target.id === 'anon') S.anon = e.target.checked; if (e.target.id === 'fbAnon') S.fbDraft.anonymous = e.target.checked; });
+  document.addEventListener('change', e => { if (e.target.id === 'anon') S.anon = e.target.checked; });
   // foto de perfil que não carregou: sai, e as iniciais que estavam por baixo aparecem
   document.addEventListener('error', e => { const el = e.target; if (el && el.tagName === 'IMG' && el.parentNode && el.parentNode.classList.contains('av')) { el.parentNode.classList.remove('ph'); el.remove(); } }, true);
   // o celular voltou: tela acesa de novo, aba de volta (inclusive pelo "voltar" do navegador), rede de volta

@@ -24,7 +24,7 @@ const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 // Roteiro padrão: a agenda do townhall (deck v18) em 4 atos. Conexões, Reflexão e as dinâmicas do Sucesso são os
 // blocos interativos de sempre; os outros passos são as cenas do deck.
 //   ATO I · Reconectar: chegada (check-in) · vídeo de abertura · boas-vindas · nuvem de palavras · plano de voo · Conexões
-//   ATO II · Rebobinar 2026: Estratégia 2026 · Jornada 2026 (almanaque) · IA em 2026 + Reflexão
+//   ATO II · Rebobinar 2026: capa da Jornada 2026 · Estratégia 2026 · Jornada 2026 (almanaque, de dezembro a janeiro) · IA em 2026 + Reflexão
 //   ATO III · Reconhecer: Reconhecimento 2026 · intervalo
 //   ATO IV · Avançar para 2027: Visão 2027 (capa + estratégia) · capa do Sucesso + Sucesso 01 a 04 + o Doc · 88 MPH · créditos e feedback
 // "Como a IA nos ajudou em 2026" é o próprio bloco Reflexão, e o "Manifesto 2027" é o bloco Sucesso: um passo só para cada.
@@ -37,7 +37,8 @@ function defaultSteps() {
     cena('nuvem'),                      // duas perguntas no celular: as respostas viram as nuvens de palavras
     cena('agenda'),                     // o plano de voo do dia
     { type: 'connections' },
-    cena('plano26'), cena('almanaque'), // a Estratégia 2026 e, em seguida, a Jornada 2026 (de dezembro para janeiro)
+    cena('capajornada'),                // capa do bloco Jornada 2026 (o nome e quem conduz)
+    cena('plano26'), cena('almanaque'), // a Estratégia 2026 e, em seguida, o almanaque (de dezembro para janeiro)
     { type: 'reflexao' },
     cena('reconhecimento'), cena('intervalo'),
     cena('visao'),                      // capa do bloco e a Estratégia 2027 em tela cheia
@@ -49,9 +50,9 @@ function defaultSteps() {
   ].map((x, i) => ({ id: 'p' + (i + 1), ...x, ...(noTransition(x) ? { transition: false } : {}) }));
 }
 // Passos que entram direto, sem a "viagem no tempo" de transição (pedido da organização): vídeo de abertura, boas-vindas, nuvem de palavras,
-// Jornada 2026 (a transição do bloco acontece antes, na Estratégia 2026), reconhecimento, intervalo, as dinâmicas do Sucesso (a transição
-// acontece na capa do bloco) e o Doc, 88 MPH e os créditos. Em Preparar → Roteiro dá para ligar e desligar em cada passo.
-const NO_TRANSITION_CENAS = ['abertura', 'boasvindas', 'nuvem', 'almanaque', 'reconhecimento', 'intervalo', 'mph'];
+// Estratégia 2026 e almanaque (a transição do bloco acontece antes, na capa da Jornada 2026), reconhecimento, intervalo, as dinâmicas do
+// Sucesso (a transição acontece na capa do bloco) e o Doc, 88 MPH e os créditos. Em Preparar → Roteiro dá para ligar e desligar em cada passo.
+const NO_TRANSITION_CENAS = ['abertura', 'boasvindas', 'nuvem', 'plano26', 'almanaque', 'reconhecimento', 'intervalo', 'mph'];
 function noTransition(x) { return ['sucesso', 'doc', 'closing'].includes(x.type) || (x.type === 'cena' && NO_TRANSITION_CENAS.includes(x.cena)); }
 // Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões, Reflexão,
 // Visão 2027 e cada dinâmica do Sucesso só entram uma vez (o estado delas é um só).
@@ -282,6 +283,16 @@ class Engine {
       }
       this.settings.roteiroV21 = true;
     }
+    // A capa do bloco Jornada 2026 vem antes da Estratégia 2026 (vale uma vez para roteiros guardados): capa (com a transição) →
+    // Estratégia 2026 → almanaque, os dois últimos entrando direto.
+    if (!this.settings.roteiroV22) {
+      const at = k => steps.findIndex(x => x.type === 'cena' && x.cena === k);
+      if (steps.length && at('capajornada') < 0 && (at('plano26') >= 0 || at('almanaque') >= 0)) {
+        steps.splice(at('plano26') >= 0 ? at('plano26') : at('almanaque'), 0, { id: 'p' + crypto.randomBytes(4).toString('hex'), type: 'cena', cena: 'capajornada' });
+        for (const k of ['plano26', 'almanaque']) if (at(k) >= 0) steps[at(k)].transition = false;
+      }
+      this.settings.roteiroV22 = true;
+    }
     // Transição entre blocos mais rápida (vale uma vez): quem estava com os 15 s de antes passa para 8 s.
     if (!this.settings.fastV1) { if ((this.settings.transitionSeconds || 15) >= 15) this.settings.transitionSeconds = 8; this.settings.fastV1 = true; }
     delete this.settings.wordsLive;
@@ -419,16 +430,15 @@ class Engine {
 
   /* ---------------- feedback do encerramento ---------------- */
   // No encerramento, cada pessoa conta no celular como foi o townhall: uma nota de 1 a 5 e dois textos opcionais (o que mais gostou e
-  // o que pode melhorar). Vale uma resposta por pessoa (enviar de novo troca). Quem marca "sem o meu nome" não tem o nome mostrado
-  // no painel nem na extração de dados.
+  // o que pode melhorar). Vale uma resposta por pessoa (enviar de novo troca). O feedback vai sempre com o nome de quem respondeu.
   feedbackOpen() { return this.state.block === 'closing' && !this.state.presentation; }
-  feedbackOf(personId) { const r = db.prepare('SELECT rating, liked, improve, anonymous FROM feedback WHERE person_id = ?').get(Number(personId)); return r ? { rating: r.rating, liked: r.liked || '', improve: r.improve || '', anonymous: !!r.anonymous } : null; }
+  feedbackOf(personId) { const r = db.prepare('SELECT rating, liked, improve FROM feedback WHERE person_id = ?').get(Number(personId)); return r ? { rating: r.rating, liked: r.liked || '', improve: r.improve || '' } : null; }
   setFeedback(personId, f) {
     const rating = Math.round(Number(f && f.rating));
     if (!(rating >= 1 && rating <= 5)) throw Object.assign(new Error('Pick a rating from 1 to 5.'), { status: 400 });
     const text = v => String(v ?? '').normalize('NFC').replace(/[\u0000-\u0008\u000b-\u001f]/g, ' ').trim().slice(0, 600);
-    db.prepare('INSERT INTO feedback (person_id, rating, liked, improve, anonymous, at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(person_id) DO UPDATE SET rating = excluded.rating, liked = excluded.liked, improve = excluded.improve, anonymous = excluded.anonymous, at = excluded.at')
-      .run(Number(personId), rating, text(f.liked), text(f.improve), f.anonymous ? 1 : 0, iso());
+    db.prepare('INSERT INTO feedback (person_id, rating, liked, improve, anonymous, at) VALUES (?, ?, ?, ?, 0, ?) ON CONFLICT(person_id) DO UPDATE SET rating = excluded.rating, liked = excluded.liked, improve = excluded.improve, anonymous = 0, at = excluded.at')
+      .run(Number(personId), rating, text(f.liked), text(f.improve), iso());
     this.commit();
     return this.feedbackOf(personId);
   }
@@ -438,10 +448,10 @@ class Engine {
     for (const r of db.prepare('SELECT rating, COUNT(*) AS n FROM feedback GROUP BY rating').all()) if (r.rating >= 1 && r.rating <= 5) { dist[r.rating - 1] = r.n; sum += r.rating * r.n; count += r.n; }
     return { count, avg: count ? Math.round(sum / count * 10) / 10 : 0, dist };
   }
-  // Para o painel e a extração de dados: quem pediu "sem o meu nome" aparece sem nome
+  // Para o painel e a extração de dados: cada resposta com o nome de quem respondeu
   feedbackList() {
-    return db.prepare('SELECT f.rating, f.liked, f.improve, f.anonymous, f.at, p.name, p.area FROM feedback f LEFT JOIN people p ON p.id = f.person_id ORDER BY f.at').all()
-      .map(r => ({ name: r.anonymous ? '' : r.name || '', area: r.anonymous ? '' : r.area || '', rating: r.rating, liked: r.liked || '', improve: r.improve || '', anonymous: !!r.anonymous, at: r.at }));
+    return db.prepare('SELECT f.rating, f.liked, f.improve, f.at, p.name, p.area FROM feedback f LEFT JOIN people p ON p.id = f.person_id ORDER BY f.at').all()
+      .map(r => ({ name: r.name || '', area: r.area || '', rating: r.rating, liked: r.liked || '', improve: r.improve || '', at: r.at }));
   }
 
   addPerson(f) {

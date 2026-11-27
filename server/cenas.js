@@ -1,7 +1,7 @@
 // Cenas do townhall: o conteúdo do deck "CDIO HC + BPC · 2026 Townhall" (v18, agenda atualizada), em INGLÊS (como
 // no deck original) e com a cara do app. Cada cena é um passo do roteiro (tipo "cena") que o Doc coloca no telão:
 //   abertura (vídeo de abertura) · boasvindas · nuvem (duas perguntas no celular e as nuvens de palavras) · agenda (plano de voo)
-//   plano26 (Estratégia 2026) · almanaque (Jornada 2026, de dezembro para janeiro) · ia (IA em 2026)
+//   capajornada (capa da Jornada 2026) · plano26 (Estratégia 2026) · almanaque (Jornada 2026, de dezembro para janeiro) · ia (IA em 2026)
 //   reconhecimento (prêmios) · intervalo (cronômetro e o alerta de volta) · visao (capa e a Estratégia 2027 em tela cheia)
 //   capasucesso (capa do bloco Sucesso) · manifesto · mph (88 MPH)
 // Aqui ficam o conteúdo (editável em Preparar → Agenda e cenas), o estado ao vivo de cada cena (mês do almanaque,
@@ -9,7 +9,7 @@
 // As dinâmicas (Conexões, Reflexão e Sucesso) continuam em português e não ficam neste arquivo.
 const { kvGet, kvSet } = require('./db');
 
-const KINDS = ['abertura', 'boasvindas', 'nuvem', 'agenda', 'plano26', 'almanaque', 'ia', 'reconhecimento', 'intervalo', 'visao', 'capasucesso', 'manifesto', 'mph'];
+const KINDS = ['abertura', 'boasvindas', 'nuvem', 'agenda', 'capajornada', 'plano26', 'almanaque', 'ia', 'reconhecimento', 'intervalo', 'visao', 'capasucesso', 'manifesto', 'mph'];
 // Cenas que não são conteúdo confidencial do townhall: a nuvem de palavras (precisa dos celulares), o intervalo e a capa do Sucesso
 const OPEN_KINDS = ['nuvem', 'intervalo', 'capasucesso'];
 // name: o nome que aparece no telão e nos celulares (inglês) · label e hint: como o passo aparece no Painel do Doc (português)
@@ -19,8 +19,9 @@ const META = {
   boasvindas: { name: 'Welcome', label: 'Boas-vindas e jornada', icon: '👋', act: 0, hint: 'abertura com Monserrat, William e Luciano', tr: 'Doc gathers the crew' },
   nuvem: { name: 'Word cloud', label: 'Nuvem de palavras', icon: '☁️', act: 0, hint: 'as duas perguntas que cada pessoa responde logo depois do login viram as nuvens no telão', tr: 'The crew has something to say' },
   agenda: { name: 'Flight plan', label: 'Plano de voo (agenda)', icon: '🗺️', act: -1, hint: 'a agenda do dia em 4 atos', tr: 'Set the time circuits' },
-  plano26: { name: '2026 Strategy', label: 'Estratégia 2026', icon: '🧭', act: 1, hint: 'o plano estratégico LATAM GDT 2026, no visual do filme (antes da Jornada 2026)', tr: 'First, where we said we would go' },
-  almanaque: { name: '2026 Journey', label: 'Jornada 2026', icon: '📅', act: 1, hint: 'o almanaque do ano, de dezembro para janeiro (o carro vai de ré), e o resumo em uma página', tr: 'Our year, month by month' },
+  capajornada: { name: '2026 Journey', label: 'Jornada 2026 · capa do bloco', icon: '📅', act: 1, hint: 'a capa do bloco Jornada 2026: o nome e quem conduz (antes da Estratégia 2026)', tr: 'Our year, month by month' },
+  plano26: { name: '2026 Strategy', label: 'Estratégia 2026', icon: '🧭', act: 1, hint: 'o plano estratégico LATAM GDT 2026, no visual do filme (entre a capa da Jornada 2026 e o almanaque)', tr: 'First, where we said we would go' },
+  almanaque: { name: '2026 Journey', label: 'Jornada 2026 · dezembro a janeiro', icon: '🚗', act: 1, hint: 'o almanaque do ano, de dezembro para janeiro (o carro vai de ré), e o resumo em uma página', tr: 'Our year, month by month' },
   ia: { name: 'How AI helped us in 2026', label: 'Como a IA nos ajudou em 2026', icon: '🦋', act: 1, hint: 'abertura da Frente 2 (antes da Reflexão)', tr: 'The butterfly effect' },
   reconhecimento: { name: 'Recognition 2026', label: 'Reconhecimento 2026', icon: '🏆', act: 2, hint: 'tributo, Prêmios Torre do Relógio e Hall da Fama', tr: 'The lightning is coming' },
   intervalo: { name: 'Break', label: 'Intervalo', icon: '☕', act: 2, hint: 'cronômetro: reabastecendo a DeLorean', tr: 'Mr. Fusion recharging' },
@@ -134,7 +135,7 @@ const DEFAULT_CONFIG = () => ({
   // Estratégia 2026 (o slide "LATAM GDT 2026 Strategic Plan"), antes da Jornada 2026: uma faixa de cima, três pilares e a base.
   plano26: {
     kicker: '2026 Strategy', titulo: 'LATAM GDT *2026* Strategic Plan',
-    lideres: [{ nome: 'Claudia Meira', papel: 'CDIO BPC LATAM' }, { nome: 'Fermín Grandas', papel: 'CDIO HC LATAM' }, { nome: 'Aldo Medina', papel: 'CDIO Foods LATAM' }],
+    lideres: [{ nome: 'Claudia Meira', papel: 'CDIO BPC LATAM' }, { nome: 'Fermín Grandas', papel: 'CDIO HC LATAM' }],
     topo: { t: 'Desire at Scale', s: 'Master our Social First Demand Generation Model',
       itens: [{ t: 'Content & Social First', d: 'Content Studio | UCA (AR) | Insights' }, { t: 'Measurement', d: 'Rapid ROI (BR and MX)' }, { t: 'Influencer & Social Commerce', d: 'Social + dCom | Influencer @ Scale' }] },
     p1: { t: 'Growth', s: 'Excellence in Frontline Execution · CSP & CD Tooling', itens: [
@@ -164,6 +165,9 @@ const DEFAULT_CONFIG = () => ({
     base: { t: 'Governance & Culture', s: '',
       itens: [{ t: 'Cost Management', d: 'BU\'s Budget Model' }, { t: 'Governance on Projects', d: 'Prioritization with clear results' }, { t: 'Strengthen Relationship', d: 'Business Leaders / BG&BU leaders / GDT team' }] },
   },
+  // Capa do bloco Jornada 2026 (em inglês, como o bloco): o nome do bloco e quem conduz (Quem conduz cada bloco → Jornada 2026).
+  // A ordem do bloco: capa → Estratégia 2026 → almanaque de dezembro a janeiro.
+  capajornada: { kicker: 'Front 2 · Reconnect 2026', titulo: '2026 Journey', sub: 'Our 2026 almanac: a year of delivery, month by month.' },
   almanaque: {
     kicker: 'Front 2 · Reconnect 2026', titulo: 'Our 2026 *almanac*', sub: 'A year of delivery, month by month.', quem: 'Claudia Meira & Fermín Grandas',
     kpis: [{ v: '94%', l: 'Portfolio on track' }, { v: '€35M+', l: 'Targeted savings' }, { v: '#1', l: 'Copilot AI Adoption BW' }],
@@ -297,7 +301,7 @@ function cleanSection(key, cur, p) {
       }
       break;
     }
-    case 'capasucesso': txt('kicker', 80); txt('titulo', 80); txt('sub', 160); break;
+    case 'capasucesso': case 'capajornada': txt('kicker', 80); txt('titulo', 80); txt('sub', 160); break;
     case 'almanaque':
       txt('kicker', 80); txt('titulo', 80); txt('sub', 160); txt('quem', 80); txt('kpiEntregas', 60); txt('kpiBeneficios', 60); txt('fonte', 400);
       if (Array.isArray(p.kpis)) out.kpis = p.kpis.slice(0, 4).map(x => ({ v: clip(x && x.v, 12), l: clip(x && x.l, 60) })).filter(x => x.v);
@@ -359,7 +363,7 @@ const defaultState = () => ({
   abertura: { play: false, at: 0, fim: false },                                                 // vídeo de abertura: tocando, desde quando, terminou
   nuvem: { foco: 0 },                                                                           // nuvens de palavras: 0 = as duas perguntas · 1 ou 2 = só uma em destaque
   plano26: { foco: 0 },                                                                         // Estratégia 2026: 0 = tudo · 1 a 5 = uma parte em destaque
-  almanaque: { mes: -1, tocando: false, pagina: false, fim: 0, off: [] },                       // mês -1 = ainda em branco
+  almanaque: { mes: 11, tocando: false, pagina: false, fim: 0, off: [] },                       // começa em dezembro (a capa do bloco é um passo próprio do roteiro)
   reconhecimento: { fase: 'intro', premio: null, passo: 'categoria', at: 0, carga: 0, feitos: [], video: false },
   intervalo: { phase: 'idle', endsAt: null, remaining: null, alerta: null },                 // alerta: quando o "alerta de emergência" de volta do intervalo foi disparado
   visao: { intro: false, aberta: false },                                                     // aberta: false = a capa do bloco · true = a estratégia em tela cheia
@@ -368,10 +372,12 @@ const defaultState = () => ({
 
 // v2: Reflexão e Sucesso na agenda, anfitriões por bloco · v3: o conteúdo das cenas passou para o inglês (deck original),
 // entrou o vídeo de abertura e saíram os minutos de cada bloco
-const CONFIG_VERSION = 3;
+// v4: o Aldo Medina saiu dos líderes da Estratégia 2026
+const CONFIG_VERSION = 4;
 function createCenas() {
-  const saved = kvGet('cenas', {}) || {};
-  if (saved.config && (saved.v || 1) < CONFIG_VERSION) {
+  const saved = kvGet('cenas', {}) || {}, savedV = saved.v || 1;
+  if (saved.config && savedV === 3 && saved.config.plano26 && Array.isArray(saved.config.plano26.lideres)) saved.config.plano26.lideres = saved.config.plano26.lideres.filter(x => !/^aldo medina$/i.test(String((x && x.nome) || '').trim()));
+  if (saved.config && savedV < 3) {
     // Dos textos guardados em português fica só o que não depende do idioma: quem conduz cada bloco, o início da agenda, a
     // duração do intervalo, o vídeo-tributo e como o Flux Capacitor carrega; e, se os indicados já foram trocados pelos de
     // verdade, os indicados, o vencedor e a citação de cada prêmio.
@@ -412,7 +418,9 @@ function createCenas() {
     const f = x => `${String(Math.floor(x / 60) % 24).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
     // posição de cada item no roteiro (pelo passo a que ele corresponde), para marcar o que já passou e o que está no ar
     const steps = (ctx && ctx.steps) || [], cur = ctx ? ctx.index : -1;
-    const at = ref => steps.findIndex(s => (s.type === 'cena' ? s.cena : s.type) === ref);
+    // (o item "2026 Journey" começa na capa do bloco; o "Success", na capa do Sucesso)
+    const ALIAS = { almanaque: ['capajornada', 'plano26', 'almanaque'], sucesso: ['capasucesso', 'sucesso'] };
+    const at = ref => steps.findIndex(s => (ALIAS[ref] || [ref]).includes(s.type === 'cena' ? s.cena : s.type));
     const itens = a.itens.map((x, i) => { const start = t; t += x.min; const pos = x.ref ? at(x.ref) : -1; return { ...x, i, hora: f(start), fim: f(t), pos }; });
     // o item "no ar" é o último cujo passo já chegou (os passos entre dois itens, como as dinâmicas do Sucesso, contam para o anterior)
     let live = -1; itens.forEach(x => { if (x.pos >= 0 && x.pos <= cur) live = x.i; });
@@ -434,6 +442,7 @@ function createCenas() {
       case 'nuvem': return { ...base, ...config.nuvem, live: { ...state.nuvem } };
       case 'plano26': return { ...base, ...config.plano26, live: { ...state.plano26 } };
       case 'capasucesso': return { ...base, ...config.capasucesso, quem: names(hosts('sucesso')) };
+      case 'capajornada': return { ...base, ...config.capajornada, quem: names(hosts('almanaque')) };
       case 'almanaque': { const c = config.almanaque, s = state.almanaque; return { ...base, kicker: c.kicker, titulo: c.titulo, sub: c.sub, quem: names(hosts('almanaque')) || c.quem, kpis: c.kpis, kpiEntregas: c.kpiEntregas, kpiBeneficios: c.kpiBeneficios, itens: c.itens, fonte: c.fonte, pagina: c.pagina, stats: almanaqueStats(), meses: MONTHS, bus: BUS, tipos: TIPOS, live: { ...s } }; }
       case 'ia': { const { nota, ...c } = config.ia; return { ...base, ...c }; } // a nota é para quem apresenta: fica só no painel
       case 'reconhecimento': {
@@ -453,7 +462,7 @@ function createCenas() {
     }
   }
   // quem conduz um bloco (nomes): o servidor junta a foto de perfil de cada um
-  const hosts = key => { const k = key === 'capasucesso' ? 'sucesso' : key; return HOST_KEYS.includes(k) ? (config.anfitrioes[k] || []).slice() : []; }; // a capa do Sucesso mostra quem conduz o Sucesso
+  const hosts = key => { const k = { capasucesso: 'sucesso', capajornada: 'almanaque' }[key] || key; return HOST_KEYS.includes(k) ? (config.anfitrioes[k] || []).slice() : []; }; // as capas mostram quem conduz o bloco
   // as duas perguntas (e a dica) em cada idioma: os celulares precisam delas desde o check-in, antes de a cena entrar no ar
   const nuvemTexts = () => { const n = config.nuvem; return { q: { en: n.perguntas, pt: n.perguntasPt, es: n.perguntasEs }, tip: { en: n.dica, pt: n.dicaPt, es: n.dicaEs } }; };
   const especial = () => ({ nomes: (config.anfitrioes.especial || []).slice(), nota: config.anfitrioes.especialNota || '' }); // participação especial (Conexões)
@@ -623,7 +632,7 @@ function createCenas() {
     if (kind === 'plano26') state.plano26.foco = 0;
     if (kind === 'visao') state.visao.aberta = false;                                                // o bloco começa pela capa
     if (kind === 'intervalo') state.intervalo.alerta = null;                                         // um alerta antigo não volta para a tela
-    if (kind === 'almanaque') { stopPlay(); Object.assign(state.almanaque, { mes: -1, tocando: false, pagina: false, fim: 0 }); }
+    if (kind === 'almanaque') { stopPlay(); Object.assign(state.almanaque, { mes: 11, tocando: false, pagina: false, fim: 0 }); } // entra em dezembro, pronto para voltar no tempo
     if (kind === 'reconhecimento') { clearTimeout(drawT); drawT = null; Object.assign(state.reconhecimento, { fase: 'intro', premio: null, passo: 'categoria', carga: 0, at: now(), video: false }); }
     if (kind === 'mph') state.mph.at = null;
     save();

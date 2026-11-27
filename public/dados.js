@@ -138,10 +138,10 @@
       N.clouds.forEach((c, i) => c.forEach(([w, n]) => rows.push([`${i + 1} · ${N.perguntas[i]}`, w, n])));
       return ['Nuvem_Termos.csv', rows];
     },
-    // Feedback do encerramento (quem pediu "sem o meu nome" aparece sem nome)
+    // Feedback do encerramento (com o nome de quem respondeu)
     feedback() {
-      const rows = [['Nome', 'Área', 'Nota (1 a 5)', 'O que mais gostou', 'O que melhorar', 'Sem nome', 'Data/Hora']];
-      for (const f of D.data.feedback.list) rows.push([f.anonymous ? '' : f.name, f.anonymous ? '' : f.area, f.rating, f.liked, f.improve, f.anonymous ? 'Sim' : 'Não', when(f.at)]);
+      const rows = [['Nome', 'Área', 'Nota (1 a 5)', 'O que mais gostou', 'O que melhorar', 'Data/Hora']];
+      for (const f of D.data.feedback.list) rows.push([f.name, f.area, f.rating, f.liked, f.improve, when(f.at)]);
       return ['Feedback.csv', rows];
     },
   };
@@ -216,8 +216,8 @@
     return `<div class="card"><h1>📝 Feedback do Townhall</h1>
         <div class="stats"><div class="stat"><b>${S.count}</b><span>respostas</span></div><div class="stat"><b>${S.count ? String(S.avg).replace('.', ',') : '—'}</b><span>nota média (de 1 a 5)</span></div>${[5, 4, 3, 2, 1].map(k => `<div class="stat"><b>${S.dist[k - 1]}</b><span>nota ${k}</span></div>`).join('')}</div>
         <div class="actions">${dx('Baixar o feedback (Excel)', 'feedback', S.count)}<span class="small">ou em .csv:</span>${dl('Feedback', 'feedback', '', S.count)}</div></div>
-      <div class="card"><h2>Todas as respostas</h2><p class="small">Quem marcou "sem o meu nome" aparece sem nome. Os dois textos são opcionais.</p>
-        ${table(['Pessoa', 'Nota', 'O que mais gostou', 'O que melhorar', 'Hora'], F.list.map(f => `<tr><td>${f.anonymous ? '<span class="muted">sem nome</span>' : esc(f.name)}</td><td class="n">${f.rating}</td><td>${esc(f.liked)}</td><td>${esc(f.improve)}</td><td>${esc(when(f.at))}</td></tr>`), 'Ninguém respondeu ainda. O formulário aparece nos celulares no encerramento.')}</div>`;
+      <div class="card"><h2>Todas as respostas</h2><p class="small">Cada resposta com o nome de quem respondeu. Os dois textos são opcionais.</p>
+        ${table(['Pessoa', 'Nota', 'O que mais gostou', 'O que melhorar', 'Hora'], F.list.map(f => `<tr><td>${esc(f.name)}</td><td class="n">${f.rating}</td><td>${esc(f.liked)}</td><td>${esc(f.improve)}</td><td>${esc(when(f.at))}</td></tr>`), 'Ninguém respondeu ainda. O formulário aparece nos celulares no encerramento.')}</div>`;
   }
 
   function render() {

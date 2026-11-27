@@ -17,7 +17,7 @@ const STRATEGY_SHA256 = '07d7a467caaec2b26381eab3be2d32ff5b8054262768b371868aafc
 const await0 = () => { const t = Date.now(); while (Date.now() === t) { /* espera o relógio andar 1 ms */ } };
 {
   const c = createCenas();
-  assert.deepEqual(KINDS, ['abertura', 'boasvindas', 'nuvem', 'agenda', 'plano26', 'almanaque', 'ia', 'reconhecimento', 'intervalo', 'visao', 'capasucesso', 'manifesto', 'mph']);
+  assert.deepEqual(KINDS, ['abertura', 'boasvindas', 'nuvem', 'agenda', 'capajornada', 'plano26', 'almanaque', 'ia', 'reconhecimento', 'intervalo', 'visao', 'capasucesso', 'manifesto', 'mph']);
   for (const k of KINDS) { assert.ok(META[k].name); assert.ok(META[k].label, 'cada cena tem o nome em inglês (telas) e em português (painel)'); assert.equal(c.publicState(k).kind, k); assert.equal(c.publicState(k).name, META[k].name); }
   assert.equal(c.publicState('nao-existe'), null);
   assert.equal(c.evento().titulo, 'CDIO HC + BPC'); assert.equal(c.evento().destino, 'DEC 11 2027'); assert.equal(c.evento().sub, '2026 Townhall');
@@ -44,7 +44,7 @@ const await0 = () => { const t = Date.now(); while (Date.now() === t) { /* esper
   assert.deepEqual(al.stats.bus.map(b => [b.bu, b.n, b.txt]), [['HC', 15, '€9.3M'], ['BPC', 10, '€41.0M'], ['X', 16, '€992K']]);
   assert.deepEqual(al.stats.porTipo, { E: 41, M: 7, R: 2, C: 1 }); assert.deepEqual(al.stats.porBu, { HC: 16, BPC: 18, X: 16 });
   assert.equal(al.itens.filter(x => x.m === 5).length, 10, 'junho tem 10 itens'); assert.equal(al.meses[5], 'JUN');
-  assert.equal(al.live.mes, -1, 'começa em branco');
+  assert.equal(al.live.mes, 11, 'o almanaque abre em dezembro (a capa do bloco é um passo próprio do roteiro)');
   c.command('almanaque', { action: 'mes', mes: 5 }); assert.equal(c.publicState('almanaque').live.mes, 5);
   // a viagem é de trás para a frente (a DeLorean vai de ré): "próximo" volta um mês, "anterior" avança um
   c.command('almanaque', { action: 'prox' }); c.command('almanaque', { action: 'prox' }); assert.equal(c.publicState('almanaque').live.mes, 3);
@@ -59,7 +59,7 @@ const await0 = () => { const t = Date.now(); while (Date.now() === t) { /* esper
   c.command('almanaque', { action: 'tocar' }); let l = c.publicState('almanaque').live; assert.equal(l.tocando, true); assert.equal(l.mes, 11); assert.equal(l.pagina, false, 'a viagem pelo ano começa em dezembro');
   c.command('almanaque', { action: 'tocar' }); assert.equal(c.publicState('almanaque').live.tocando, false, 'tocar de novo pausa');
   c.command('almanaque', { action: 'tocar' }); c.sync('ia'); assert.equal(c.publicState('almanaque').live.tocando, false, 'sair da cena para o ano');
-  c.enter('almanaque'); assert.equal(c.publicState('almanaque').live.mes, -1, 'entrar na cena recomeça em branco');
+  c.enter('almanaque'); assert.equal(c.publicState('almanaque').live.mes, 11, 'entrar na cena recomeça em dezembro');
 
   // reconhecimento: o vencedor só vai para os aparelhos quando o sorteio do prêmio começa
   let rc = c.publicState('reconhecimento');
@@ -177,13 +177,16 @@ const await0 = () => { const t = Date.now(); while (Date.now() === t) { /* esper
   assert.throws(() => c.setConfig({ nuvem: { perguntas: ['Só uma', ''] } }), /duas perguntas/); c.resetConfig('nuvem');
   // Estratégia 2026: o destino, os três motores e a estrada; uma parte em destaque por vez
   const pl = c.publicState('plano26'); assert.equal(pl.topo.t, 'Desire at Scale'); assert.deepEqual([pl.p1.t, pl.p2.t, pl.p3.t], ['Growth', 'Operational Effectiveness', 'Net Productivity']); assert.equal(pl.base.t, 'Governance & Culture');
-  assert.deepEqual([pl.topo.itens.length, pl.p1.itens.length, pl.p2.itens.length, pl.p3.itens.length, pl.base.itens.length], [3, 7, 5, 6, 3]); assert.deepEqual(pl.lideres.map(x => x.nome), ['Claudia Meira', 'Fermín Grandas', 'Aldo Medina']);
+  assert.deepEqual([pl.topo.itens.length, pl.p1.itens.length, pl.p2.itens.length, pl.p3.itens.length, pl.base.itens.length], [3, 7, 5, 6, 3]); assert.deepEqual(pl.lideres.map(x => x.nome), ['Claudia Meira', 'Fermín Grandas']);
   assert.equal(pl.ato.n, 'ACT II'); assert.equal(pl.live.foco, 0);
   c.command('plano26', { action: 'foco', n: 3 }); assert.equal(c.publicState('plano26').live.foco, 3); c.command('plano26', { action: 'prox' }); c.command('plano26', { action: 'prox' }); assert.equal(c.publicState('plano26').live.foco, 5);
   c.command('plano26', { action: 'prox' }); assert.equal(c.publicState('plano26').live.foco, 0, 'depois da última parte, volta a mostrar tudo'); assert.throws(() => c.command('plano26', { action: 'x' }), /inválido/);
   c.setConfig({ plano26: { p1: { t: 'Crescimento', itens: [{ t: 'Loja perfeita', d: 'EDDGIE' }, { t: '', d: 'sem título sai' }] } } });
   assert.equal(c.publicState('plano26').p1.t, 'Crescimento'); assert.equal(c.publicState('plano26').p1.itens.length, 1); assert.equal(c.publicState('plano26').p1.s, 'Excellence in Frontline Execution · CSP & CD Tooling', 'o que não foi enviado fica'); assert.equal(c.publicState('plano26').p2.itens.length, 5);
   assert.throws(() => c.setConfig({ plano26: { base: { itens: [] } } }), /pelo menos um item/); c.resetConfig('plano26');
+  // capa do bloco Jornada 2026: o nome do bloco e quem conduz a Jornada 2026 (vem antes da Estratégia 2026 e do almanaque)
+  const cj = c.publicState('capajornada'); assert.equal(cj.titulo, '2026 Journey'); assert.equal(cj.quem, 'Claudia Meira & Fermín Grandas'); assert.deepEqual(c.hosts('capajornada'), ['Claudia Meira', 'Fermín Grandas']); assert.equal(cj.ato.n, 'ACT II');
+  assert.throws(() => c.command('capajornada', { action: 'x' }), /não tem comandos/);
   // capa do bloco Sucesso: o nome do bloco e quem conduz o Sucesso
   const cs = c.publicState('capasucesso'); assert.equal(cs.titulo, 'De Volta para o *Sucesso*'); assert.equal(cs.quem, 'Lucas Barbosa, Giovana Romão & Maria Eduarda'); assert.deepEqual(c.hosts('capasucesso'), ['Lucas Barbosa', 'Giovana Romão', 'Maria Eduarda']);
   assert.throws(() => c.command('capasucesso', { action: 'x' }), /não tem comandos/);
@@ -201,7 +204,10 @@ const await0 = () => { const t = Date.now(); while (Date.now() === t) { /* esper
   assert.equal(ucfg.agenda.itens.length, 10); assert.equal(ucfg.agenda.itens[4].t, 'Reflection'); assert.equal(ucfg.agenda.inicio, '09:00', 'o início da agenda fica'); assert.equal(ucfg.visao.titulo, '2027 Vision'); assert.equal(ucfg.nuvem.perguntas.length, 2); assert.equal(ucfg.plano26.p3.t, 'Net Productivity'); assert.match(ucfg.boasvindas.frase, /^Close 2026/);
   assert.equal(ucfg.intervalo.min, 22, 'a duração do intervalo fica'); assert.equal(ucfg.reconhecimento.carga, 'ambos'); assert.deepEqual(up.hosts('visao'), ['Pessoa Um', 'Pessoa Dois'], 'quem conduz cada bloco fica');
   assert.deepEqual(up.hosts('connections'), ['Nicolas Kuhnast', 'Douglas Hamasaki']);
-  up.setConfig({ intervalo: { min: 15 } }); assert.equal(kvGet('cenas').v, 3, 'depois de atualizado, não volta a mexer');
+  up.setConfig({ intervalo: { min: 15 } }); assert.equal(kvGet('cenas').v, 4, 'depois de atualizado, não volta a mexer');
+  // conteúdo guardado na versão 3: o Aldo Medina sai dos líderes da Estratégia 2026 (o resto do que foi escrito fica)
+  const v3 = kvGet('cenas'); v3.v = 3; v3.config.plano26.lideres = [{ nome: 'Claudia Meira', papel: 'CDIO BPC LATAM' }, { nome: 'Aldo Medina', papel: 'CDIO Foods LATAM' }, { nome: 'Outra Pessoa', papel: 'Convidada' }]; v3.config.plano26.p1.t = 'Growth!'; kvSet('cenas', v3);
+  const up4 = createCenas().adminState().config; assert.deepEqual(up4.plano26.lideres.map(x => x.nome), ['Claudia Meira', 'Outra Pessoa']); assert.equal(up4.plano26.p1.t, 'Growth!');
   console.log('OK · cenas: agenda, almanaque, reconhecimento (aplausos e toques), anfitriões, intervalo, 88 MPH e conteúdo editável');
 }
 
@@ -258,9 +264,9 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await go('agenda'); assert.equal(r.status, 200); st = await state();
     assert.equal(st.block, 'cena'); assert.equal(st.cena.kind, 'agenda'); assert.equal(st.step.cena, 'agenda'); assert.equal(st.cena.itens[1].estado, 'agora', 'o plano de voo vem depois das boas-vindas'); assert.equal(st.audio.mode, 'off');
     assert.equal(st.step.transition, true, 'o plano de voo entra com a transição do filme'); assert.deepEqual(st.hosts, [], 'a agenda não tem anfitrião'); assert.deepEqual(st.cena.hosts, []);
-    // roteiro padrão (* = entra com a transição do filme): a Estratégia 2026 abre o bloco e a Jornada 2026 entra direto; a Visão 2027 e a
+    // roteiro padrão (* = entra com a transição do filme): a capa da Jornada 2026 abre o bloco; a Estratégia 2026 e o almanaque entram direto; a Visão 2027 e a
     // capa do Sucesso entram com transição; boas-vindas, nuvem de palavras, reconhecimento, intervalo, as dinâmicas do Sucesso, o Doc, 88 MPH e os créditos entram direto
-    assert.deepEqual(steps.map(x => (x.cena || x.activity || x.type) + (x.transition === false ? '' : '*')), ['checkin*', 'abertura', 'boasvindas', 'nuvem', 'agenda*', 'connections*', 'plano26*', 'almanaque', 'reflexao*', 'reconhecimento', 'intervalo', 'visao*', 'capasucesso*', 'd1', 'd2', 'd3', 'd4', 'doc', 'mph', 'closing']);
+    assert.deepEqual(steps.map(x => (x.cena || x.activity || x.type) + (x.transition === false ? '' : '*')), ['checkin*', 'abertura', 'boasvindas', 'nuvem', 'agenda*', 'connections*', 'capajornada*', 'plano26', 'almanaque', 'reflexao*', 'reconhecimento', 'intervalo', 'visao*', 'capasucesso*', 'd1', 'd2', 'd3', 'd4', 'doc', 'mph', 'closing']);
     // vídeo de abertura: entra direto e já tocando; os comandos são do Doc
     r = await go('abertura'); st = await state(); assert.equal(st.cena.kind, 'abertura'); assert.equal(st.step.transition, false); assert.equal(st.cena.live.play, true); assert.equal(st.cena.name, 'Opening video');
     r = await cena('abertura', { action: 'play', on: false }); assert.equal((await state()).cena.live.play, false); r = await cena('abertura', { action: 'fim' }); assert.equal((await state()).cena.live.fim, true);
@@ -269,7 +275,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await go('connections'); st = await state(); assert.deepEqual(st.hosts.map(h => h.nome), ['Nicolas Kuhnast', 'Douglas Hamasaki']); assert.ok(st.hosts.every(h => 'foto' in h)); assert.equal(st.step.transition, true);
     assert.deepEqual(st.especial.pessoas.map(p => p.nome), ['Vinicius Santos']); assert.match(st.especial.nota, /organização/); // participação especial, só nas Conexões
     r = await go('reflexao'); st = await state(); assert.deepEqual(st.hosts.map(h => h.nome), ['Felipe Zompero', 'Mayara Gomes', 'Pedro Teixeira', 'Geovanna Moreira']); assert.equal(st.especial, undefined);
-    r = await go('almanaque'); st = await state(); assert.equal(st.cena.kind, 'almanaque'); assert.equal(st.cena.ato.n, 'ACT II'); assert.equal(st.cena.live.mes, -1);
+    r = await go('almanaque'); st = await state(); assert.equal(st.cena.kind, 'almanaque'); assert.equal(st.cena.ato.n, 'ACT II'); assert.equal(st.cena.live.mes, 11, 'o almanaque entra em dezembro');
     assert.deepEqual(st.cena.hosts.map(h => h.nome), ['Claudia Meira', 'Fermín Grandas']); assert.equal(st.cena.quem, 'Claudia Meira & Fermín Grandas');
     r = await cena('almanaque', { action: 'mes', mes: 8 }); assert.equal(r.status, 200); assert.equal((await state()).cena.live.mes, 8);
     r = await cena('reconhecimento', { action: 'fase', fase: 'premios' }); assert.equal(r.status, 409, 'comando de outra cena é recusado');
@@ -289,8 +295,9 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await go('visao'); st = await state(); assert.equal(st.cena.src, '/estrategia-2027.html'); assert.equal(st.audio.mode, 'off'); assert.deepEqual(st.cena.hosts.map(h => h.nome), ['Claudia Meira', 'Fermín Grandas']);
     assert.equal(st.cena.live.aberta, false, 'a Visão 2027 começa pela capa do bloco'); assert.equal(st.step.transition, true, 'e entra com a transição do filme');
     r = await cena('visao', { action: 'abrir', on: true }); assert.equal(r.status, 200); assert.equal((await state()).cena.live.aberta, true, 'o Doc abre a estratégia em tela cheia');
-    // Estratégia 2026, logo antes da Jornada 2026: os líderes ganham a foto; uma parte em destaque por vez
-    r = await go('plano26'); st = await state(); assert.equal(st.cena.kind, 'plano26'); assert.equal(st.cena.name, '2026 Strategy'); assert.ok(st.cena.lideres.every(x => Array.isArray(x.fotos))); assert.equal(st.step.transition, true);
+    // o bloco Jornada 2026: capa (com a transição, quem conduz) → Estratégia 2026 (entra direto; os líderes ganham a foto) → almanaque (entra direto)
+    r = await go('capajornada'); st = await state(); assert.equal(st.cena.kind, 'capajornada'); assert.equal(st.cena.titulo, '2026 Journey'); assert.deepEqual(st.cena.hosts.map(h => h.nome), ['Claudia Meira', 'Fermín Grandas']); assert.equal(st.step.transition, true);
+    r = await go('plano26'); st = await state(); assert.equal(st.cena.kind, 'plano26'); assert.equal(st.cena.name, '2026 Strategy'); assert.equal(st.cena.lideres.length, 2); assert.ok(st.cena.lideres.every(x => Array.isArray(x.fotos))); assert.equal(st.step.transition, false);
     r = await cena('plano26', { action: 'foco', n: 2 }); assert.equal((await state()).cena.live.foco, 2);
     r = await go('almanaque'); st = await state(); assert.equal(st.step.transition, false, 'a Jornada 2026 entra direto depois da Estratégia 2026');
     r = await cena('almanaque', { action: 'tocar' }); assert.equal((await state()).cena.live.mes, 11, 'a viagem começa em dezembro'); r = await cena('almanaque', { action: 'tocar' });
@@ -303,7 +310,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     // reconhecimento pelo servidor: o estado público não entrega o vencedor antes da hora
     r = await go('reconhecimento'); await cena('reconhecimento', { action: 'fase', fase: 'premios' }); await cena('reconhecimento', { action: 'abrir', premio: 0 });
     st = await state(); assert.equal(st.cena.premios[0].vencedor, undefined); assert.ok(!JSON.stringify(st.cena).includes('For moving Phoenix'), 'a citação do vencedor não vaza');
-    const ov = (await call('GET', '/api/admin/overview')).json; assert.equal(ov.cenas.config.reconhecimento.premios[0].vencedor, 1, 'o Painel do Doc sabe o vencedor'); assert.equal(ov.cenas.kinds.length, 13); assert.deepEqual(ov.cenas.open, ['nuvem', 'intervalo', 'capasucesso']);
+    const ov = (await call('GET', '/api/admin/overview')).json; assert.equal(ov.cenas.config.reconhecimento.premios[0].vencedor, 1, 'o Painel do Doc sabe o vencedor'); assert.equal(ov.cenas.kinds.length, 14); assert.deepEqual(ov.cenas.open, ['nuvem', 'intervalo', 'capasucesso']);
     await cena('reconhecimento', { action: 'indicados' }); await cena('reconhecimento', { action: 'raio' }); await cena('reconhecimento', { action: 'vencedor' });
     st = await state(); assert.equal(st.cena.premios[0].feito, true); assert.equal(st.cena.premios[0].indicados[st.cena.premios[0].vencedor].nome, 'Caio Souza');
 

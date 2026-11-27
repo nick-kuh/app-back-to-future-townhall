@@ -66,11 +66,11 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
     r = await reset('cena:mph'); assert.equal(r.status, 200); assert.deepEqual(await snap(), { ...used, mph: false });
     r = await reset('cena:intervalo'); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle' });
     r = await reset('cena:reconhecimento'); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0 }); assert.equal((await ov()).cenas.state.reconhecimento.fase, 'intro');
-    r = await reset('cena:almanaque'); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0, mes: -1 });
-    r = await reset('doc'); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0, mes: -1, doc: false });
-    r = await reset('sucesso:d2'); await new Promise(done => setTimeout(done, 300)); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0, mes: -1, doc: false, d2: 0 }, 'só a dinâmica 02 perde as respostas');
-    r = await reset('sucesso'); await new Promise(done => setTimeout(done, 300)); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0, mes: -1, doc: false, d2: 0, d4: 0 });
-    r = await reset('reflexao'); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0, mes: -1, doc: false, d2: 0, d4: 0, votes: 0 }); assert.equal((await ov()).reflexao.open, null);
+    r = await reset('cena:almanaque'); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0, mes: 11 });
+    r = await reset('doc'); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0, mes: 11, doc: false });
+    r = await reset('sucesso:d2'); await new Promise(done => setTimeout(done, 300)); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0, mes: 11, doc: false, d2: 0 }, 'só a dinâmica 02 perde as respostas');
+    r = await reset('sucesso'); await new Promise(done => setTimeout(done, 300)); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0, mes: 11, doc: false, d2: 0, d4: 0 });
+    r = await reset('reflexao'); assert.deepEqual(await snap(), { ...used, mph: false, iv: 'idle', premios: 0, mes: 11, doc: false, d2: 0, d4: 0, votes: 0 }); assert.equal((await ov()).reflexao.open, null);
     r = await reset('connections'); o = await ov(); assert.equal(o.state.conn.phase, 'idle'); assert.equal(o.rounds[0].groups.length, 0); assert.equal(o.counts.checkedIn, 48, 'reiniciar as Conexões mantém os check-ins');
     r = await reset('roteiro'); assert.equal(r.status, 200); assert.equal((await snap()).step, 0); assert.equal((await state()).block, 'welcome'); assert.equal((await ov()).counts.checkedIn, 48, 'voltar o roteiro não apaga nada');
     // check-in: todo mundo sai, e as Conexões vão junto
@@ -80,12 +80,12 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
 
     // ---- cenas de uma vez ----
     token = await useEverything(); assert.deepEqual(await snap(), used);
-    r = await reset('cenas'); assert.deepEqual(await snap(), { ...used, mes: -1, premios: 0, iv: 'idle', mph: false });
+    r = await reset('cenas'); assert.deepEqual(await snap(), { ...used, mes: 11, premios: 0, iv: 'idle', mph: false });
 
     // ---- tudo, mantendo os check-ins ----
     token = await useEverything();
     r = await reset('all', { keepCheckins: true }); assert.equal(r.status, 200); await new Promise(done => setTimeout(done, 400));
-    const zero = { in: 48, conn: 'idle', votes: 0, d2: 0, d4: 0, doc: false, mes: -1, premios: 0, iv: 'idle', mph: false, step: 0 };
+    const zero = { in: 48, conn: 'idle', votes: 0, d2: 0, d4: 0, doc: false, mes: 11, premios: 0, iv: 'idle', mph: false, step: 0 };
     assert.deepEqual(await snap(), zero, 'tudo no começo, com as pessoas ainda a bordo');
     assert.equal((await call('GET', '/api/me?token=' + token, undefined, false)).json.ok, true, 'o celular continua logado');
     let st = await state(); assert.equal(st.block, 'welcome'); assert.equal(st.presentation, null); assert.equal(st.cena, null);

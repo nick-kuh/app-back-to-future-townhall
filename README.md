@@ -47,11 +47,12 @@ Painel do Doc e ao **telão aberto no navegador logado com a senha mestra**. Os 
 
 ## 🌎 Idiomas
 
-- **A primeira tela do app é a escolha do idioma: Português, Español ou English.** O toque já configura o app e segue para
-  o login; tudo o que a pessoa lê no celular passa para esse idioma (login, as duas perguntas, telas de espera, intervalo,
-  prêmios, alerta, feedback, avisos). Dá para trocar depois pela chave **PT | ES | EN** no topo do app.
-- **As dinâmicas** (Conexões, Reflexão, Sucesso e a mensagem do Doc) existem em **português e espanhol**: quem escolhe
-  English as vê em português. Nas Conexões a dupla vê a **mesma** pergunta, cada um no seu idioma.
+- **A primeira tela do app é a escolha do idioma: Português ou Español** (não há opção em inglês). O toque já configura o
+  app e segue para o login; tudo o que a pessoa lê no celular passa para esse idioma (login, as duas perguntas, telas de
+  espera, intervalo, prêmios, alerta, feedback, avisos e as dinâmicas). Dá para trocar depois pela chave **PT | ES** no
+  topo do app.
+- **As dinâmicas** (Conexões, Reflexão, Sucesso e a mensagem do Doc) seguem o mesmo idioma. Nas Conexões a dupla vê a
+  **mesma** pergunta, cada um no seu idioma.
 - **O conteúdo do deck fica em inglês**, como foi escrito: a agenda, os títulos das cenas, os prêmios e os blocos da
   Claudia e do Fermín (Estratégia 2026, Jornada 2026 e Visão 2027). **O telão** também: em inglês, com as dinâmicas em português.
 - Os textos padrão que o Doc pode trocar em Ajustes (boas-vindas, encerramento, "olhos no telão", alerta do intervalo)
@@ -73,19 +74,19 @@ Painel do Doc e ao **telão aberto no navegador logado com a senha mestra**. Os 
 4. **Depois desse passo** as respostas fecham: quem chega atrasado vai direto para o que está no ar.
 
 Respostas curtas entram inteiras na nuvem; frases são quebradas em palavras (sem os conectivos). As perguntas são
-editáveis nos três idiomas em **Preparar → Agenda e cenas → ☁️ Nuvem de palavras** (no telão aparece a versão em inglês).
+editáveis em português e espanhol (celulares) e em inglês (telão) em **Preparar → Agenda e cenas → ☁️ Nuvem de palavras**.
 Quem já respondeu **não vê o formulário de novo**, mesmo entrando por outro celular: a resposta fica ligada à pessoa no
 servidor. No passo do Check-in e no da Nuvem, o Doc vê quem respondeu o quê, **remove** alguma resposta que não deva
 aparecer ou apaga todas; a extração fica em 📊 Dados → Nuvem de palavras (só a senha mestra).
 
 ## 📝 Feedback no encerramento
 
-No último passo do roteiro (**Encerramento**), os celulares mostram um mini formulário: **nota de 1 a 5** ("How was the
-Townhall for you?"), **"What did you like the most?"** e **"What should we do better next time?"** (os dois textos são
-opcionais) e a opção **"Send without my name"**. Vale uma resposta por pessoa (dá para trocar). O telão chama para o
-celular e mostra quantas pessoas já responderam, acima dos créditos. No painel, o passo mostra a nota média, a
-distribuição das notas e os comentários; tudo sai em 📊 Dados → Feedback (só a senha mestra). Quem pediu "sem o meu nome"
-aparece sem nome no painel e na extração.
+No último passo do roteiro (**Encerramento**), os celulares mostram um mini formulário, no idioma da pessoa: **nota de 1
+a 5** ("Como foi o Townhall para você?"), **"Do que você mais gostou?"** e **"O que podemos fazer melhor na próxima?"**
+(os dois textos são opcionais). Vale uma resposta por pessoa (dá para trocar) e ela vai **sempre com o nome** de quem
+respondeu (não há opção de enviar sem nome). O telão chama para o celular e mostra quantas pessoas já responderam, acima
+dos créditos. No painel, o passo mostra a nota média, a distribuição das notas e os comentários; tudo sai em 📊 Dados →
+Feedback (só a senha mestra).
 
 ## 🚨 Alerta de volta do intervalo
 
@@ -117,8 +118,9 @@ O alerta some quando o Doc clica em **🔕 Silenciar o alerta** ou avança no ro
 
 ## 📱 Dinâmicas no celular
 
-Conexões, Reflexão e Sucesso acontecem no app. Enquanto o celular é necessário, o telão mostra só um **ícone discreto no
-canto** (📱 NO CELULAR · EN TU CELULAR); não há aviso em tela cheia. No celular, a dinâmica abre com o aviso "esta
+Conexões, Reflexão e Sucesso acontecem no app. Enquanto o celular é necessário, o telão mostra um **selo animado no
+canto** (um celular vibrando, com ondas, e "NO CELULAR · EN TU CELULAR"): ele entra grande logo depois da transição do
+bloco, assenta no canto e de tempos em tempos dá uma chamada. Não cobre a cena nem ocupa a tela inteira. No celular, a dinâmica abre com o aviso "esta
 dinâmica acontece aqui, no seu celular". No plano de voo e no roteiro do painel, 📱 marca o que acontece no celular
 (as três dinâmicas, a nuvem de palavras e o feedback do encerramento).
 
@@ -137,8 +139,9 @@ bloco **Sucesso**: cada um é um passo só no roteiro e um item só na agenda.
 | | ☁️ Nuvem de palavras 📱 | o telão mostra uma nuvem por pergunta, já com as respostas dadas desde o login; quem falta responde na hora |
 | | 🗺️ Plano de voo | a agenda do dia em 4 atos, com os horários; no telão, um destaque suave passeia por todos os itens |
 | | ⚡ Conexões 📱 | bloco interativo (em português/espanhol) |
-| II · Rebobinar 2026 | 🧭 Estratégia 2026 | o **plano estratégico LATAM GDT 2026** no visual do filme: o destino (Desire at Scale), os três motores (Growth, Operational Effectiveness, Net Productivity) e a estrada (Governance & Culture) |
-| | 📅 Jornada 2026 | o **almanaque**: 12 meses, 51 itens, 41 entregas, €51,3M, **de dezembro para janeiro** (a DeLorean vai de ré), e o ano em uma página |
+| II · Rebobinar 2026 | 📅 Jornada 2026 · capa do bloco | o nome do bloco e quem conduz (Claudia Meira e Fermín Grandas), com a DeLorean na estrada |
+| | 🧭 Estratégia 2026 | o **plano estratégico LATAM GDT 2026** no visual do filme: o destino (Desire at Scale), os três motores (Growth, Operational Effectiveness, Net Productivity) e a estrada (Governance & Culture) |
+| | 🚗 Jornada 2026 · dezembro a janeiro | o **almanaque**: 12 meses, 51 itens, 41 entregas, €51,3M, **de dezembro para janeiro** (a DeLorean vai de ré), e o ano em uma página |
 | | 💭 Reflexão 📱 | bloco interativo: "Como a IA nos ajudou em 2026" |
 | III · Reconhecer | 🏆 Reconhecimento 2026 | abertura → tributo (vídeo) → **Prêmios Torre do Relógio** → cerimônia de cada prêmio → Hall da Fama |
 | | ☕ Intervalo | cronômetro de 15 min no telão e nos celulares; a música entra; no fim, o **alerta de volta** |
@@ -171,16 +174,17 @@ Como conduzir cada cena (no **Ao vivo**, um botão principal por vez):
   pergunta 1` e `2 · Destacar a pergunta 2` escolhem o que o telão mostra.
 - **Estratégia 2026:** o plano inteiro aparece de uma vez; os botões `1 · Desire at Scale` … `5 · Governance & Culture`
   (ou `Destacar a próxima parte →`) deixam uma parte em destaque e apagam as outras. O conteúdo (inclusive os líderes, com
-  foto) é editável em Preparar → Agenda e cenas → 🧭 Estratégia 2026. Ao avançar, a Jornada 2026 entra direto.
+  foto) é editável em Preparar → Agenda e cenas → 🧭 Estratégia 2026. Ela vem **depois da capa da Jornada 2026** e entra
+  direto; ao avançar, o almanaque de dezembro a janeiro também entra direto.
 - **Visão 2027:** o passo entra com a transição e mostra a **capa**. `🔭 Abrir a estratégia em tela cheia` troca a capa
   pela página da estratégia ocupando a tela inteira (sem moldura, sem relógio); `← Voltar para a capa do bloco` desfaz.
 - **Intervalo:** além do cronômetro, `🚨 Chamar todo mundo de volta agora` e `🔕 Silenciar o alerta`.
 
 - **Jornada 2026:** a viagem é **de trás para a frente**: começa em **dezembro** e a DeLorean vai **de ré**, mês a mês,
   até **janeiro**, para rever tudo o que passou. `◀◀ Voltar no tempo` anda um mês a cada 3 s e, em janeiro, abre o ano em
-  uma página. Dá para clicar direto em um mês, ir mês a mês e esconder/mostrar BUs e tipos (Mais opções). Antes de
-  começar, o telão mostra só a **capa do bloco** (o nome, quem conduz e a DeLorean 3D na estrada); os indicadores e a
-  linha do tempo entram quando a viagem começa. Na linha do tempo, quem anda de mês em mês é o **modelo 3D de verdade**
+  uma página. Dá para clicar direto em um mês, ir mês a mês e esconder/mostrar BUs e tipos (Mais opções). A **capa do
+  bloco** (o nome, quem conduz e a DeLorean 3D na estrada) é um passo próprio do roteiro, antes da Estratégia 2026; por
+  isso o almanaque já abre em dezembro e não repete as placas de quem conduz. Na linha do tempo, quem anda de mês em mês é o **modelo 3D de verdade**
   (de frente para o futuro, andando de ré, com as rodas girando para trás e o rastro de fogo a cada mês). O céu e a estrada continuam rodando no fundo em todas as cenas.
 - **Reconhecimento 2026:** `▶ Tributo` → `Abrir os Prêmios` → para cada prêmio: `Conhecer os indicados` →
   `⚡ Carregar o Flux Capacitor` → o raio cai e o vencedor aparece. Na carga, **os aplausos da sala carregam o Flux
@@ -472,8 +476,8 @@ viagens (depois do sorteio, é preciso sortear de novo).
 - **Transições.** Ao trocar de bloco, o telão pode fazer uma "viagem no tempo" de **8 segundos** (era 15; a duração é
   ajustável de 3 a 30 s em Preparar → Ajustes). Cada passo do roteiro escolhe se entra **com a transição** ou **direto**
   (Preparar → Roteiro, botão `⚡ transição` / `⏭ direto`). No roteiro padrão a transição fica em: Plano de voo, Conexões,
-  Estratégia 2026, Reflexão, **Visão 2027** e a **capa do Sucesso**. Entram **direto**: Vídeo de abertura, Boas-vindas,
-  Nuvem de palavras, Jornada 2026 (a transição do bloco já aconteceu na Estratégia 2026), Reconhecimento, Intervalo, as
+  a **capa da Jornada 2026**, Reflexão, **Visão 2027** e a **capa do Sucesso**. Entram **direto**: Vídeo de abertura, Boas-vindas,
+  Nuvem de palavras, Estratégia 2026 e o almanaque (a transição do bloco já aconteceu na capa), Reconhecimento, Intervalo, as
   quatro dinâmicas do Sucesso e o Doc (a transição do bloco acontece na capa), 88 MPH e Encerramento.
   A transição tem quatro atos, para todo mundo olhar para o telão:
   1. **Programando o destino**: os circuitos de tempo digitam o nome do próximo bloco, letra a letra

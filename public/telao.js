@@ -443,15 +443,16 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#tr').classList.contains('on')) stopTransition(); });
 
   /* ---------- dinâmicas no celular ----------
-   * Conexões, Reflexão e Sucesso acontecem no app. Enquanto o celular é necessário, um ícone discreto fica no canto do
-   * telão (nada em tela cheia). A nuvem de palavras e o feedback do encerramento têm o próprio chamado dentro da cena. */
+   * Conexões, Reflexão e Sucesso acontecem no app. Enquanto o celular é necessário, um selo animado (o celular vibrando) fica
+   * no canto do telão: entra grande, assenta no canto e de tempos em tempos dá uma chamada (nada em tela cheia). A nuvem de palavras e o feedback do encerramento têm o próprio chamado dentro da cena. */
   function phoneNeeded(st) {
     if (!st || ((st.screen && st.screen.scene) || 'auto') !== 'auto') return false;
     if (st.presentation) return sucPhase(st.presentation.live) !== 'done';               // depois de encerrar: nuvem e sorteio são no telão
     if (st.reflexao) { const c = st.reflexao.cur; return !c || rfPhase(c) !== 'done'; }  // votação encerrada: os mais votados são no telão
     return st.block === 'connections';
   }
-  function phoneTag() { const el = $('#phoneTag'), on = !!S.state && phoneNeeded(S.state); if (el.hidden === on) el.hidden = !on; }
+  // (o selo só entra depois que a transição do bloco termina, para a animação de entrada dele ser vista)
+  function phoneTag() { const el = $('#phoneTag'), on = !!S.state && phoneNeeded(S.state) && !$('#tr').classList.contains('on'); if (el.hidden === on) el.hidden = !on; }
 
   /* ---------- cenas ---------- */
   function sceneFor() {

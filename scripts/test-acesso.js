@@ -20,7 +20,7 @@ const { createReflexao } = require('../server/reflexao');
 {
   const e = new Engine(), kind = x => (x.type === 'cena' ? x.cena : x.type === 'sucesso' ? x.activity : x.type);
   // roteiro padrão: check-in → vídeo de abertura → boas-vindas → nuvem de palavras → plano de voo → Conexões → Estratégia 2026 → Jornada 2026 → …
-  assert.deepEqual(e.settings.steps.map(kind), ['checkin', 'abertura', 'boasvindas', 'nuvem', 'agenda', 'connections', 'plano26', 'almanaque', 'reflexao', 'reconhecimento', 'intervalo', 'visao', 'capasucesso', 'd1', 'd2', 'd3', 'd4', 'doc', 'mph', 'closing']);
+  assert.deepEqual(e.settings.steps.map(kind), ['checkin', 'abertura', 'boasvindas', 'nuvem', 'agenda', 'connections', 'capajornada', 'plano26', 'almanaque', 'reflexao', 'reconhecimento', 'intervalo', 'visao', 'capasucesso', 'd1', 'd2', 'd3', 'd4', 'doc', 'mph', 'closing']);
   assert.equal(e.settings.steps[1].transition, false, 'o vídeo de abertura entra direto'); assert.equal(e.settings.steps[3].transition, false, 'a nuvem de palavras também'); assert.equal(e.settings.steps[4].transition, undefined, 'o plano de voo entra com a transição');
   assert.equal(e.settings.confidencial, true, 'o modo confidencial vem ligado'); assert.match(e.settings.welcomeText, /^Hang tight/, 'os textos padrão do app são em inglês');
   assert.equal(e.settings.transitionSeconds, 8, 'a transição entre blocos ficou mais rápida'); assert.equal(e.publicState().settings.transitionSeconds, 8);
@@ -54,10 +54,10 @@ const { createReflexao } = require('../server/reflexao');
   // feedback do encerramento: nota de 1 a 5 e dois textos opcionais; uma resposta por pessoa; "sem o meu nome" não mostra o nome
   assert.equal(e.publicState().feedback.open, false); assert.equal(e.meState(2).feedback, null);
   assert.throws(() => e.setFeedback(2, { rating: 0 }), /1 to 5/); assert.throws(() => e.setFeedback(2, { rating: 9 }), /1 to 5/);
-  e.setFeedback(2, { rating: 5, liked: '  Conexões  ', improve: '' }); e.setFeedback(3, { rating: 3, liked: '', improve: 'Mais tempo', anonymous: true }); e.setFeedback(2, { rating: 4, liked: 'Conexões', improve: 'x'.repeat(900) });
-  assert.deepEqual(e.meState(2).feedback, { rating: 4, liked: 'Conexões', improve: 'x'.repeat(600), anonymous: false }, 'enviar de novo troca');
+  e.setFeedback(2, { rating: 5, liked: '  Conexões  ', improve: '' }); e.setFeedback(3, { rating: 3, liked: '', improve: 'Mais tempo', anonymous: true }); /* a opção "sem o meu nome" não existe mais: é ignorada */ e.setFeedback(2, { rating: 4, liked: 'Conexões', improve: 'x'.repeat(900) });
+  assert.deepEqual(e.meState(2).feedback, { rating: 4, liked: 'Conexões', improve: 'x'.repeat(600) }, 'enviar de novo troca');
   assert.deepEqual(e.feedbackStats(), { count: 2, avg: 3.5, dist: [0, 0, 1, 1, 0] });
-  const fl = e.feedbackList(); assert.equal(fl.length, 2); assert.equal(fl.find(f => f.anonymous).name, '', 'quem pediu, aparece sem nome'); assert.equal(fl.find(f => !f.anonymous).name, e.personById(2).name);
+  const fl = e.feedbackList(); assert.equal(fl.length, 2); assert.deepEqual(fl.map(f => f.name).sort(), [e.personById(2).name, e.personById(3).name].sort(), 'o feedback vai sempre com o nome'); assert.ok(fl.every(f => !('anonymous' in f)));
   e.applyStep(id('closing')); assert.deepEqual(e.publicState().feedback, { open: true, count: 2 }); assert.equal(e.adminOverview().feedback.stats.count, 2);
   // reiniciar tudo apaga as respostas da nuvem e o feedback (mesmo mantendo os check-ins); reiniciar o check-in também
   e.resetEvent({ keepCheckins: true }); assert.equal(e.publicState().words.count, 0); assert.equal(e.feedbackStats().count, 0); assert.ok(e.personByToken(t1), 'os check-ins ficaram');
@@ -105,16 +105,16 @@ const { createReflexao } = require('../server/reflexao');
 
   // roteiro e textos guardados antes destas mudanças: o vídeo de abertura entra depois do check-in, a agenda vai para depois das
   // boas-vindas, entram a nuvem de palavras (depois das boas-vindas), a Estratégia 2026 (antes da Jornada 2026, que passa a entrar
-  // direto) e a capa do Sucesso (antes da primeira dinâmica); a Visão 2027 ganha a transição; a transição de 15 s passa para 8 s;
+  // direto), a capa da Jornada 2026 (antes da Estratégia 2026) e a capa do Sucesso (antes da primeira dinâmica); a Visão 2027 ganha a transição; a transição de 15 s passa para 8 s;
   // e os textos padrão antigos (português) passam para o inglês. O que foi escrito à mão fica.
-  const s = kvGet('settings'); delete s.roteiroV20; delete s.roteiroV21; delete s.fastV1; delete s.enV1; s.transitionSeconds = 15;
+  const s = kvGet('settings'); delete s.roteiroV20; delete s.roteiroV21; delete s.roteiroV22; delete s.fastV1; delete s.enV1; s.transitionSeconds = 15;
   s.steps = [{ id: 'a1', type: 'checkin' }, { id: 'a2', type: 'cena', cena: 'agenda' }, { id: 'a3', type: 'cena', cena: 'boasvindas', transition: false }, { id: 'a4', type: 'connections' }, { id: 'a6', type: 'cena', cena: 'almanaque' },
     { id: 'a7', type: 'cena', cena: 'visao', transition: false }, { id: 'a8', type: 'sucesso', activity: 'd1', transition: false }, { id: 'a5', type: 'closing', transition: false }];
   s.welcomeText = 'Aguarde: a viagem começa em breve.'; s.closingText = 'Obrigado, pessoal!'; kvSet('settings', s);
   const st = kvGet('state'); st.step = 'a4'; kvSet('state', st);
-  const e2 = new Engine(), migrated = ['checkin', 'abertura', 'boasvindas', 'nuvem', 'agenda', 'connections', 'plano26', 'almanaque', 'visao', 'capasucesso', 'd1', 'closing'];
+  const e2 = new Engine(), migrated = ['checkin', 'abertura', 'boasvindas', 'nuvem', 'agenda', 'connections', 'capajornada', 'plano26', 'almanaque', 'visao', 'capasucesso', 'd1', 'closing'];
   assert.deepEqual(e2.settings.steps.map(kind), migrated);
-  assert.deepEqual(e2.settings.steps.map(x => x.transition !== false), [true, false, false, false, true, true, true, false, true, true, false, false], 'quem entra com a transição do filme');
+  assert.deepEqual(e2.settings.steps.map(x => x.transition !== false), [true, false, false, false, true, true, true, false, false, true, true, false, false], 'quem entra com a transição do filme (a capa da Jornada 2026 sim; a Estratégia 2026 e o almanaque entram direto)');
   assert.equal(e2.settings.transitionSeconds, 8);
   assert.equal(e2.state.step, 'a4', 'o passo que estava no ar continua no ar'); assert.match(e2.settings.welcomeText, /^Hang tight/); assert.equal(e2.settings.closingText, 'Obrigado, pessoal!');
   e2.updateSettings({ transitionSeconds: 15 }); e2.save();
@@ -162,7 +162,7 @@ function sock({ cookie } = {}) {
     assert.equal((await call('GET', '/api/admin/overview')).status, 401); assert.equal((await call('GET', '/api/admin/overview', undefined, { key: 'errada' })).status, 401);
     assert.match((await call('GET', '/dinamicas')).text, /id="loginForm"/, 'o painel das dinâmicas tem o seu endereço');
     const ovM = (await call('GET', '/api/admin/overview', undefined, M)).json, steps = ovM.settings.steps, id = k => steps.find(s => (s.type === 'cena' ? s.cena : s.activity || s.type) === k).id;
-    assert.equal(ovM.role, 'master'); assert.equal(ovM.team, true); assert.ok(ovM.cenas); assert.equal(steps.length, 20);
+    assert.equal(ovM.role, 'master'); assert.equal(ovM.team, true); assert.ok(ovM.cenas); assert.equal(steps.length, 21);
 
     /* ----- senha das dinâmicas: só Conexões, Reflexão e Sucesso ----- */
     let ovT = (await call('GET', '/api/admin/overview', undefined, T)).json;
@@ -172,7 +172,7 @@ function sock({ cookie } = {}) {
     assert.deepEqual(ovT.settings.steps.map(x => x.cena || x.activity || x.type), ['checkin', 'connections', 'reflexao', 'capasucesso', 'd1', 'd2', 'd3', 'd4', 'doc']);
     assert.ok(!('confidencial' in ovT.settings) && !('agenda' in ovT.settings) && !('welcomeText' in ovT.settings), 'só os ajustes das dinâmicas');
     assert.ok(!/Monserrat|Clock Tower|Flight plan|almanac|EXECUTIVE PRODUCERS|Desire at Scale|Emergency alert|flight plan/i.test(JSON.stringify({ ...ovT, people: null })), 'nada do conteúdo do townhall vai para o painel das dinâmicas');
-    for (const [url, body] of [['/api/admin/step', { id: id('agenda') }], ['/api/admin/step', { id: id('closing') }], ['/api/admin/step', { id: id('nuvem') }], ['/api/admin/step', { id: id('plano26') }], ['/api/admin/step', { id: id('intervalo') }],
+    for (const [url, body] of [['/api/admin/step', { id: id('agenda') }], ['/api/admin/step', { id: id('closing') }], ['/api/admin/step', { id: id('nuvem') }], ['/api/admin/step', { id: id('plano26') }], ['/api/admin/step', { id: id('capajornada') }], ['/api/admin/step', { id: id('intervalo') }],
       ['/api/admin/cena', { kind: 'intervalo', action: 'alerta' }], ['/api/admin/reset', { scope: 'feedback' }], ['/api/admin/cena', { action: 'config', config: { evento: { titulo: 'x' } } }], ['/api/admin/cena', { kind: 'mph', action: 'go' }],
       ['/api/admin/reset', { scope: 'all' }], ['/api/admin/reset', { scope: 'checkin' }], ['/api/admin/reset', { scope: 'roteiro' }], ['/api/admin/reset', { scope: 'cenas' }], ['/api/admin/reset', { scope: 'words' }], ['/api/admin/words', { action: 'clear' }],
       ['/api/admin/action', { type: 'resetEvent' }], ['/api/admin/action', { type: 'setBlock', block: 'standby' }], ['/api/admin/action', { type: 'setMessage', message: { title: 'x' }, show: true }], ['/api/admin/action', { type: 'setScene', scene: 'logo' }]]) {
@@ -181,7 +181,7 @@ function sock({ cookie } = {}) {
     // os ajustes que não são das dinâmicas são ignorados (o roteiro e o modo confidencial não mudam)
     r = await call('POST', '/api/admin/action', { type: 'settings', settings: { confidencial: false, steps: [{ type: 'checkin' }], eventName: 'Hackeado', roundSeconds: 95, skip: { reflexao: [3] } } }, T); assert.equal(r.status, 200);
     let s2 = (await call('GET', '/api/admin/overview', undefined, M)).json.settings;
-    assert.equal(s2.confidencial, true); assert.equal(s2.steps.length, 20); assert.notEqual(s2.eventName, 'Hackeado'); assert.equal(s2.roundSeconds, 95); assert.deepEqual(s2.skip.reflexao, [3]);
+    assert.equal(s2.confidencial, true); assert.equal(s2.steps.length, 21); assert.notEqual(s2.eventName, 'Hackeado'); assert.equal(s2.roundSeconds, 95); assert.deepEqual(s2.skip.reflexao, [3]);
     // o que é das dinâmicas funciona: pôr no ar, conduzir, reiniciar, extrair os dados, pessoas e perguntas
     r = await call('POST', '/api/admin/action', { type: 'testCheckinAll' }, T); assert.equal(r.status, 200);
     r = await call('POST', '/api/admin/step', { id: id('connections') }, T); assert.equal(r.status, 200);
@@ -251,9 +251,9 @@ function sock({ cookie } = {}) {
     assert.ok((await call('GET', '/api/state', undefined, M)).json.creditos.blocos.length > 0);
     r = await call('POST', '/api/feedback', { token: 'não-existe', rating: 5 }); assert.equal(r.status, 401);
     r = await call('POST', '/api/feedback', { token: tok2, rating: 0 }); assert.equal(r.status, 400);
-    r = await call('POST', '/api/feedback', { token: tok2, rating: 5, liked: 'Conexões', improve: '', anonymous: true }); assert.equal(r.status, 200); assert.deepEqual(r.json.me.feedback, { rating: 5, liked: 'Conexões', improve: '', anonymous: true });
+    r = await call('POST', '/api/feedback', { token: tok2, rating: 5, liked: 'Conexões', improve: '', anonymous: true }); assert.equal(r.status, 200); assert.deepEqual(r.json.me.feedback, { rating: 5, liked: 'Conexões', improve: '' });
     assert.equal((await call('GET', '/api/state')).json.feedback.count, 1);
-    const ovF = (await call('GET', '/api/admin/overview', undefined, M)).json.feedback; assert.equal(ovF.stats.count, 1); assert.equal(ovF.list[0].name, '', 'sem o nome'); assert.equal(ovF.list[0].liked, 'Conexões');
+    const ovF = (await call('GET', '/api/admin/overview', undefined, M)).json.feedback; assert.equal(ovF.stats.count, 1); assert.ok(ovF.list[0].name, 'o feedback vai com o nome de quem respondeu'); assert.equal(ovF.list[0].liked, 'Conexões');
     r = await call('GET', '/api/admin/export', undefined, M); assert.equal(r.json.feedback.stats.avg, 5); assert.equal(r.json.nuvem.perguntas.length, 2); assert.equal(r.json.nuvem.respostas.length, 1);
     r = await call('POST', '/api/admin/reset', { scope: 'feedback' }, M); assert.equal(r.status, 200); assert.equal((await call('GET', '/api/state')).json.feedback.count, 0);
     r = await call('POST', '/api/admin/step', { id: id('checkin') }, M);
