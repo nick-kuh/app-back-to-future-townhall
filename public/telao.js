@@ -1,48 +1,22 @@
-/* ===== Telão · segue o estado do evento (sem identidade) ===== */
+/* ===== Telão · segue o estado do evento (sem identidade) =====
+ * O telão é em INGLÊS (as cenas do deck, o check-in, as transições e os créditos). As dinâmicas (Conexões, Reflexão e
+ * Sucesso) continuam em português, com um aviso de que acontecem no celular. */
 (() => {
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const pad = n => String(n).padStart(2, '0');
   const fmt = s => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
-  const MONTHS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+  const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const ERA_KEYS = ['presente', 'passado', 'futuro'];
   const linkify = s => esc(s).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]])/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
-  const QUOTES = [
-    ['Para onde vamos, não precisamos de estradas.', 'Doc Brown · 1985'],
-    ['Great Scott!', 'Doc Brown'],
-    ['Isso é pesado, Doc.', 'Marty McFly · 1985'],
-    ['1,21 gigawatts!', 'Doc Brown · 1985'],
-    ['Se você vai construir uma máquina do tempo num carro, por que não fazer isso com estilo?', 'Doc Brown · 1985'],
-    ['O futuro ainda não está escrito. Ele é o que você fizer dele.', 'Doc Brown · 1990'],
-    ['Ninguém me chama de covarde.', 'Marty McFly · 1989'],
-    ['Hill Valley: um bom lugar para viver.', 'placa da cidade · 1955'],
-    ['Salve a torre do relógio!', 'panfleto · 1985'],
-    ['Hoverboards não funcionam na água!', 'Hill Valley · 2015'],
-    ['Tubarão 19: desta vez é realmente pessoal.', 'cinema de Hill Valley · 2015'],
-    ['Nós precisamos voltar... de volta para o futuro!', 'Doc Brown · 1985'],
-    ['Você não está pensando em quatro dimensões!', 'Doc Brown · 1990'],
-    ['Tênis que amarram sozinhos. Casacos que se secam. 2015.', 'Hill Valley · 2015'],
-    ['Baile do Encantamento Submarino, 12 de novembro de 1955.', 'Hill Valley High · 1955'],
-    ['Quando essa belezinha chega a 88 milhas por hora, você vai ver algo sério.', 'Doc Brown · 1985'],
-    ['Só um raio pode gerar 1,21 gigawatts.', 'Doc Brown · 1955'],
-    ['Clara, você é a mulher mais incrível que já conheci.', 'Doc Brown · 1885'],
-    ['O Almanaque Esportivo Grays: 1950 a 2000.', 'Biff Tannen · 2015'],
-    ['Oitenta e oito milhas por hora!', 'Marty McFly · 1985'],
-  ];
-  const ERAS_FILM = [
-    { y: '1885', f: 'FILME III · VELHO OESTE', d: 'Doc vira ferreiro em Hill Valley, conhece Clara e uma locomotiva empurra a DeLorean a 88 mph.' },
-    { y: '1955', f: 'FILME I · O RAIO', d: 'Baile do Encantamento Submarino. O raio na torre do relógio gera os 1,21 gigawatts da volta.' },
-    { y: '1985', f: 'FILME I · HILL VALLEY', d: 'Twin Pines Mall, 1h21 da manhã: a DeLorean atinge 88 mph pela primeira vez.' },
-    { y: '2015', f: 'FILME II · O FUTURO', d: 'Hoverboards, carros voadores, tênis que amarram sozinhos e Tubarão 19 em 3D.' },
-    { y: '1985-A', f: 'FILME II · LINHA ALTERNATIVA', d: 'Biff rouba o almanaque e Hill Valley vira uma cidade sombria. A missão: consertar o tempo.' },
-  ];
 
-  const S = { state: null, offset: 0, socket: null, key: '', people: null, eraIdx: 0, quoteIdx: 0,
+  const S = { state: null, offset: 0, socket: null, key: '', people: null,
     car: null, energy: 0, checked: null, pollT: null,
     // De Volta para o Sucesso em exibição
     responses: null, auth: false, drawAnswer: null, seen: new Set(), roundId: null, liveCount: null, prevPhase: null, endStage: null, endTok: 0,
     cloud: null, drawAt: null, reelT: null, revealed: false, talkDone: null,
     blk: null, trT: [], trI: null, // transição entre blocos
+    master: false, sockMaster: false, wcloud: null, // senha mestra (modo confidencial) · nuvem das duas palavras no check-in
     // Reflexão em exibição
     fx: null, rf: null, rfProjects: null, rfRev: null, rfTimers: [] };
   // De Volta para o Sucesso: as quatro dinâmicas (mesmas cores do painel do Lucas)
@@ -57,19 +31,25 @@
   /* ---------- rede ---------- */
   function connect() {
     S.socket = io({ transports: ['websocket', 'polling'], tryAllTransports: true });
-    S.socket.on('connect', () => S.socket.emit('hello', {}, res => { if (res && res.state) { S.state = res.state; S.offset = res.now - Date.now(); render(); } }));
+    S.socket.on('connect', () => S.socket.emit('hello', {}, res => { if (res && res.state) { S.sockMaster = !!res.master; S.state = res.state; S.offset = res.now - Date.now(); render(); } checkAuth(); }));
     S.socket.on('state', st => { S.state = st; S.offset = st.now - Date.now(); render(); });
     S.socket.on('sucesso:pulse', () => pollScreen());
     S.socket.on('cena:pulse', p => { if (window.Cenas) Cenas.pulse(p); }); // Reconhecimento: a carga do Flux Capacitor subindo com os toques dos celulares
     S.socket.on('doc:test', () => { if (window.DocCena) { DocCena.testVoice(S.state); setTimeout(report, 300); } }); // Painel do Doc: "Testar a voz no telão"
-    S.socket.on('connect', () => { pollScreen(); checkAuth(); });
+    S.socket.on('connect', () => pollScreen());
   }
   // Avisa o Painel do Doc como este telão está: logado (pode mostrar respostas) e com o som liberado.
-  function report() { if (S.socket && S.socket.connected) S.socket.emit('telao:status', { locked: !!(window.Trilha && Trilha.locked), auth: S.auth, doc: window.DocCena ? DocCena.progress() : null }); }
+  function report() { if (S.socket && S.socket.connected) S.socket.emit('telao:status', { locked: !!(window.Trilha && Trilha.locked), auth: S.auth, videos: window.Cenas ? Cenas.videos() : null, doc: window.DocCena ? DocCena.progress() : null }); }
+  // O telão sabe se este navegador está logado no Painel do Doc e com qual senha. No modo confidencial, as cenas do townhall
+  // só chegam ao telão logado com a senha mestra: se o login foi feito depois de o telão abrir, a conexão é refeita para valer.
   async function checkAuth() {
-    try { const d = await (await fetch('/api/sucesso/screen', { cache: 'no-store', credentials: 'same-origin' })).json(); S.auth = !!d.authenticated; } catch { /* segue */ }
+    try {
+      const d = await (await fetch('/api/sucesso/screen', { cache: 'no-store', credentials: 'same-origin' })).json(); S.auth = !!d.authenticated; S.master = !!d.master;
+      if (S.master !== S.sockMaster && S.socket && S.socket.connected && Date.now() - (S.reAt || 0) > 8000) { S.reAt = Date.now(); S.socket.disconnect(); S.socket.connect(); }
+    } catch { /* segue */ }
     report();
   }
+  setInterval(checkAuth, 20000); // confere de tempos em tempos (e mantém o servidor acordado enquanto o telão está aberto)
   // Textos das respostas (nuvem, feed, resposta do sorteado): só chegam se este navegador estiver
   // logado no Painel do Doc. Fase, contagem, cronômetro e nome do sorteado vêm no estado público.
   async function pollScreen() {
@@ -91,13 +71,11 @@
   /* ---------- peças ---------- */
   // o nome do evento vem do conteúdo das cenas (Preparar → Agenda e cenas): "CDIO HC + BPC · TOWNHALL 2026"
   const eventLine = () => { const ev = (S.state && S.state.evento) || {}; return [ev.titulo, ev.sub].filter(Boolean).join(' · ').toUpperCase() || 'TOWNHALL · HILL VALLEY'; };
-  const logo = () => `<div class="logo"><div class="l1">DE VOLTA AO</div><div class="l2">FUTURO</div><div class="bar"></div><div class="l3">${esc(eventLine())}</div></div>`;
+  const logo = () => `<div class="logo"><div class="l1">BACK TO THE</div><div class="l2">FUTURE</div><div class="bar"></div><div class="l3">${esc(eventLine())}</div></div>`;
   const flux = () => `<div class="flux"><i></i><i></i><i></i><b></b></div>`;
   // Quem conduz o bloco que está no ar (Preparar → Agenda e cenas → Quem conduz): placas com a foto de perfil e o nome
   const hostIni = n => String(n || '?').trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
   const hosts = (cls = '', label = 'COM') => { const h = (S.state && S.state.hosts) || []; return h.length ? `<div class="hosts ${cls}">${label ? `<small>${label}</small>` : ''}${h.map(x => `<div class="host"><div class="av ${x.foto ? 'foto' : ''}">${esc(hostIni(x.nome))}${x.foto ? `<img src="${esc(x.foto)}" alt="">` : ''}</div><b>${esc(x.nome)}</b></div>`).join('')}</div>` : ''; };
-  const quoteBlock = i => { const q = QUOTES[i % QUOTES.length]; return `<div class="quote" id="quote">“${esc(q[0])}”<small>${esc(q[1])}</small></div>`; };
-  const eras = () => `<div class="eras" id="eras">${ERAS_FILM.map((e, i) => `<div class="era ${i === S.eraIdx ? 'on' : ''}"><div class="y">${esc(e.y)}</div><div class="f">${esc(e.f)}</div><div class="d">${esc(e.d)}</div></div>`).join('')}</div>`;
   const huge = (kind, cls = '') => `<div class="cdwrap" id="cdwrap" data-kind="${kind}"><div class="huge ${cls}" id="cd">--:--</div><div class="ptag">❚❚ PAUSADO</div></div>`;
   function gauge() {
     const cx = 125, cy = 112, R = 96;
@@ -116,11 +94,11 @@
       <text x="125" y="96" text-anchor="middle" font-family="Orbitron" font-size="8" font-weight="700" fill="#bcaee0" letter-spacing="3">MPH</text>
       <g id="needle" class="needle"><line x1="125" y1="112" x2="125" y2="32" stroke="#ff3b30" stroke-width="4" stroke-linecap="round"/><circle cx="125" cy="112" r="8" fill="#1d1142" stroke="#bcaee0" stroke-width="2"/></g></svg></div>`;
   }
-  function qrBox() {
+  function qrBox(cta = '') {
     const url = location.origin + '/';
     let svg = '';
     try { const q = qrcode(0, 'M'); q.addData(url); q.make(); svg = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch { svg = ''; }
-    return `<div class="qrbox">${svg ? `<div class="qr">${svg}</div>` : ''}<div class="url">${esc(url.replace(/^https?:\/\//, ''))}</div></div>`;
+    return `<div class="qrbox">${svg ? `<div class="qr">${svg}</div>` : ''}<div class="url">${esc(url.replace(/^https?:\/\//, ''))}</div>${cta ? `<div class="cta">${esc(cta)}</div>` : ''}</div>`;
   }
 
   // Carro 3D + flux capacitor (do painel "De Volta para o Sucesso")
@@ -370,16 +348,16 @@
    * onde vamos) e um elemento do filme: velocímetro até 88 MPH com rastros de fogo, o Flux Capacitor
    * chegando a 1,21 gigawatts, o relógio da torre às 10:04, ou o "CONTINUA…" do final. Termina no raio. */
   const TR = {
-    checkin: { kind: 'circuits', ms: 2800, quote: ['Circuitos de tempo ligados.', 'Doc Brown · 1985'] },
-    stage: { kind: 'clock', ms: 3200, quote: ['Salve a torre do relógio!', 'Hill Valley · 1985'] },
-    connections: { kind: 'speed', ms: 3800, quote: ['Para onde vamos, não precisamos de estradas.', 'Doc Brown · 1985'] },
-    reflexao: { kind: 'fuel', ms: 3800, quote: ['Só um raio pode gerar 1,21 gigawatts!', 'Doc Brown · 1955'] },
-    sucesso: { kind: 'speed', ms: 3800, quote: ['Quando essa belezinha chegar a 88 milhas por hora, você vai ver algo sério.', 'Doc Brown · 1985'] },
+    checkin: { kind: 'circuits', ms: 2800, quote: ['Time circuits on.', 'Doc Brown · 1985'] },
+    stage: { kind: 'clock', ms: 3200, quote: ['Save the clock tower!', 'Hill Valley · 1985'] },
+    connections: { kind: 'speed', ms: 3800, quote: ['Roads? Where we\'re going, we don\'t need roads.', 'Doc Brown · 1985'] },
+    reflexao: { kind: 'fuel', ms: 3800, quote: ['1.21 gigawatts!', 'Doc Brown · 1955'] },
+    sucesso: { kind: 'speed', ms: 3800, quote: ['When this baby hits 88 miles per hour, you\'re gonna see some serious stuff.', 'Doc Brown · 1985'] },
     message: { kind: 'circuits', ms: 2400, quote: ['Great Scott!', 'Doc Brown'] },
-    standby: { kind: 'circuits', ms: 2400, quote: ['Isso é pesado, Doc.', 'Marty McFly · 1985'] },
-    closing: { kind: 'end', ms: 4400, quote: ['O futuro ainda não está escrito. Ele é o que você fizer dele.', 'Doc Brown · 1990'] },
-    doc: { kind: 'fuel', ms: 3800, quote: ['Você não está pensando em quatro dimensões!', 'Doc Brown · 1990'] },
-    cena: { kind: 'speed', ms: 3600, quote: ['Para onde vamos, não precisamos de estradas.', 'Doc Brown · 1985'] }, // cada cena do deck traz a sua frase (Cenas.info)
+    standby: { kind: 'circuits', ms: 2400, quote: ['This is heavy.', 'Marty McFly · 1985'] },
+    closing: { kind: 'end', ms: 4400, quote: ['Your future is whatever you make it. So make it a good one.', 'Doc Brown · 1990'] },
+    doc: { kind: 'fuel', ms: 3800, quote: ['You\'re not thinking fourth-dimensionally!', 'Doc Brown · 1990'] },
+    cena: { kind: 'speed', ms: 3600, quote: ['Roads? Where we\'re going, we don\'t need roads.', 'Doc Brown · 1985'] }, // cada cena do deck traz a sua frase (Cenas.info)
   };
   // o bloco que está no ar: identidade (para saber quando mudou) e nome (para os circuitos de tempo)
   function blockInfo(st) {
@@ -389,11 +367,11 @@
     if (st.block === 'doc') return { id: 'doc', type: 'doc', name: 'VISÃO 2027' };
     if (st.block === 'cena' && st.cena && window.Cenas) return Cenas.info(st);
     switch (st.block) {
-      case 'stage': return { id: 'stage:' + i, type: 'stage', name: (st.stage && st.stage.title) || 'BLOCO' };
+      case 'stage': return { id: 'stage:' + i, type: 'stage', name: (st.stage && st.stage.title) || 'ON STAGE' };
       case 'connections': return { id: 'connections', type: 'connections', name: 'CONEXÕES' };
-      case 'message': return { id: 'message:' + st.message.title, type: 'message', name: st.message.title || 'AVISO' };
-      case 'standby': return { id: 'standby', type: 'standby', name: 'OLHOS NO TELÃO' };
-      case 'closing': return { id: 'closing', type: 'closing', name: 'CONCLUSÃO' };
+      case 'message': return { id: 'message:' + st.message.title, type: 'message', name: st.message.title || 'NOTICE' };
+      case 'standby': return { id: 'standby', type: 'standby', name: 'EYES ON THE SCREEN' };
+      case 'closing': return { id: 'closing', type: 'closing', name: 'THE END' };
       default: return { id: 'welcome', type: 'checkin', name: 'CHECK-IN' };
     }
   }
@@ -411,8 +389,8 @@
       el.dataset.kind = cfg.kind; $('#trDest').textContent = led(to.name);
       void el.offsetWidth; el.classList.add('on');
       const num = $('#trNum'), ramp = ms - 1100, t0 = performance.now();
-      const show = { speed: k => String(Math.round(88 * k)).padStart(2, '0'), fuel: k => (1.21 * k).toFixed(2).replace('.', ','), clock: k => `10:0${Math.min(4, Math.floor(k * 4.999))}` }[cfg.kind];
-      $('#trUnit').textContent = { speed: 'MPH', fuel: 'GIGAWATTS', clock: 'PM · TORRE DO RELÓGIO' }[cfg.kind] || '';
+      const show = { speed: k => String(Math.round(88 * k)).padStart(2, '0'), fuel: k => (1.21 * k).toFixed(2), clock: k => `10:0${Math.min(4, Math.floor(k * 4.999))}` }[cfg.kind];
+      $('#trUnit').textContent = { speed: 'MPH', fuel: 'GIGAWATTS', clock: 'PM · CLOCK TOWER' }[cfg.kind] || '';
       if (show) { num.textContent = show(0); S.trI = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ramp); num.textContent = show(k * k * (3 - 2 * k)); if (k >= 1) clearInterval(S.trI); }, 40); }
       if (window.Trilha) Trilha.sfx('warp', (ms - 900) / 1000);
       later(ms - 900, () => el.classList.add('go'));
@@ -428,21 +406,21 @@
     const phase = (name, text) => { el.dataset.phase = name; step.textContent = text; };
     el.dataset.kind = 'trip'; $('#trDest').textContent = '';
     $('#trName').textContent = to.name; $('#trName').classList.toggle('long', to.name.length > 18);
-    $('#trArrive').textContent = to.type === 'closing' ? 'CONTINUA…' : '88 MPH!';
-    void el.offsetWidth; el.classList.add('on', 'long'); phase('type', 'PROGRAMANDO O DESTINO…');
+    $('#trArrive').textContent = to.type === 'closing' ? 'TO BE CONTINUED…' : '88 MPH!';
+    void el.offsetWidth; el.classList.add('on', 'long'); phase('type', 'SETTING THE DESTINATION TIME…');
     bar.style.transition = 'none'; bar.style.width = '0'; void bar.offsetWidth; bar.style.transition = `width ${T.arrive}ms linear`; bar.style.width = '100%';
     // 1) digita o destino
     const per = (T.fuel - T.type - 500) / Math.max(1, dest.length);
     [...dest].forEach((ch, i) => later(T.type + i * per, () => { $('#trDest').textContent = dest.slice(0, i + 1); if (ch !== ' ' && window.Trilha) Trilha.sfx('key', i); }));
     // 2) Flux Capacitor
     later(T.fuel, () => {
-      phase('fuel', 'CARREGANDO O FLUX CAPACITOR…'); unit.textContent = 'GIGAWATTS'; if (window.Trilha) Trilha.sfx('hum', (T.speed - T.fuel) / 1000);
+      phase('fuel', 'CHARGING THE FLUX CAPACITOR…'); unit.textContent = 'GIGAWATTS'; if (window.Trilha) Trilha.sfx('hum', (T.speed - T.fuel) / 1000);
       const t0 = performance.now(), ramp = T.speed - T.fuel - 350; clearInterval(S.trI);
-      S.trI = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ramp); num.textContent = (1.21 * k * k * (3 - 2 * k)).toFixed(2).replace('.', ','); if (k >= 1) clearInterval(S.trI); }, 40);
+      S.trI = setInterval(() => { const k = Math.min(1, (performance.now() - t0) / ramp); num.textContent = (1.21 * k * k * (3 - 2 * k)).toFixed(2); if (k >= 1) clearInterval(S.trI); }, 40);
     });
     // 3) 88 milhas por hora
     later(T.speed, () => {
-      phase('speed', 'ACELERANDO ATÉ 88 MILHAS POR HORA…'); unit.textContent = 'MPH'; if (window.Trilha) Trilha.sfx('warp', (T.arrive - T.speed) / 1000);
+      phase('speed', 'ACCELERATING TO 88 MILES PER HOUR…'); unit.textContent = 'MPH'; if (window.Trilha) Trilha.sfx('warp', (T.arrive - T.speed) / 1000);
       const t0 = performance.now(), ramp = T.arrive - T.speed - 150, lines = $('.tr-lines'); clearInterval(S.trI);
       S.trI = setInterval(() => {
         const k = Math.min(1, (performance.now() - t0) / ramp), v = Math.round(88 * Math.pow(k, 1.35));
@@ -464,6 +442,33 @@
   // Esc pula a transição (se o apresentador quiser ir direto para a tela)
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#tr').classList.contains('on')) stopTransition(); });
 
+  /* ---------- dinâmicas no celular ----------
+   * Conexões, Reflexão e Sucesso acontecem no app. Quando uma delas entra no ar, o telão avisa em tela cheia
+   * ("PEGUE O CELULAR", em português e espanhol) e, enquanto ela precisa do celular, uma etiqueta fica no canto. */
+  const PHONE_TYPES = ['connections', 'reflexao', 'sucesso'];
+  function phoneNeeded(st) {
+    if (!st || ((st.screen && st.screen.scene) || 'auto') !== 'auto') return false;
+    if (st.presentation) return sucPhase(st.presentation.live) !== 'done';               // depois de encerrar: nuvem e sorteio são no telão
+    if (st.reflexao) { const c = st.reflexao.cur; return !c || rfPhase(c) !== 'done'; }  // votação encerrada: os mais votados são no telão
+    return st.block === 'connections';
+  }
+  function phoneCall(info, delay) {
+    const el = $('#phoneCall'); clearTimeout(S.pcT); el.classList.remove('on');
+    if (!PHONE_TYPES.includes(info.type) || !phoneNeeded(S.state)) return;
+    $('#pcUrl').textContent = location.host;
+    S.pcT = setTimeout(() => {
+      void el.offsetWidth; el.classList.add('on'); if (window.Trilha) Trilha.sfx('reveal');
+      S.pcT = setTimeout(() => el.classList.remove('on'), 6500);
+    }, delay);
+  }
+  function phoneTag() { const el = $('#phoneTag'), on = !!S.state && phoneNeeded(S.state); if (el.hidden === on) el.hidden = !on; }
+  // quanto dura a transição que está começando (para o aviso do celular entrar logo depois dela)
+  function trMs(info) { const secs = Number(S.state.settings.transitionSeconds) || 15, quick = info.type === 'message' || info.type === 'standby'; return quick ? 3000 : secs < 7 ? Math.max(2400, secs * 1000) : secs * 1000; }
+
+  /* ---------- nuvem das "duas palavras" no check-in ---------- */
+  function mountWords() { const cv = $('#wCloud'); S.wcloud = cv && window.NuvemDePalavras ? new NuvemDePalavras(cv, { scale: 2.1, wide: true, empty: 'WAITING FOR THE FIRST WORDS…' }) : null; patchWords(); }
+  function patchWords() { const w = S.state && S.state.words; if (!S.wcloud || !w) return; S.wcloud.sync(w.top); const n = $('#wCount'); if (n) n.textContent = w.count; }
+
   /* ---------- cenas ---------- */
   function sceneFor() {
     const st = S.state, c = st.conn, sc = (st.screen && st.screen.scene) || 'auto';
@@ -475,23 +480,24 @@
 
     const b = st.block;
     if (b === 'welcome') { // chegada: QR do app, o carro carregando a cada check-in e os circuitos de tempo do evento
-      const circ = ''; // (os três circuitos de tempo do evento saíram desta tela, a pedido da organização)
-      return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox()}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} a bordo</small></div></div></div>${circ}`];
+      // No meio, a nuvem das "duas palavras" que cada pessoa responde logo depois do login (ao vivo; o Doc pode desligar)
+      const w = st.words || {}, cloud = w.live ? `<div class="wbox"><div class="wb-k">TWO WORDS · HOW THE CREW IS ARRIVING</div><canvas id="wCloud"></canvas><div class="wb-n"><b id="wCount">${w.count || 0}</b> travelers answered</div></div>` : '';
+      return ['welcome', `${logo()}<div class="rowx welcome-row ${cloud ? 'has-cloud' : ''}">${qrBox('SCAN · CHECK IN · TELL US YOUR TWO WORDS')}${cloud}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} aboard</small></div></div></div>`];
     }
     if (b === 'standby') return ['logo', `${logo()}${flux()}`]; // olhos no telão: só o logo
     if (b === 'stage') { // bloco de fala: tela calma, com o título no estilo do logo do filme
-      const g = st.stage || {}, theme = (g.theme || '').trim(), title = (g.title || 'Bloco').trim();
+      const g = st.stage || {}, theme = (g.theme || '').trim(), title = (g.title || 'On stage').trim();
       // "BLOCO 1 ⟶" com a seta, como o "BACK TO THE" do logo; embaixo, em letras grandes, o tema (ou o próprio nome do bloco)
       return ['stage', `<div class="stage-film">
-          <div class="sf-top"><span class="sf-kick bttf">${esc(theme ? title : 'No palco agora')}</span><i class="sf-arrow"></i></div>
+          <div class="sf-top"><span class="sf-kick bttf">${esc(theme ? title : 'On stage now')}</span><i class="sf-arrow"></i></div>
           <div class="sf-title ${(theme || title).length > 26 ? 'long' : ''}"><span class="bttf">${esc(theme || title)}</span></div>
           <div class="sf-fire"><i></i><i></i></div>
-          ${g.speaker ? `<div class="sf-plate"><small>HILL VALLEY · NO PALCO</small><b>${esc(g.speaker)}</b></div>` : ''}
+          ${g.speaker ? `<div class="sf-plate"><small>HILL VALLEY · ON STAGE</small><b>${esc(g.speaker)}</b></div>` : ''}
           <div class="sf-circ"><span class="r"><small>DESTINATION TIME</small><b>OCT 21 2015 04:29</b></span><span class="g"><small>PRESENT TIME</small><b>OCT 26 1985 01:21</b></span><span class="a"><small>LAST TIME DEPARTED</small><b>NOV 05 1955 06:00</b></span></div>
         </div>`];
     }
     if (b === 'message') { const m = st.message; return ['message', `<div class="msg"><div class="e">${esc(m.emoji || '📣')}</div></div><div class="title">${esc(m.title)}</div><div class="msg"><p>${linkify(m.body)}</p></div>`]; }
-    if (b === 'closing') return ['closing', `<div class="fin" id="fin"><div class="a"><span class="bttf" id="finA">FIM DA VIAGEM</span></div><div class="b" id="finB"></div></div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
+    if (b === 'closing') return ['closing', `<div class="fin" id="fin"><div class="a"><span class="bttf" id="finA">END OF THE JOURNEY</span></div><div class="b" id="finB"></div></div><div class="sub">${esc(st.event.closingText)}</div>${credits()}`];
     // conexões
     const r = c.round, era = roundEra(r), t = c.timer;
     if (c.phase === 'idle' || c.phase === 'ready') return ['prep', `<div class="kicker">BLOCO CONEXÕES</div><div class="title">ROTAS TEMPORAIS</div>${flux()}${hosts()}${guests()}`];
@@ -509,13 +515,13 @@
     const dur = Math.max(40, (names.length + blocos.reduce((n, x) => n + 1 + x.l.length, 0)) * 2.2);
     return `<div class="credits"><div class="roll" style="--dur:${dur}s">${c.titulo ? `<div class="t">${esc(c.titulo)}</div><div class="s">${esc(c.sub || '')}</div>` : ''}
       ${blocos.map(x => `<div class="h">${esc(x.h)}</div>${x.l.map(n => `<div>${esc(n)}</div>`).join('')}`).join('')}
-      <div class="h">ELENCO · VIAJANTES DO TEMPO</div>${names.map(n => `<div>${esc(n)}</div>`).join('')}<div class="h">DIREÇÃO · DOC BROWN</div><div>Hill Valley, 1985</div>
+      <div class="h">CAST · TIME TRAVELERS</div>${names.map(n => `<div>${esc(n)}</div>`).join('')}<div class="h">DIRECTED BY · DOC BROWN</div><div>Hill Valley, 1985</div>
       ${c.fim ? `<div class="end">${esc(c.fim)}</div><div class="s">${esc(c.fimSub || '')}</div>` : ''}</div></div>`;
   }
   // O final do deck: as frases passam uma a uma por cima dos créditos e param no agradecimento
   function startFinale() {
     clearInterval(S.finT);
-    const c = (S.state && S.state.creditos) || {}, lines = [...(c.final || []), [c.fim || 'FIM DA VIAGEM', c.fimSub || '']];
+    const c = (S.state && S.state.creditos) || {}, lines = [...(c.final || []), [c.fim || 'THE END', c.fimSub || '']];
     let i = 0; const show = () => { const f = $('#fin'); if (!f) return clearInterval(S.finT); $('#finA').textContent = lines[i][0]; $('#finB').textContent = lines[i][1]; f.classList.remove('sw'); void f.offsetWidth; f.classList.add('sw'); };
     show(); if (lines.length > 1) S.finT = setInterval(() => { if (++i >= lines.length - 1) clearInterval(S.finT); show(); }, 5000);
   }
@@ -527,13 +533,15 @@
     // mudou o bloco no ar: transição do filme (não na primeira tela, nem com o telão preso em "relógio"/"logo")
     const info = blockInfo(S.state), auto = ((S.state.screen && S.state.screen.scene) || 'auto') === 'auto';
     const stepTr = !S.state.step || S.state.step.transition !== false || info.type === 'message' || info.type === 'standby'; // Preparar → Roteiro: cada passo diz se entra com a transição
-    if (S.blk && S.blk.id !== info.id && auto && stepTr && S.state.settings && S.state.settings.transitions !== false) playTransition(S.blk, info);
-    else if (S.blk && S.blk.id !== info.id) stopTransition(); // entrou direto: uma transição que ainda estivesse passando sai da frente
+    const changed = !!S.blk && S.blk.id !== info.id, plays = changed && auto && stepTr && !!S.state.settings && S.state.settings.transitions !== false;
+    if (plays) playTransition(S.blk, info);
+    else if (changed) stopTransition(); // entrou direto: uma transição que ainda estivesse passando sai da frente
+    if (changed) phoneCall(info, plays ? trMs(info) + 250 : 500); // a dinâmica é no celular: o telão avisa (depois da transição)
     S.blk = info;
     const [key, html] = sceneFor();
     const pr = S.state.presentation, rf = key === 'reflexao' ? S.state.reflexao : null;
     const dk = key === 'doc' && S.state.doc ? `${S.state.doc.rev}:${S.state.doc.message ? 1 : 0}` : ''; // nova mensagem (ou a cena começou): monta de novo
-    const ck = key === 'cena' ? S.state.cena.kind : key === 'closing' ? JSON.stringify(S.state.creditos || '').length : key === 'welcome' || key === 'logo' ? JSON.stringify(S.state.evento || '') : ''; // cena do deck no ar / conteúdo do evento
+    const ck = key === 'cena' ? S.state.cena.kind : key === 'closing' ? JSON.stringify(S.state.creditos || '').length : key === 'welcome' || key === 'logo' ? JSON.stringify(S.state.evento || '') + (key === 'welcome' && S.state.words && S.state.words.live ? '|nuvem' : '') : ''; // cena do deck no ar / conteúdo do evento
     const k = `${key}|${dk}|${ck}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}|${key === 'cena' ? '' : (S.state.hosts || []).map(h => h.nome + (h.foto || '')).join() + JSON.stringify(S.state.especial || '')}`;
     if (k !== S.key) {
       if (window.DocCena) DocCena.unmount();
@@ -543,9 +551,10 @@
       $('#scene').classList.toggle('projection-scene', key === 'projection' || key === 'reflexao' || key === 'cena');
       $('#scene').dataset.key = key;
       mountCar(key);
+      mountWords();
       mountReflexao();
       if (key === 'doc') DocCena.mount($('#scene'), S.state);
-      if (key === 'cena') Cenas.mount($('#scene'), S.state, { car: () => S.car, remount: () => mountCar('cena'), flash, duck: on => { S.duck = !!on; applyAudio(); } });
+      if (key === 'cena') Cenas.mount($('#scene'), S.state, { car: () => S.car, remount: () => mountCar('cena'), flash, duck: on => { S.duck = !!on; applyAudio(); }, emit: (ev, data) => { if (S.socket) S.socket.emit(ev, data); }, report: () => setTimeout(report, 300) });
       if (key === 'closing' && S.people) startFinale();
       if (key === 'roundEnd' || key === 'results') flash();
       if (key === 'projection') pollScreen(); else { clearTimeout(S.pollT); S.responses = null; }
@@ -557,6 +566,7 @@
       if (key !== 'cena') S.duck = false; if (window.Delorean3D) Delorean3D.pause(false);
     } else {
       const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), S.checked !== null && S.state.counts.checkedIn > S.checked); }
+      patchWords();
       if (key === 'projection') patchProjection();
       if (key === 'reflexao') patchReflexao();
       if (key === 'doc') DocCena.update(S.state);
@@ -564,12 +574,14 @@
       const rd = $('#rankDone'); if (rd) { rd.textContent = S.state.conn.rankingDone; const b = $('#rankBar'); if (b) b.style.width = Math.round(100 * S.state.conn.rankingDone / Math.max(1, S.state.conn.rankingTotal)) + '%'; }
     }
     S.checked = S.state.counts.checkedIn;
+    phoneTag();
     tick();
   }
   function tick() {
     $('#osdNow').textContent = ledNow();
     const led = $('#ledNow'); if (led) led.textContent = ledNow(true);
     if (!S.state) return;
+    phoneTag();
     tickProjection();
     tickReflexao();
     if (window.Cenas) Cenas.tick();

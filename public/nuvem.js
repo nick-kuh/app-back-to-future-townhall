@@ -5,6 +5,8 @@
  * até 30 quadros/s, para em abas ocultas e respeita a preferência de movimento reduzido.
  *
  *   const nuvem = new NuvemDePalavras(canvas); nuvem.add('texto da resposta'); nuvem.reset(); nuvem.dim = true
+ *   nuvem.sync([['palavra', 3], ['outra', 1]])  → deixa a nuvem igual à lista (palavra, quantas vezes); usado pela
+ *   nuvem das "duas palavras" das boas-vindas, que chega pronta do servidor. Opções: { scale, wide, empty: 'texto sem palavras' }
  */
 (function () {
   'use strict';
@@ -20,7 +22,7 @@
     const loop = now => { if (!this.cv.isConnected && this.started) return; this.started = this.started || this.cv.isConnected; requestAnimationFrame(loop); this.frame(now); };
     requestAnimationFrame(loop);
   }
-  Nuvem.prototype.reset = function () { this.words = []; this.byKey.clear(); this.ranked = []; this.rankDirty = true; this.dirty = true; };
+  Nuvem.prototype.reset = function () { this.words = []; this.byKey.clear(); this.ranked = []; this.rankDirty = true; this.dirty = true; this.synced = null; };
   Nuvem.prototype.add = function (txt) {
     txt = String(txt || '').trim(); if (!txt) return;
     const phrase = txt.length <= 28;
@@ -35,6 +37,15 @@
       }
     }
     this.rankDirty = true; this.dirty = true;
+  };
+  // Deixa a nuvem igual à lista [[palavra, quantas vezes], …]. Palavra nova ou repetida: entra com o brilho de sempre.
+  // Se alguma saiu ou diminuiu (o Doc tirou uma resposta), a nuvem é montada de novo.
+  Nuvem.prototype.sync = function (list) {
+    const want = new Map((list || []).map(([w, n]) => [String(w).toLowerCase(), Math.max(1, Number(n) || 1)]));
+    const had = this.synced || new Map();
+    if ([...had].some(([w, n]) => (want.get(w) || 0) < n)) { this.reset(); had.clear(); }
+    for (const [w, n] of want) for (let k = had.get(w) || 0; k < n; k++) this.add(w);
+    this.synced = want;
   };
   Nuvem.prototype.size = function () {
     const r = this.cv.getBoundingClientRect(); if (!r.width || !r.height) return false;
@@ -68,7 +79,7 @@
       c.globalAlpha = w.born * (.45 + .55 * (1 - p.z) / 2) * (this.dim ? .35 : 1); c.shadowColor = w.col; c.shadowBlur = 18 * dp; c.fillStyle = w.col; c.fillText(w.t, p.x, p.y); c.shadowBlur = 0;
     });
     c.globalAlpha = 1;
-    if (!this.words.length) { c.fillStyle = '#a9a3d9'; c.font = `700 ${18 * dp}px "Share Tech Mono",Consolas,monospace`; c.textAlign = 'center'; c.fillText('AGUARDANDO TRANSMISSÕES DO CIBERESPAÇO...', W / 2, H * .44); }
+    if (!this.words.length) { c.fillStyle = '#a9a3d9'; c.font = `700 ${18 * dp}px "Share Tech Mono",Consolas,monospace`; c.textAlign = 'center'; c.fillText(this.o.empty || 'AGUARDANDO TRANSMISSÕES DO CIBERESPAÇO...', W / 2, H * .44); }
     if (!still && this.words.some(w => w.pulse > 0 || w.born < 1)) this.dirty = true;
   };
   window.NuvemDePalavras = Nuvem;

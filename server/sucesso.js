@@ -24,7 +24,7 @@ const PERSON_PREFIX = 'b77f0000-0000-4000-8000-';
 const personUuid = id => PERSON_PREFIX + Number(id).toString(16).padStart(12, '0');
 const personOfUuid = uuid => (typeof uuid === 'string' && uuid.startsWith(PERSON_PREFIX) ? parseInt(uuid.slice(PERSON_PREFIX.length), 16) : null);
 
-function createSucesso({ dbPath, adminPassword }) {
+function createSucesso({ dbPath, adminPassword, teamPassword = '' }) {
   let mod = null, DB = null, worker = null;
   const listeners = [];
 
@@ -37,7 +37,10 @@ function createSucesso({ dbPath, adminPassword }) {
   }
 
   /* ---------- login do apresentador (cookie) ---------- */
-  const signature = () => crypto.createHmac('sha256', String(adminPassword)).update('painel-do-doc').digest('hex');
+  // Dois níveis de acesso: 'master' (a senha mestra: tudo) e 'team' (a senha das dinâmicas: só Conexões, Reflexão e Sucesso).
+  // O cookie guarda a assinatura feita com a senha de quem entrou; é por ela que o servidor sabe o nível.
+  const signature = (role = 'master') => crypto.createHmac('sha256', String(role === 'team' ? teamPassword : adminPassword)).update(role === 'team' ? 'painel-das-dinamicas' : 'painel-do-doc').digest('hex');
+  const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
   function readCookie(req) {
     const raw = req.headers.cookie || '';
     for (const part of raw.split(';')) {
@@ -46,13 +49,18 @@ function createSucesso({ dbPath, adminPassword }) {
     }
     return '';
   }
-  function hasCookie(req) {
-    const value = readCookie(req), expected = signature();
-    return value.length === expected.length && crypto.timingSafeEqual(Buffer.from(value), Buffer.from(expected));
+  // nível de acesso de quem traz o cookie: 'master', 'team' ou null (req pode ser o pedido HTTP ou o do WebSocket)
+  function cookieRole(req) {
+    const value = readCookie(req);
+    if (!value) return null;
+    if (same(value, signature('master'))) return 'master';
+    if (teamPassword && same(value, signature('team'))) return 'team';
+    return null;
   }
-  function setCookie(req, res) {
+  const hasCookie = req => !!cookieRole(req);
+  function setCookie(req, res, role = 'master') {
     const secure = req.secure ? '; Secure' : '';
-    res.append('Set-Cookie', `${COOKIE}=${signature()}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}${secure}`);
+    res.append('Set-Cookie', `${COOKIE}=${signature(role)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}${secure}`);
   }
   function clearCookie(res) { res.append('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`); }
 
@@ -198,7 +206,7 @@ function createSucesso({ dbPath, adminPassword }) {
   }
 
   /* ---------- rotas ---------- */
-  function mount(app, { isAdmin }) {
+  function mount(app, { isAdmin, roleOf = () => 'master' }) {
     isPresenter = req => hasCookie(req) || isAdmin(req);
     const send = file => (req, res) => res.sendFile(path.join(PUBLIC, file), { headers: { 'Cache-Control': 'no-store' } });
     app.all(/^\/api\/rooms(\/.*)?$/, (req, res) => {
@@ -209,7 +217,7 @@ function createSucesso({ dbPath, adminPassword }) {
     });
     // Painel do apresentador: o login é o mesmo do Painel do Doc.
     app.get(['/painel', '/painel.html'], (req, res, next) => {
-      if (hasCookie(req) || isAdmin(req)) { if (!hasCookie(req)) setCookie(req, res); return res.set('Cache-Control', 'no-store').type('html').send(painelHtml()); }
+      if (hasCookie(req) || isAdmin(req)) { if (!hasCookie(req)) setCookie(req, res, roleOf(req) || 'master'); return res.set('Cache-Control', 'no-store').type('html').send(painelHtml()); }
       res.redirect(302, '/admin.html?next=' + encodeURIComponent('/painel' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '')));
     });
     // O painel original manda "entrar de novo" para o login do ChatGPT: aqui vira o login do Doc.
@@ -226,7 +234,7 @@ function createSucesso({ dbPath, adminPassword }) {
   return {
     init, mount, prepare, storePresentation, publicPresentation,
     live, responses, mine, answer, roomExists, latestRoom, createRoom, clearRoom, clearActivity, overview, exportData,
-    hasCookie, setCookie, clearCookie,
+    hasCookie, cookieRole, setCookie, clearCookie,
     onChange: fn => listeners.push(fn),
     ready: () => !!mod,
     PRESENTER_ID,

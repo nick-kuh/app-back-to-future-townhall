@@ -1,4 +1,4 @@
-/* ===== De Volta ao Futuro · app do participante · visual anos 80 (VHS / neon / Hill Valley) ===== */
+/* ===== Back to the Future · app do participante · visual anos 80 (VHS / neon / Hill Valley) ===== */
 :root{
   --bg:#0b0618; --panel:#150b2e; --panel2:#1d1142; --line:#3b2a6e; --line2:#5c47a8;
   --orange:#ff6a00; --flame:#ff2a00; --yellow:#ffd21f; --cyan:#2ee6d6; --magenta:#ff2d95; --purple:#8b5cf6;
@@ -394,3 +394,45 @@ textarea.input{resize:none;line-height:1.4;font-size:16px;font-weight:500;min-he
 .clap{font-size:64px;line-height:1;margin:6px 0 10px;animation:clap .5s ease-in-out infinite alternate}
 @keyframes clap{to{transform:scale(1.18) rotate(-8deg)}}
 @media (prefers-reduced-motion:reduce){.clap{animation:none}}
+
+/* ---- dinâmicas (Conexões, Reflexão, Sucesso): o aviso de que esta parte acontece no celular ---- */
+.phonechip{align-self:center;display:inline-flex;gap:6px;align-items:center;font:700 11.5px/1.2 Inter;color:#0b0618;background:linear-gradient(90deg,var(--cyan),#9ff8ef);border-radius:99px;padding:6px 14px;box-shadow:0 0 18px rgba(46,230,214,.45);animation:chipglow 2.4s ease-in-out infinite;text-align:center}
+@keyframes chipglow{50%{box-shadow:0 0 30px rgba(46,230,214,.85)}}
+.ag-it>i{background:none;padding:0;font-size:16px;line-height:1.2}
+/* ---- idioma das dinâmicas: escolha no login e chave PT | ES no topo ---- */
+.hdr{display:flex;align-items:center;gap:10px}
+.langchip{display:inline-flex;border:1px solid var(--line2);border-radius:99px;background:rgba(21,11,46,.7);padding:2px;cursor:pointer}
+.langchip b{font:700 9px var(--display);letter-spacing:1px;color:var(--dim);padding:4px 7px;border-radius:99px}
+.langchip b.on{background:var(--cyan);color:#0b0618}
+.langpick .kicker{color:var(--cyan);font-size:9px}
+.langpick .seg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 10px}
+.seg button{font:800 14px Inter;color:var(--txt);background:transparent;border:2px solid var(--line2);border-radius:12px;padding:12px 8px;cursor:pointer}
+.seg button.on{background:var(--cyan);border-color:var(--cyan);color:#0b0618;box-shadow:0 0 18px rgba(46,230,214,.4)}
+/* ---- "duas palavras": a primeira tela depois do login (os campos são os circuitos de tempo) ---- */
+.tw{display:flex;flex-direction:column;gap:14px;align-items:stretch;text-align:center;flex:1;justify-content:center}
+.tw .kicker{color:var(--amber);font-size:9px}
+.tw-title{display:flex;justify-content:center;gap:.26em;font:400 italic 54px/1.05 "BTTF Logo","Russo One",var(--display);font-size:clamp(34px,12.5vw,56px);text-transform:uppercase;letter-spacing:.02em;text-shadow:none;padding:4px 0}
+.tw-title span{padding:0 .06em;background:linear-gradient(180deg,#ff2a12 0%,#ff6a0e 34%,#ffab12 62%,#ffe65c 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:1px rgba(120,190,255,.5);filter:drop-shadow(0 3px 0 #5a1200) drop-shadow(0 0 16px rgba(255,106,0,.55));animation:twin .8s cubic-bezier(.2,1.3,.4,1) both}
+.tw-title span:nth-child(2){animation-name:twin2;animation-delay:.28s}
+@keyframes twin{from{opacity:0;transform:translateX(-110%) skewX(-24deg)}to{opacity:1;transform:none}}
+@keyframes twin2{from{opacity:0;transform:translateX(110%) skewX(24deg)}to{opacity:1;transform:none}}
+.tw-q{font:600 17px/1.35 Inter}
+.tw-q b{color:var(--yellow)}
+.tw-circ{display:grid;gap:10px;background:linear-gradient(#262a35,#121419);border:2px solid #4a4f5c;border-radius:14px;padding:12px;box-shadow:inset 0 0 22px #000,0 6px 20px rgba(0,0,0,.5);animation:fadein .6s .5s both}
+.tw-circ .tc{grid-template-columns:76px 1fr}
+.tw-circ .tc>span{font:400 7px var(--pixel);color:#fff;padding:7px 4px;border-radius:3px;text-align:center;line-height:1.5}
+.tw-circ .tc.r>span{background:#8d1313}.tw-circ .tc.g>span{background:#0f6d2a}
+.led-in{width:100%;min-width:0;font:400 22px var(--led);letter-spacing:2px;text-transform:uppercase;text-align:center;background:#040404;border:1px solid #333;border-radius:6px;padding:10px 8px;outline:none;caret-color:#fff;-webkit-appearance:none;appearance:none}
+.tc.r .led-in{color:var(--red);text-shadow:0 0 9px var(--red)}.tc.g .led-in{color:var(--green);text-shadow:0 0 9px var(--green)}
+.led-in::placeholder{color:#3d3348;text-shadow:none}
+.led-in:focus{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(46,230,214,.25)}
+.mywords{margin-top:14px;display:flex;flex-direction:column;gap:5px;align-items:center}
+.mywords small{font:400 7px var(--pixel);color:var(--muted)}
+.mywords b{font:400 19px var(--led);letter-spacing:2px;color:var(--green);text-shadow:0 0 9px var(--green);text-transform:uppercase;overflow-wrap:anywhere}
+/* nuvem das duas palavras no celular: o tamanho de cada palavra é quantas pessoas a escreveram; as minhas ficam marcadas */
+.wc .kicker{color:var(--cyan);font-size:9px;text-align:center}
+.wcloud{display:flex;flex-wrap:wrap;gap:6px 13px;justify-content:center;align-items:center;padding:8px 0 12px;min-height:64px}
+.wcloud span{font:800 14px/1.15 Inter;font-size:calc(14px*var(--s,1));color:var(--c,var(--cyan));text-shadow:0 0 14px rgba(0,0,0,.6);text-transform:lowercase;overflow-wrap:anywhere;animation:wfloat 5s ease-in-out infinite;animation-delay:calc(var(--d,0s)*-1)}
+.wcloud span.me{outline:1px dashed rgba(255,255,255,.6);outline-offset:3px;border-radius:6px}
+.wcloud .wc-empty{width:100%}
+@keyframes wfloat{50%{transform:translateY(-3px)}}

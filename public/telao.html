@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Telão · De Volta ao Futuro</title>
+<title>Big screen · Back to the Future</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0618'/%3E%3Cpath d='M36 6 L16 36 h14 L26 58 L48 26 H34 Z' fill='%23ffd21f'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,17 +44,26 @@
       <div class="flux tr-flux"><i></i><i></i><i></i><b></b></div>
       <div class="tr-gauge"><b id="trNum">00</b><span id="trUnit">MPH</span></div>
     </div>
-    <div class="tr-end">CONTINUA…</div>
+    <div class="tr-end">TO BE CONTINUED…</div>
     <div class="tr-quote" id="trQuote"></div>
     <!-- chegada: o nome do bloco em letras do logo -->
-    <div class="tr-arrive"><div class="tr-mph" id="trArrive">88 MPH!</div><div class="tr-top"><span class="bttf">DESTINO</span><i class="sf-arrow"></i></div><div class="tr-name"><span class="bttf" id="trName"></span></div></div>
+    <div class="tr-arrive"><div class="tr-mph" id="trArrive">88 MPH!</div><div class="tr-top"><span class="bttf">DESTINATION</span><i class="sf-arrow"></i></div><div class="tr-name"><span class="bttf" id="trName"></span></div></div>
   </div>
   <div class="tr-progress"><i id="trBar"></i></div>
   <div class="tr-fire"></div><div class="tr-fire f2"></div>
   <div class="tr-flash"></div>
 </div>
 
-<button id="soundChip" class="sound-chip" type="button" hidden>🔊 Clique aqui para ligar o som do telão</button>
+<!-- dinâmicas no celular (Conexões, Reflexão, Sucesso): aviso em tela cheia ao entrar e etiqueta fixa enquanto o celular é necessário -->
+<div class="phonecall" id="phoneCall" aria-hidden="true">
+  <div class="pc-box">
+    <div class="pc-phone"><i></i><i></i><i></i><div class="pc-dev"><span>⚡</span></div></div>
+    <div class="pc-txt"><b class="bttf">PEGUE O CELULAR</b><span>Esta dinâmica acontece no app</span><small>TOMA TU CELULAR · esta dinámica ocurre en la app</small><em id="pcUrl"></em></div>
+  </div>
+</div>
+<div class="phonetag" id="phoneTag" hidden><span class="pt-ico">📱</span><span class="pt-tx"><b>NO CELULAR</b><small>EN TU CELULAR</small></span></div>
+
+<button id="soundChip" class="sound-chip" type="button" hidden>🔊 Click here to turn on the big screen sound</button>
 
 
 

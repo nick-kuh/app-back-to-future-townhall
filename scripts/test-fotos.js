@@ -119,6 +119,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     r = await call('DELETE', `/api/admin/people/${semFoto.id}/photo`); assert.equal(r.status, 200); assert.equal((await call('GET', `/api/photo/${semFoto.id}`, undefined, false)).status, 404);
     // nas cenas: quem fala nas boas-vindas e os indicados dos prêmios ganham a foto pelo nome
     const steps = (await call('GET', '/api/admin/overview')).json.settings.steps, go = k => call('POST', '/api/admin/step', { id: steps.find(s => s.cena === k).id });
+    await call('POST', '/api/admin/action', { type: 'settings', settings: { confidencial: false } }); // (dia do evento: as cenas vão para todos)
     await go('boasvindas'); let st = (await call('GET', '/api/state', undefined, false)).json;
     assert.deepEqual(st.cena.pessoas.map(p => p.fotos.length), [1, 1, 1]); assert.equal(st.cena.pessoas[1].fotos[0], will.photo);
     await go('reconhecimento'); st = (await call('GET', '/api/state', undefined, false)).json;

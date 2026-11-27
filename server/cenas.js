@@ -1,161 +1,170 @@
-// Cenas do townhall: o conteúdo do deck "CDIO HC + BPC · Townhall 2026" (v18, agenda atualizada), em português
-// e com a cara do app. Cada cena é um passo do roteiro (tipo "cena") que o Doc coloca no telão:
-//   agenda (plano de voo) · boasvindas · almanaque (Jornada 2026) · ia (IA em 2026) · reconhecimento (prêmios)
-//   intervalo (cronômetro) · visao (Estratégia 2027, arquivo original sem alterações) · manifesto · mph (88 MPH)
+// Cenas do townhall: o conteúdo do deck "CDIO HC + BPC · 2026 Townhall" (v18, agenda atualizada), em INGLÊS (como
+// no deck original) e com a cara do app. Cada cena é um passo do roteiro (tipo "cena") que o Doc coloca no telão:
+//   abertura (vídeo de abertura) · boasvindas (com a nuvem das "duas palavras") · agenda (plano de voo)
+//   almanaque (Jornada 2026) · ia (IA em 2026) · reconhecimento (prêmios) · intervalo (cronômetro)
+//   visao (Estratégia 2027, arquivo original sem alterações) · manifesto · mph (88 MPH)
 // Aqui ficam o conteúdo (editável em Preparar → Agenda e cenas), o estado ao vivo de cada cena (mês do almanaque,
 // fase da cerimônia, cronômetro do intervalo…) e os comandos do Painel do Doc. Tudo guardado no banco.
+// As dinâmicas (Conexões, Reflexão e Sucesso) continuam em português e não ficam neste arquivo.
 const { kvGet, kvSet } = require('./db');
 
-const KINDS = ['agenda', 'boasvindas', 'almanaque', 'ia', 'reconhecimento', 'intervalo', 'visao', 'manifesto', 'mph'];
-// nome no roteiro, ato (0 a 3) e o que aparece na transição do telão (frase do deck)
+const KINDS = ['abertura', 'boasvindas', 'agenda', 'almanaque', 'ia', 'reconhecimento', 'intervalo', 'visao', 'manifesto', 'mph'];
+// name: o nome que aparece no telão e nos celulares (inglês) · label e hint: como o passo aparece no Painel do Doc (português)
+// act: ato (0 a 3) · tr: a frase da transição do telão (do deck)
 const META = {
-  agenda: { name: 'Plano de voo', icon: '🗺️', act: -1, hint: 'a agenda do dia em 4 atos', tr: 'Programem os circuitos de tempo' },
-  boasvindas: { name: 'Boas-vindas e jornada', icon: '👋', act: 0, hint: 'abertura com Monserrat, William e Luciano', tr: 'O Doc reúne a tripulação' },
-  almanaque: { name: 'Jornada 2026', icon: '📅', act: 1, hint: 'o almanaque do ano, mês a mês, e o resumo em uma página', tr: 'Nosso ano, mês a mês' },
-  ia: { name: 'Como a IA nos ajudou em 2026', icon: '🦋', act: 1, hint: 'abertura da Frente 2 (antes da Reflexão)', tr: 'O efeito borboleta' },
-  reconhecimento: { name: 'Reconhecimento 2026', icon: '🏆', act: 2, hint: 'tributo, Prêmios Torre do Relógio e Hall da Fama', tr: 'O raio está chegando' },
-  intervalo: { name: 'Intervalo', icon: '☕', act: 2, hint: 'cronômetro: reabastecendo a DeLorean', tr: 'Mr. Fusion recarregando' },
-  visao: { name: 'Visão 2027 · Estratégia', icon: '🔭', act: 3, hint: 'a Estratégia CDIO LATAM 2027 (arquivo original) no telão', tr: 'Para onde vamos…' },
-  manifesto: { name: 'Manifesto 2027', icon: '📜', act: 3, hint: 'abertura da Frente 3 (antes das dinâmicas do Sucesso)', tr: 'O futuro de vocês é o que vocês fizerem dele' },
-  mph: { name: '88 MPH · Encerramento', icon: '🏎️', act: 3, hint: 'o velocímetro chega a 88 e todo mundo chega a 2027', tr: 'Segurem firme…' },
+  abertura: { name: 'Opening video', label: 'Vídeo de abertura', icon: '🎬', act: 0, hint: 'o vídeo que abre o townhall, em tela cheia', tr: 'Roads? Where we\'re going, we don\'t need roads' },
+  boasvindas: { name: 'Welcome', label: 'Boas-vindas e jornada', icon: '👋', act: 0, hint: 'abertura com Monserrat, William e Luciano e a nuvem das duas palavras', tr: 'Doc gathers the crew' },
+  agenda: { name: 'Flight plan', label: 'Plano de voo (agenda)', icon: '🗺️', act: -1, hint: 'a agenda do dia em 4 atos', tr: 'Set the time circuits' },
+  almanaque: { name: '2026 Journey', label: 'Jornada 2026', icon: '📅', act: 1, hint: 'o almanaque do ano, mês a mês, e o resumo em uma página', tr: 'Our year, month by month' },
+  ia: { name: 'How AI helped us in 2026', label: 'Como a IA nos ajudou em 2026', icon: '🦋', act: 1, hint: 'abertura da Frente 2 (antes da Reflexão)', tr: 'The butterfly effect' },
+  reconhecimento: { name: 'Recognition 2026', label: 'Reconhecimento 2026', icon: '🏆', act: 2, hint: 'tributo, Prêmios Torre do Relógio e Hall da Fama', tr: 'The lightning is coming' },
+  intervalo: { name: 'Break', label: 'Intervalo', icon: '☕', act: 2, hint: 'cronômetro: reabastecendo a DeLorean', tr: 'Mr. Fusion recharging' },
+  visao: { name: '2027 Vision', label: 'Visão 2027 · Estratégia', icon: '🔭', act: 3, hint: 'a Estratégia CDIO LATAM 2027 (arquivo original) no telão', tr: 'Where we\'re going…' },
+  manifesto: { name: '2027 Manifesto', label: 'Manifesto 2027', icon: '📜', act: 3, hint: 'abertura da Frente 3 (antes das dinâmicas do Sucesso)', tr: 'Your future is whatever you make it' },
+  mph: { name: '88 MPH', label: '88 MPH · Encerramento', icon: '🏎️', act: 3, hint: 'o velocímetro chega a 88 e todo mundo chega a 2027', tr: 'Hold on…' },
 };
 const HOST_KEYS = ['connections', 'almanaque', 'reflexao', 'reconhecimento', 'visao', 'sucesso']; // blocos com anfitriões
-const MONTHS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+const PHONE_REFS = ['connections', 'reflexao', 'sucesso'];                                        // itens da agenda que usam o celular
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const BUS = { HC: 'HC', BPC: 'BPC', X: 'CROSS BU' };
-const TIPOS = { E: 'Entregue', M: 'Marco', R: 'Resultado', C: 'Contexto' };
+const TIPOS = { E: 'Delivered', M: 'Milestone', R: 'Result', C: 'Context' };
 
 // Almanaque 2026: [mês (0 a 11), tipo (E entregue · M marco · R resultado · C contexto), BU, benefício somado em €, texto]
-// A classificação e os valores somados são os mesmos do deck (41 entregas · €51,3M).
+// Os textos são os do deck (em inglês); a classificação e os valores somados são os mesmos (41 entregas · €51.3M).
 const ALMANAQUE = [
-  [0, 'C', '', 0, 'Davos 2026: a IA sai dos pilotos e ganha escala'],
-  [0, 'E', 'HC', 0, 'Rebalanceamento automático de estoque no Kinaxis no ar · planejamento HC Brasil'],
-  [1, 'E', 'HC', 37800, 'Manutenção Preditiva Igarassu · ML prevê falhas · €37,8K (€31,5K em 2026)'],
-  [2, 'E', 'X', 0, 'SIDOM UY e PY + CR AR · compliance fiscal River Plate'],
+  [0, 'C', '', 0, 'Davos 2026: AI moves from pilots to scale'],
+  [0, 'E', 'HC', 0, 'Automated Stock Rebalance in Kinaxis live · HC Brazil planning'],
+  [1, 'E', 'HC', 37800, 'Predictive Maintenance Igarassu · ML predicts failures · €37.8K (€31.5K in 2026)'],
+  [2, 'E', 'X', 0, 'SIDOM UY & PY + CR AR · fiscal compliance River Plate'],
   [2, 'E', 'X', 0, 'OTM Reloaded AR · Wave 1 (Q1)'],
-  [2, 'E', 'X', 0, 'OTM BR · Wave 1 POB Tender e Pick-up / Delivery Appointment (Q1)'],
-  [2, 'E', 'BPC', 0, 'Minecraft HUB FG · automação fiscal (Q1)'],
-  [3, 'E', 'BPC', 11000000, 'Go-live do EOTTS Logistics Pack (Q2) · €11M'],
-  [3, 'E', 'BPC', 30000000, 'Minecraft Wave 2 · HUB de Matérias-Primas (Q2) · €30M de valor do programa'],
-  [3, 'E', 'HC', 1000000, 'Chuck Norris · linha de Suape com ativos reaproveitados · €1M de economia'],
-  [4, 'M', 'BPC', 0, 'Digital Master Plan BR: MIRAI negado, ondas com escopo revisto'],
-  [4, 'E', 'HC', 7300000, 'ARES · nova linha HC A10 em Vinhedo · €7,3M de economia com o McGuyver'],
-  [4, 'E', 'HC', 0, 'Copilot Wave 1 HC Nordeste · 11 agentes · manutenção de 40h/semana → 10 min'],
-  [5, 'E', 'HC', 660000, 'FEU 2.0 BR + MX · previsão autônoma · €660K de redução de estoque (€330K em 2026)'],
-  [5, 'E', 'X', 0, 'Migração CAE Argentina (L&F) · €104M de risco evitado · Waves 3, 3.1 e 4 na sequência'],
-  [5, 'E', 'X', 0, 'OTM BR · Wave 2 POB Planning dos CDs (PAV / auto bulk-plan / shuttle) (Q2)'],
-  [5, 'E', 'X', 0, 'PlanGPT · treinamento no Q1 → go-live no Q2'],
-  [5, 'E', 'X', 0, 'Discovery BR · fonte única para custos de frete, armazém e finanças (Q2)'],
-  [5, 'E', 'X', 0, 'Frete Mínimo BR · conformidade com a ANTT (Q2)'],
+  [2, 'E', 'X', 0, 'OTM BR · Wave 1 POB Tender & Pick-up / Delivery Appointment (Q1)'],
+  [2, 'E', 'BPC', 0, 'Minecraft HUB FG · tax automation (Q1)'],
+  [3, 'E', 'BPC', 11000000, 'EOTTS Logistics Pack Go-Live (Q2) · €11M'],
+  [3, 'E', 'BPC', 30000000, 'Minecraft Wave 2 · Raw Materials HUB (Q2) · €30M program value'],
+  [3, 'E', 'HC', 1000000, 'Chuck Norris · Suape line from repurposed assets · €1M savings'],
+  [4, 'M', 'BPC', 0, 'Digital Master Plan BR: MIRAI denied, waves re-scoped'],
+  [4, 'E', 'HC', 7300000, 'ARES · new HC line A10 Vinhedo · €7.3M savings with McGuyver'],
+  [4, 'E', 'HC', 0, 'Copilot Wave 1 HC Northeast · 11 agents · maintenance 40h/week → 10 min'],
+  [5, 'E', 'HC', 660000, 'FEU 2.0 BR + MX · autonomous forecasting · €660K inventory reduction (€330K in 2026)'],
+  [5, 'E', 'X', 0, 'CAE Migration Argentina (L&F) · €104M risk avoided · Waves 3, 3.1 & 4 follow'],
+  [5, 'E', 'X', 0, 'OTM BR · Wave 2 POB Planning DCs (PAV / auto bulk-plan / shuttle) (Q2)'],
+  [5, 'E', 'X', 0, 'PlanGPT · training Q1 → go-live Q2'],
+  [5, 'E', 'X', 0, 'Discovery BR · single source for freight, WH & finance costs (Q2)'],
+  [5, 'E', 'X', 0, 'Frete Mínimo BR · ANTT compliance (Q2)'],
   [5, 'E', 'X', 0, 'Data Foundation VTT · Global Data Lake (Q2)'],
-  [5, 'E', 'X', 0, 'PEGA BRE WM MX · regras de desbloqueio de pedidos Walmart (Q2)'],
-  [5, 'E', 'BPC', 0, 'EDDGIE OSA Horizon 2 MX · IA para vendas perdidas (Q2)'],
-  [5, 'E', 'BPC', 0, 'SKY 3.0 MX · POC de geração de demanda com IA com o Walmart (Q2)'],
-  [6, 'E', 'BPC', 0, 'Go-live do Yard Management BR e do Pack Guru BR'],
-  [6, 'E', 'BPC', 0, 'Portfólio 94% no prazo · €35M+ de economia-alvo'],
-  [6, 'E', 'X', 202000, 'AOF Argentina · €202K · 3.534 h liberadas · +26% de pedidos sem toque'],
-  [7, 'E', 'BPC', 0, 'Go-live do Sky 2.0 / CPFR 4.0 BR'],
-  [7, 'E', 'BPC', 0, 'DC Cost Allocation LA · aprovado no ARB'],
-  [8, 'E', 'BPC', 0, 'AURA no ar no Teams para a liderança'],
-  [8, 'R', 'BPC', 0, 'Agente Anvisa no ar (a validar)'],
-  [8, 'E', 'HC', 0, 'McGuyver II · envasadora A09 em Vinhedo · parte dos €7,3M'],
-  [8, 'E', 'HC', 0, 'Project Farewell L05 Vinhedo · 7 de setembro · entregue OTIF'],
-  [8, 'E', 'HC', 0, 'Chanel – Comfort Boom Indaiatuba · 30 de setembro'],
-  [8, 'E', 'HC', 0, 'Inbound WMS Indaiatuba · base do Appius · €10,4M esperados a partir do Q4\'27'],
-  [8, 'E', 'X', 177000, 'Inventory 2.0 PLN · AGV + visão computacional · €177K'],
-  [8, 'E', 'HC', 0, 'Copilot Wave 2 Tortuguitas HC · 5 agentes vs. meta de 3 · mais de 40 pessoas treinadas'],
-  [9, 'E', 'HC', 0, 'Go-live do FTS Jaboatão (13/10)'],
-  [9, 'M', 'BPC', 0, 'CAPEX do Phoenix BR em validação global'],
-  [9, 'M', 'BPC', 0, 'Discussão de funding do Hermes AI 2027'],
-  [9, 'E', 'HC', 0, 'Safety Suite Indaiatuba · IA para segurança · entregue antes do prazo (14 de outubro)'],
-  [9, 'E', 'X', 378000, 'Wrong Addition Tortuguitas · €378K · menos erros de matéria-prima'],
-  [9, 'E', 'X', 115000, 'HAP R&R + Chatbot · atendimento ao cliente automatizado · €115K'],
-  [9, 'E', 'X', 0, 'Copilot Forward PC Supply Chain LATAM · BR, AR, MX · ES e PT'],
-  [10, 'R', 'BPC', 0, 'Nº 1 em adoção de IA Copilot · BW'],
-  [10, 'E', 'HC', 0, 'Project Orion AR · diagnóstico de Data Foundation · 75 stakeholders · 49 sessões · 13 fontes · roadmap em 4 ondas'],
-  [10, 'E', 'HC', 301250, 'Phoenix · Data Squad BR · €301K de valor destravado · 7.712 h economizadas · 91 telas · +16 p.p. FA-CD'],
-  [10, 'M', 'BPC', 0, 'EDDGIE BR H2 · CRM em teste'],
-  [10, 'M', 'BPC', 0, 'Go-live do DMP México (planejado)'],
-  [10, 'E', 'X', 120000, 'Mistral e Unitrack · priorização de OSA/STK · €120K · +0,2% de OSA'],
-  [11, 'M', 'BPC', 0, 'EDDGIE BR H2 · deploy do CRM em 01/12'],
-  [11, 'M', 'HC', 0, 'SPC Indaiatuba · Controle Estatístico de Processo (PGLS)'],
+  [5, 'E', 'X', 0, 'PEGA BRE WM MX · Walmart order-unblock rules (Q2)'],
+  [5, 'E', 'BPC', 0, 'EDDGIE OSA Horizon 2 MX · AI lost-sales (Q2)'],
+  [5, 'E', 'BPC', 0, 'SKY 3.0 MX · AI demand generation POC with Walmart (Q2)'],
+  [6, 'E', 'BPC', 0, 'Yard Management BR & Pack Guru BR Go-Live'],
+  [6, 'E', 'BPC', 0, 'Portfolio 94% on track · €35M+ targeted savings'],
+  [6, 'E', 'X', 202000, 'AOF Argentina · €202K · 3,534 h unlocked · +26% non-touch orders'],
+  [7, 'E', 'BPC', 0, 'Sky 2.0 / CPFR 4.0 BR Go-Live'],
+  [7, 'E', 'BPC', 0, 'DC Cost Allocation LA · ARB approved'],
+  [8, 'E', 'BPC', 0, 'AURA live in Teams for leadership'],
+  [8, 'R', 'BPC', 0, 'Anvisa Agent live (to validate)'],
+  [8, 'E', 'HC', 0, 'McGuyver II · filling machine A09 Vinhedo · part of €7.3M'],
+  [8, 'E', 'HC', 0, 'Project Farewell L05 Vinhedo · Sep 7 · delivered OTIF'],
+  [8, 'E', 'HC', 0, 'Chanel – Comfort Boom Indaiatuba · Sep 30'],
+  [8, 'E', 'HC', 0, 'Inbound WMS Indaiatuba · Appius foundation · €10.4M expected from Q4\'27'],
+  [8, 'E', 'X', 177000, 'Inventory 2.0 PLN · AGV + computer vision · €177K'],
+  [8, 'E', 'HC', 0, 'Copilot Wave 2 Tortuguitas HC · 5 agents vs. goal 3 · 40+ trained'],
+  [9, 'E', 'HC', 0, 'FTS Jaboatão Go-Live (13/10)'],
+  [9, 'M', 'BPC', 0, 'Phoenix BR CAPEX in global validation'],
+  [9, 'M', 'BPC', 0, 'Hermes AI 2027 funding discussion'],
+  [9, 'E', 'HC', 0, 'Safety Suite Indaiatuba · AI for safety · delivered early (Oct 14)'],
+  [9, 'E', 'X', 378000, 'Wrong Addition Tortuguitas · €378K · fewer raw-material errors'],
+  [9, 'E', 'X', 115000, 'HAP R&R + Chatbot · automated customer support · €115K'],
+  [9, 'E', 'X', 0, 'Copilot Forward PC Supply Chain LATAM · BR, AR, MX · ES & PT'],
+  [10, 'R', 'BPC', 0, 'Copilot AI Adoption #1 BW'],
+  [10, 'E', 'HC', 0, 'Project Orion AR · Data Foundation assessment · 75 stakeholders · 49 sessions · 13 sources · 4-wave roadmap'],
+  [10, 'E', 'HC', 301250, 'Phoenix · Data Squad BR · €301K value unlock · 7,712 h saved · 91 screens · +16 p.p. FA-CD'],
+  [10, 'M', 'BPC', 0, 'EDDGIE BR H2 · CRM in test'],
+  [10, 'M', 'BPC', 0, 'DMP Mexico Go-Live (planned)'],
+  [10, 'E', 'X', 120000, 'Mistral & Unitrack · OSA/STK prioritization · €120K · +0.2% OSA'],
+  [11, 'M', 'BPC', 0, 'EDDGIE BR H2 · CRM deploy 01/12'],
+  [11, 'M', 'HC', 0, 'SPC Indaiatuba · Statistical Process Control (PGLS)'],
 ];
 
 // Nos textos, *asteriscos* marcam as palavras em destaque (as que no deck aparecem "em chamas").
 const DEFAULT_CONFIG = () => ({
-  evento: { titulo: 'CDIO HC + BPC', sub: 'Townhall 2026', sobre: 'TOWNHALL DE FIM DE ANO', data: '11 DEZ 2026', local: 'The Garage', destino: 'DEZ 11 2027', presente: 'DEZ 11 2026', partida: 'JAN 01 2026' },
-  atos: ['Reconectar', 'Rebobinar 2026', 'Reconhecer', 'Avançar para 2027'],
+  evento: { titulo: 'CDIO HC + BPC', sub: '2026 Townhall', sobre: 'YEAR-END TOWNHALL', data: 'DEC 11 2026', local: 'The Garage', destino: 'DEC 11 2027', presente: 'DEC 11 2026', partida: 'JAN 01 2026' },
+  atos: ['Reconnect', 'Rewind 2026', 'Recognize', 'Fast-forward 2027'],
+  // Vídeo de abertura: o endereço do arquivo (https://… ou caminho do site). Vazio = o arquivo é arrastado para a tela do telão
+  // (ele fica guardado no navegador do telão). auto: começa a tocar assim que o passo entra no ar.
+  abertura: { kicker: 'Opening', titulo: 'Back to the *Future*', sub: 'CDIO HC + BPC · 2026 Townhall', video: '', auto: true },
   agenda: {
-    kicker: 'Roteiro do dia · The Garage', titulo: 'O *plano de voo* de hoje', inicio: '14:00',
-    // ato (1 a 4) · título · detalhe · minutos · passo do roteiro a que o item corresponde (para marcar onde o evento está)
+    kicker: 'Run of show · The Garage', titulo: 'Today\'s *flight plan*', inicio: '14:00',
+    // ato (1 a 4) · título · detalhe · minutos (só para calcular os horários: não aparecem na tela) · passo do roteiro a que o item corresponde
     itens: [
-      { ato: 1, t: 'Chegada e vídeo de abertura', d: 'Música · De Volta para o Futuro / gancho da DeLorean', min: 10, ref: 'checkin' },
-      { ato: 1, t: 'Boas-vindas e jornada', d: 'Monserrat, William e Luciano', min: 10, ref: 'boasvindas' },
-      { ato: 1, t: 'Conexão', d: 'Speed-connection em duplas · Nicolas e Douglas', min: 20, ref: 'connections' },
-      { ato: 2, t: 'Jornada 2026', d: 'Resultados, impacto e aprendizados da liderança · Claudia e Fermín', min: 35, ref: 'almanaque' },
-      { ato: 2, t: 'Reflexão', d: 'Como a IA nos ajudou em 2026 · da experimentação à geração de valor', min: 15, ref: 'reflexao' },
-      { ato: 3, t: 'Reconhecimento 2026', d: 'Homenagens aos stakeholders · 2 BPC + 2 HC', min: 25, ref: 'reconhecimento' },
-      { ato: 3, t: 'Intervalo', d: 'Fechar 2026 · reabastecer antes da viagem para 2027', min: 15, ref: 'intervalo' },
-      { ato: 4, t: 'Transição e visão 2027', d: 'De Volta para o Futuro · Claudia e Fermín', min: 30, ref: 'visao' },
-      { ato: 4, t: 'Sucesso', d: 'Manifesto 2027 · compromisso coletivo no app', min: 15, ref: 'sucesso' },
-      { ato: 4, t: '88 MPH · Encerramento', d: 'Vozes jovens · acelerar juntos', min: 5, ref: 'mph' },
+      { ato: 1, t: 'Arrival & opening video', d: 'Check-in in the app · Back to the Future / DeLorean hook', min: 10, ref: 'checkin' },
+      { ato: 1, t: 'Welcome & journey', d: 'Monserrat, William & Luciano', min: 10, ref: 'boasvindas' },
+      { ato: 1, t: 'Connection', d: 'Speed-connection in pairs · Nicolas & Douglas', min: 20, ref: 'connections' },
+      { ato: 2, t: '2026 Journey', d: 'Outcomes, impact & leadership takeaways · Claudia & Fermín', min: 35, ref: 'almanaque' },
+      { ato: 2, t: 'Reflection', d: 'How AI helped us in 2026 · from experimentation to value realization', min: 15, ref: 'reflexao' },
+      { ato: 3, t: 'Recognition 2026', d: 'Stakeholder tributes · 2 BPC + 2 HC', min: 25, ref: 'reconhecimento' },
+      { ato: 3, t: 'Break', d: 'Close 2026 · refuel before the journey to 2027', min: 15, ref: 'intervalo' },
+      { ato: 4, t: '2027 transition & vision', d: 'Back to the Future · Claudia & Fermín', min: 30, ref: 'visao' },
+      { ato: 4, t: 'Success', d: '2027 Manifesto · collective commitment in the app', min: 15, ref: 'sucesso' },
+      { ato: 4, t: '88 MPH · Closing', d: 'Young voices · accelerate together', min: 5, ref: 'mph' },
     ],
   },
   boasvindas: {
-    kicker: 'Boas-vindas', frase: 'Fechar 2026 com *orgulho*. Sair com um *destino* claro para 2027.', min: 10,
-    pessoas: [{ nome: 'Monserrat Diaz', papel: 'BOAS-VINDAS E JORNADA' }, { nome: 'William Manganeli', papel: 'BOAS-VINDAS E JORNADA' }, { nome: 'Luciano Barbosa', papel: 'CONTEXTO DA LIDERANÇA' }],
-    faixa: 'BOAS-VINDAS · DE VOLTA PARA O FUTURO · 2026 → 2027',
+    kicker: 'Welcome', frase: 'Close 2026 with *pride*. Leave with a clear 2027 *destination*.',
+    pessoas: [{ nome: 'Monserrat Diaz', papel: 'WELCOME & JOURNEY' }, { nome: 'William Manganeli', papel: 'WELCOME & JOURNEY' }, { nome: 'Luciano Barbosa', papel: 'LEADERSHIP CONTEXT' }],
+    faixa: 'WELCOME · BACK TO THE FUTURE · 2026 → 2027',
+    nuvemTitulo: 'How the crew *arrived* today', // a nuvem das "duas palavras" que cada pessoa responde logo depois do login
   },
   almanaque: {
-    kicker: 'Frente 2 · Reconectar 2026', titulo: 'Nosso *almanaque* 2026', sub: 'Um ano de entregas, mês a mês.', quem: 'Claudia Meira e Fermín Grandas', min: 35,
-    kpis: [{ v: '94%', l: 'Portfólio no prazo' }, { v: '€35M+', l: 'Economia-alvo' }, { v: '#1', l: 'Adoção de IA Copilot · BW' }],
-    kpiEntregas: 'Entregues HC + BPC', kpiBeneficios: 'Benefícios entregues em 2026',
+    kicker: 'Front 2 · Reconnect 2026', titulo: 'Our 2026 *almanac*', sub: 'A year of delivery, month by month.', quem: 'Claudia Meira & Fermín Grandas',
+    kpis: [{ v: '94%', l: 'Portfolio on track' }, { v: '€35M+', l: 'Targeted savings' }, { v: '#1', l: 'Copilot AI Adoption BW' }],
+    kpiEntregas: 'Delivered HC + BPC', kpiBeneficios: 'Benefits delivered 2026',
     itens: ALMANAQUE.map(([m, k, bu, v, t]) => ({ m, k, bu, v, t })),
-    fonte: 'Fonte: AURA, Monthly Portfolio Update, Big Rocks Tracking (10 Deployed · 09 PGLS), CDIO LATAM 2026 H2 Results (Roadmap 2026 & Core Projects), decks dos Townhalls de HC Supply Chain BR e Argentina/River Plate.',
+    fonte: 'Source: AURA, Monthly Portfolio Update, Big Rocks Tracking (10 Deployed · 09 PGLS), CDIO LATAM 2026 H2 Results (Roadmap 2026 & Core Projects), HC Supply Chain BR & Argentina/River Plate Townhall decks.',
     pagina: {
-      kicker: 'Jornada 2026 · Entregue', titulo: 'Um ano, *uma página*: tudo o que o CDIO HC + BPC entregou em 2026',
-      nota: 'Benefícios = economia e valor entregues, reportados por projeto. Não somados: €104M de risco evitado (CAE Argentina) · €10,4M esperados a partir do Q4\'27 (Inbound WMS). Valores pendentes de validação dos responsáveis.',
-      lideranca: 'Claudia Meira, Diretora de BPC, e Fermín Grandas, Diretor de HC · Resultados, impacto e os poucos aprendizados que definem 2026. O almanaque é evidência visual, não uma revisão projeto a projeto.',
+      kicker: '2026 Journey · Delivered', titulo: 'One year, *one page*: everything CDIO HC + BPC delivered in 2026',
+      nota: 'Benefits = delivered savings & value reported per project. Not summed: €104M risk avoided (CAE Argentina) · €10.4M expected from Q4\'27 (Inbound WMS). Values pending owner validation.',
+      lideranca: 'Claudia Meira, BPC Director & Fermín Grandas, HC Director · Outcomes, impact and the few lessons that define 2026. The almanac is visual evidence, not a project-by-project review.',
     },
   },
   ia: {
-    kicker: 'Frente 2 · IA em 2026', titulo: 'Como a IA nos ajudou em *2026*', min: 15, quem: 'Giovana, Pedro e Felipe',
-    texto: 'Da experimentação à adoção, aos casos de uso e à geração de valor. Uma visão concisa dos destaques que mudaram a nossa linha do tempo.',
-    faixa: 'DESTAQUES DE IA 2026 · EXPERIMENTAÇÃO → GERAÇÃO DE VALOR',
+    kicker: 'Front 2 · AI in 2026', titulo: 'How AI helped us in *2026*', quem: 'Giovana, Pedro & Felipe',
+    texto: 'From experimentation to adoption, use cases and value realization. A concise view of the highlights that changed our timeline.',
+    faixa: 'AI 2026 HIGHLIGHTS · EXPERIMENTATION → VALUE REALIZATION',
     nota: 'Use apenas destaques selecionados, exemplos e impacto mensurável. Deixe os bloqueios e o dashboard completo fora da narrativa do Townhall.',
   },
   reconhecimento: {
-    kicker: 'Reconhecimento 2026', min: 25,
-    abertura: ['A tecnologia nos move.', '*As pessoas nos levam até lá.*'], aberturaSub: 'Antes de o raio cair, vamos ouvir por que isso é o que mais importa.',
-    tributo: 'Nossas pessoas são o *Flux Capacitor*', fala: 'Claudia Meira / Luciano Barbosa (a confirmar) · 3–5 min', video: '',
-    premiosTitulo: 'Os *Prêmios Torre do Relógio* 2026', hallTitulo: 'Hall da Fama 2026', hallSub: 'As pessoas que tornaram possível a linha do tempo de 2026.',
+    kicker: 'Recognition 2026',
+    abertura: ['Technology moves us.', '*People take us there.*'], aberturaSub: 'Before the lightning strikes, let\'s hear why this matters most.',
+    tributo: 'Our people are the *flux capacitor*', fala: 'Claudia Meira / Luciano Barbosa (to confirm) · 3–5 min', video: '',
+    premiosTitulo: 'The 2026 *Clock Tower Awards*', hallTitulo: 'Hall of Fame 2026', hallSub: 'The people who made the 2026 timeline possible.',
     exemplo: true, // os nomes do deck são de exemplo: o aviso sai quando os indicados forem editados
     // como o Flux Capacitor carrega na cerimônia: 'mic' = o microfone ouve os aplausos da sala (quanto mais barulho, mais rápido);
     // 'toques' = cada toque no botão dos celulares soma energia; 'ambos' = as duas coisas
     carga: 'mic',
     // ic: ícone (i raio · c dupla · b ferramenta · f relógio) · n: prêmio · k: categoria · indicados: nome e projeto · vencedor: posição na lista (1 a 4)
     premios: [
-      { ic: 'i', n: 'Flux Capacitor', k: 'IMPACTO', porque: 'A fonte de energia do ano. Reconhece a entrega de valor de negócio mensurável em 2026.',
-        criterios: ['Valor mensurável (economia, crescimento, produtividade)', 'Compromissos cumpridos', 'Visível para o negócio'],
-        indicados: [{ nome: 'Caio Souza', projeto: 'Phoenix BR' }, { nome: 'William Manganeli', projeto: 'Portfólio' }, { nome: 'Fernando Bolivar', projeto: 'Democratização da IA' }, { nome: 'Thaiz Cabral', projeto: 'Entregas' }],
-        vencedor: 1, citacao: 'Por fazer o Phoenix avançar e transformar o trabalho de base de dados em valor para o negócio.' },
-      { ic: 'c', n: 'Marty & Doc', k: 'COLABORAÇÃO', porque: 'Sem a dupla, não há viagem no tempo. Reconhece as pontes construídas entre negócio, mercados, BUs e CDIO.',
-        criterios: ['Trabalho entre times ou entre mercados', 'Responsabilidade compartilhada', 'Fez os outros terem sucesso'],
-        indicados: [{ nome: 'Vinicius & Nicolas', projeto: 'Conexões do Townhall' }, { nome: 'Giovana & Lucas', projeto: 'App Sucesso 2027' }, { nome: 'Felipe & Pedro', projeto: 'Reconectar 2026' }, { nome: 'Nicolas Kuhnast', projeto: 'Adoção do Copilot' }],
-        vencedor: 2, citacao: 'Por construírem juntos, entre times, uma experiência que toda a organização vai usar.' },
-      { ic: 'b', n: 'The Garage', k: 'BASTIDORES', porque: 'Onde a máquina é construída. Reconhece o trabalho invisível que mantém tudo funcionando.',
-        criterios: ['Governança, dados, relatórios, rituais', 'Consistência e confiabilidade', 'Pouca visibilidade, alta dependência'],
-        indicados: [{ nome: 'Nicolas Kuhnast', projeto: 'Relatórios' }, { nome: 'Thaiz Cabral', projeto: 'Operações' }, { nome: 'Monserrat Diaz', projeto: 'Governança e AURA' }, { nome: 'William Manganeli', projeto: 'Rituais de portfólio' }],
-        vencedor: 1, citacao: 'Por manter os números, os rituais e os relatórios em dia, todos os meses.' },
-      { ic: 'f', n: 'Great Scott!', k: 'PRONTOS PARA O FUTURO', porque: 'A descoberta que muda a linha do tempo. Reconhece quem está nos preparando para 2027.',
-        criterios: ['IA e novas capacidades', 'Aprendizado e adoção', 'Destrava as prioridades de 2027'],
-        indicados: [{ nome: 'Fernando Bolivar', projeto: 'Democratização da IA' }, { nome: 'Monserrat Diaz', projeto: 'Agente AURA' }, { nome: 'Caio Souza', projeto: 'Hermes AI' }, { nome: 'Lucas', projeto: 'App DeLorean' }],
-        vencedor: 2, citacao: 'Por construir um agente de IA que muda a forma como a liderança acompanha e decide.' },
+      { ic: 'i', n: 'Flux Capacitor', k: 'IMPACT', porque: 'The power source of the year. Recognizes delivery of measurable business value in 2026.',
+        criterios: ['Measurable value (savings, growth, productivity)', 'Delivered on commitments', 'Visible to the business'],
+        indicados: [{ nome: 'Caio Souza', projeto: 'Phoenix BR' }, { nome: 'William Manganeli', projeto: 'Portfolio' }, { nome: 'Fernando Bolivar', projeto: 'AI Democratization' }, { nome: 'Thaiz Cabral', projeto: 'Delivery' }],
+        vencedor: 1, citacao: 'For moving Phoenix forward and turning data foundation work into business value.' },
+      { ic: 'c', n: 'Marty & Doc', k: 'COLLABORATION', porque: 'No time travel without the duo. Recognizes bridges built across business, markets, BU and CDIO.',
+        criterios: ['Cross-team or cross-market work', 'Shared ownership', 'Made others successful'],
+        indicados: [{ nome: 'Vinicius & Nicolas', projeto: 'Townhall Connection' }, { nome: 'Giovana & Lucas', projeto: 'Success 2027 app' }, { nome: 'Felipe & Pedro', projeto: 'Reconnect 2026' }, { nome: 'Nicolas Kuhnast', projeto: 'Copilot Adoption' }],
+        vencedor: 2, citacao: 'For building together, across teams, an experience the whole organization will use.' },
+      { ic: 'b', n: 'The Garage', k: 'BEHIND THE SCENES', porque: 'Where the machine gets built. Recognizes invisible work that keeps everything running.',
+        criterios: ['Governance, data, reporting, rituals', 'Consistency and reliability', 'Low visibility, high dependency'],
+        indicados: [{ nome: 'Nicolas Kuhnast', projeto: 'Reporting' }, { nome: 'Thaiz Cabral', projeto: 'Operations' }, { nome: 'Monserrat Diaz', projeto: 'Governance & AURA' }, { nome: 'William Manganeli', projeto: 'Portfolio rituals' }],
+        vencedor: 1, citacao: 'For keeping the numbers, rituals and reports right, every single month.' },
+      { ic: 'f', n: 'Great Scott!', k: 'FUTURE READY', porque: 'The breakthrough that changes the timeline. Recognizes those preparing us for 2027.',
+        criterios: ['AI and new capabilities', 'Learning and adoption', 'Unlocks 2027 priorities'],
+        indicados: [{ nome: 'Fernando Bolivar', projeto: 'AI Democratization' }, { nome: 'Monserrat Diaz', projeto: 'AURA agent' }, { nome: 'Caio Souza', projeto: 'Hermes AI' }, { nome: 'Lucas', projeto: 'DeLorean app' }],
+        vencedor: 2, citacao: 'For building an AI agent that changes how leadership tracks and decides.' },
     ],
   },
-  intervalo: { kicker: 'Intervalo', titulo: 'Reabastecendo a *DeLorean*', min: 15, texto: 'O Mr. Fusion está recarregando. Pegue um café, conheça alguém novo e volte antes de o relógio zerar.' },
-  visao: { kicker: 'Visão 2027', titulo: 'Para onde vamos…', nota: 'Estratégia CDIO LATAM 2027 · interativa', quem: 'Claudia Meira e Fermín Grandas', min: 30 },
-  manifesto: { kicker: 'Frente 3 · Compromisso 2027', mes: 'DEZ', dia: '11', ano: '2027', titulo: 'Nós conhecemos o destino de 2027.', pergunta: 'O que fez dele um sucesso?', faixa: 'QR INTERATIVO / APP · MANIFESTO COLETIVO 2027', quem: 'Lucas e Giovana', min: 15 },
-  mph: { kicker: 'Encerramento', antes: '2026 nos deu o impulso.', chegada: 'Bem-vindos a 2027', depois: 'Para onde vamos, construímos a estrada juntos.', quem: 'Vozes jovens · acelerar juntos', min: 5 },
+  intervalo: { kicker: 'Break', titulo: 'Refueling the *DeLorean*', min: 15, texto: 'Mr. Fusion is recharging. Grab a coffee, meet someone new, and be back before the clock hits zero.' },
+  visao: { kicker: '2027 Vision', titulo: 'Where we\'re going…', nota: 'CDIO LATAM 2027 Strategy · interactive', quem: 'Claudia Meira & Fermín Grandas' },
+  manifesto: { kicker: 'Front 3 · 2027 Commitment', mes: 'DEC', dia: '11', ano: '2027', titulo: 'We know the 2027 destination.', pergunta: 'What made it a success?', faixa: 'INTERACTIVE QR / APP · COLLECTIVE 2027 MANIFESTO', quem: 'Lucas & Giovana' },
+  mph: { kicker: 'Closing', antes: '2026 gave us the momentum.', chegada: 'Welcome to 2027', depois: 'Where we\'re going, we build the road together.', quem: 'Young voices · accelerate together' },
   // Quem conduz cada bloco: aparece no telão com o nome e a foto de perfil (como nas boas-vindas).
   // connections, reflexao e sucesso são os blocos interativos; os outros são cenas.
   anfitrioes: {
@@ -171,20 +180,20 @@ const DEFAULT_CONFIG = () => ({
   creditos: {
     // "TÍTULO: nome, nome" por linha; o elenco (todos os nomes do check-in) entra sozinho no fim
     blocos: [
-      { h: 'PRODUTORES EXECUTIVOS', l: ['Claudia Meira', 'Luciano Barbosa'] },
-      { h: 'FRENTE 1 · CONEXÃO', l: ['Nicolas Kuhnast', 'Douglas Hamasaki'] },
-      { h: 'PARTICIPAÇÃO ESPECIAL · ORGANIZAÇÃO', l: ['Vinicius Santos'] },
-      { h: 'FRENTE 2 · IA EM 2026', l: ['Giovana', 'Pedro', 'Felipe'] },
-      { h: 'FRENTE 3 · MANIFESTO 2027', l: ['Lucas', 'Giovana'] },
-      { h: 'ESTRATÉGIA E NARRATIVA', l: ['Monserrat Diaz', 'William Manganeli'] },
-      { h: 'APP DELOREAN E PERSONAGEM DE IA', l: ['Lucas & Giovana'] },
-      { h: 'LOCAL', l: ['The Garage'] },
-      { h: 'ESTRELANDO', l: ['Cada integrante do CDIO HC + BPC LATAM', 'que fez 2026 acontecer'] },
-      { h: 'AGRADECIMENTOS ESPECIAIS', l: ['Nossos parceiros de negócio no Brasil, México, River Plate e Andina', 'Times globais de CDIO e D&T', 'Todo mundo que compartilhou sua história de IA hoje'] },
+      { h: 'EXECUTIVE PRODUCERS', l: ['Claudia Meira', 'Luciano Barbosa'] },
+      { h: 'FRONT 1 · CONNECTION', l: ['Nicolas Kuhnast', 'Douglas Hamasaki'] },
+      { h: 'SPECIAL GUEST · ORGANIZATION', l: ['Vinicius Santos'] },
+      { h: 'FRONT 2 · AI IN 2026', l: ['Giovana', 'Pedro', 'Felipe'] },
+      { h: 'FRONT 3 · 2027 MANIFESTO', l: ['Lucas', 'Giovana'] },
+      { h: 'STRATEGY & STORYLINE', l: ['Monserrat Diaz', 'William Manganeli'] },
+      { h: 'DELOREAN APP & AI CHARACTER', l: ['Lucas & Giovana'] },
+      { h: 'LOCATION', l: ['The Garage'] },
+      { h: 'STARRING', l: ['Every member of CDIO HC + BPC LATAM', 'who made 2026 happen'] },
+      { h: 'SPECIAL THANKS', l: ['Our business partners across Brazil, Mexico, River Plate and Andina', 'Global CDIO & D&T teams', 'Everyone who shared their AI story today'] },
     ],
     // frases que passam antes dos créditos (o final estendido do deck)
-    final: [['2026', 'O ano em que entregamos'], ['Obrigado', 'A cada integrante do CDIO HC + BPC LATAM'], ['Juntos', 'Brasil · México · River Plate · Andina'], ['Cada go-live', 'Cada ritual · cada relatório · cada história'], ['2027', 'Para onde vamos, construímos a estrada juntos']],
-    fim: 'Obrigado', fimSub: 'Nos vemos no futuro.',
+    final: [['2026', 'The year we delivered'], ['Thank you', 'To every member of CDIO HC + BPC LATAM'], ['Together', 'Brazil · Mexico · River Plate · Andina'], ['Every go-live', 'Every ritual · every report · every story'], ['2027', 'Where we\'re going, we build the road together']],
+    fim: 'Thank you', fimSub: 'See you in the future.',
   },
 });
 
@@ -194,14 +203,15 @@ const int = (v, lo, hi, fb) => (Number.isFinite(Number(v)) ? clamp(Math.round(Nu
 const url = v => { const u = String(v ?? '').trim(); return /^(https?:\/\/|\/)[^\s"'<>]*$/i.test(u) ? u.slice(0, 500) : ''; };
 const fail = (message, status = 409) => { throw Object.assign(new Error(message), { status }); };
 const hhmm = v => { const m = String(v || '').trim().match(/^(\d{1,2})[:h](\d{2})$/); return m && +m[1] < 24 && +m[2] < 60 ? `${String(+m[1]).padStart(2, '0')}:${m[2]}` : null; };
-const fmtE = v => (v >= 1e6 ? `€${(v / 1e6).toFixed(1).replace('.', ',')}M` : `€${Math.round(v / 1e3)}K`);
+const fmtE = v => (v >= 1e6 ? `€${(v / 1e6).toFixed(1)}M` : `€${Math.round(v / 1e3)}K`); // em inglês, como no deck: €51.3M
 
 // Confere uma seção vinda do painel: só campos conhecidos, com os tipos e tamanhos certos. O que não vier fica como está.
 function cleanSection(key, cur, p) {
   if (!p || typeof p !== 'object') return cur;
-  const out = { ...cur }, txt = (k, n = 200) => { if (p[k] !== undefined) out[k] = clip(p[k], n); }, min = () => { if (p.min !== undefined) out.min = int(p.min, 0, 600, cur.min); };
+  const out = { ...cur }, txt = (k, n = 200) => { if (p[k] !== undefined) out[k] = clip(p[k], n); };
   switch (key) {
     case 'evento': ['titulo', 'sub', 'sobre', 'data', 'local', 'destino', 'presente', 'partida'].forEach(k => txt(k, 60)); break;
+    case 'abertura': txt('kicker', 80); txt('titulo', 80); txt('sub', 120); if (p.video !== undefined) out.video = url(p.video); if (p.auto !== undefined) out.auto = !!p.auto; break;
     case 'agenda':
       txt('kicker', 80); txt('titulo', 80);
       if (p.inicio !== undefined) out.inicio = hhmm(p.inicio) || cur.inicio;
@@ -214,11 +224,11 @@ function cleanSection(key, cur, p) {
       }
       break;
     case 'boasvindas':
-      txt('kicker', 80); txt('frase', 240); txt('faixa', 120); min();
+      txt('kicker', 80); txt('frase', 240); txt('faixa', 120); txt('nuvemTitulo', 80);
       if (Array.isArray(p.pessoas)) out.pessoas = p.pessoas.slice(0, 6).map(x => ({ nome: clip(x && x.nome, 60), papel: clip(x && x.papel, 60) })).filter(x => x.nome);
       break;
     case 'almanaque':
-      txt('kicker', 80); txt('titulo', 80); txt('sub', 160); txt('quem', 80); txt('kpiEntregas', 60); txt('kpiBeneficios', 60); txt('fonte', 400); min();
+      txt('kicker', 80); txt('titulo', 80); txt('sub', 160); txt('quem', 80); txt('kpiEntregas', 60); txt('kpiBeneficios', 60); txt('fonte', 400);
       if (Array.isArray(p.kpis)) out.kpis = p.kpis.slice(0, 4).map(x => ({ v: clip(x && x.v, 12), l: clip(x && x.l, 60) })).filter(x => x.v);
       if (Array.isArray(p.itens)) {
         const itens = p.itens.slice(0, 200).map(x => ({ m: int(x && x.m, 0, 11, 0), k: TIPOS[x && x.k] ? x.k : 'M', bu: BUS[x && x.bu] ? x.bu : '', v: int(x && x.v, 0, 1e10, 0), t: clip(x && x.t, 220) })).filter(x => x.t);
@@ -227,9 +237,9 @@ function cleanSection(key, cur, p) {
       }
       if (p.pagina && typeof p.pagina === 'object') out.pagina = { kicker: clip(p.pagina.kicker ?? cur.pagina.kicker, 80), titulo: clip(p.pagina.titulo ?? cur.pagina.titulo, 160), nota: clip(p.pagina.nota ?? cur.pagina.nota, 400), lideranca: clip(p.pagina.lideranca ?? cur.pagina.lideranca, 400) };
       break;
-    case 'ia': txt('kicker', 80); txt('titulo', 100); txt('texto', 400); txt('faixa', 120); txt('nota', 400); txt('quem', 80); min(); break;
+    case 'ia': txt('kicker', 80); txt('titulo', 100); txt('texto', 400); txt('faixa', 120); txt('nota', 400); txt('quem', 80); break;
     case 'reconhecimento':
-      txt('kicker', 80); txt('aberturaSub', 200); txt('tributo', 120); txt('fala', 160); txt('premiosTitulo', 100); txt('hallTitulo', 80); txt('hallSub', 160); min();
+      txt('kicker', 80); txt('aberturaSub', 200); txt('tributo', 120); txt('fala', 160); txt('premiosTitulo', 100); txt('hallTitulo', 80); txt('hallSub', 160);
       if (p.video !== undefined) out.video = url(p.video);
       if (p.exemplo !== undefined) out.exemplo = !!p.exemplo;
       if (p.carga !== undefined) out.carga = ['mic', 'toques', 'ambos'].includes(p.carga) ? p.carga : cur.carga;
@@ -246,9 +256,9 @@ function cleanSection(key, cur, p) {
       }
       break;
     case 'intervalo': txt('kicker', 80); txt('titulo', 100); txt('texto', 300); if (p.min !== undefined) out.min = int(p.min, 1, 120, cur.min); break;
-    case 'visao': txt('kicker', 100); txt('titulo', 80); txt('nota', 100); txt('quem', 80); min(); break;
-    case 'manifesto': txt('kicker', 80); txt('mes', 6); txt('dia', 4); txt('ano', 6); txt('titulo', 120); txt('pergunta', 120); txt('faixa', 120); txt('quem', 80); min(); break;
-    case 'mph': txt('kicker', 80); txt('antes', 160); txt('chegada', 60); txt('depois', 160); txt('quem', 80); min(); break;
+    case 'visao': txt('kicker', 100); txt('titulo', 80); txt('nota', 100); txt('quem', 80); break;
+    case 'manifesto': txt('kicker', 80); txt('mes', 6); txt('dia', 4); txt('ano', 6); txt('titulo', 120); txt('pergunta', 120); txt('faixa', 120); txt('quem', 80); break;
+    case 'mph': txt('kicker', 80); txt('antes', 160); txt('chegada', 60); txt('depois', 160); txt('quem', 80); break;
     case 'anfitrioes':
       for (const k of [...HOST_KEYS, 'especial']) if (Array.isArray(p[k])) out[k] = p[k].slice(0, 6).map(x => clip(x, 60)).filter(Boolean);
       txt('especialNota', 120);
@@ -275,6 +285,8 @@ function cleanConfig(saved) {
 const DRAW_MS = 8600;      // sorteio do prêmio: holofote girando, pausa, raio (o telão anima; o servidor vira para "vencedor")
 const PLAY_MS = 3200;      // "tocar o ano": um mês a cada 3,2 s (como no deck)
 const defaultState = () => ({
+  abertura: { play: false, at: 0, fim: false },                                                 // vídeo de abertura: tocando, desde quando, terminou
+  boasvindas: { nuvem: false },                                                                 // a nuvem das "duas palavras" no telão
   almanaque: { mes: -1, tocando: false, pagina: false, fim: 0, off: [] },                       // mês -1 = ainda em branco
   reconhecimento: { fase: 'intro', premio: null, passo: 'categoria', at: 0, carga: 0, feitos: [], video: false },
   intervalo: { phase: 'idle', endsAt: null, remaining: null },
@@ -282,10 +294,25 @@ const defaultState = () => ({
   mph: { at: null },
 });
 
-const CONFIG_VERSION = 2; // v2: Reflexão e Sucesso na agenda, anfitriões por bloco (na Visão 2027 os nomes saem da linha de cima e vão para as placas)
+// v2: Reflexão e Sucesso na agenda, anfitriões por bloco · v3: o conteúdo das cenas passou para o inglês (deck original),
+// entrou o vídeo de abertura e saíram os minutos de cada bloco
+const CONFIG_VERSION = 3;
 function createCenas() {
   const saved = kvGet('cenas', {}) || {};
-  if (saved.config && (saved.v || 1) < CONFIG_VERSION) for (const k of ['agenda', 'visao']) delete saved.config[k];
+  if (saved.config && (saved.v || 1) < CONFIG_VERSION) {
+    // Dos textos guardados em português fica só o que não depende do idioma: quem conduz cada bloco, o início da agenda, a
+    // duração do intervalo, o vídeo-tributo e como o Flux Capacitor carrega; e, se os indicados já foram trocados pelos de
+    // verdade, os indicados, o vencedor e a citação de cada prêmio.
+    const old = saved.config, keep = {}, r = old.reconhecimento;
+    if (old.anfitrioes) keep.anfitrioes = old.anfitrioes;
+    if (old.agenda && old.agenda.inicio) keep.agenda = { inicio: old.agenda.inicio };
+    if (old.intervalo && old.intervalo.min) keep.intervalo = { min: old.intervalo.min };
+    if (r) {
+      const d = DEFAULT_CONFIG().reconhecimento, real = r.exemplo === false && Array.isArray(r.premios);
+      keep.reconhecimento = { video: r.video || '', carga: r.carga, ...(real ? { exemplo: false, premios: d.premios.map((p, i) => (r.premios[i] ? { ...p, indicados: r.premios[i].indicados, vencedor: r.premios[i].vencedor, citacao: r.premios[i].citacao || p.citacao } : p)) } : {}) };
+    }
+    saved.config = keep;
+  }
   let config = cleanConfig(saved.config);
   const state = defaultState();
   for (const k of Object.keys(state)) if (saved.state && saved.state[k] && typeof saved.state[k] === 'object') Object.assign(state[k], saved.state[k]);
@@ -319,25 +346,26 @@ function createCenas() {
     let live = -1; itens.forEach(x => { if (x.pos >= 0 && x.pos <= cur) live = x.i; });
     const total = itens.reduce((s, x) => s + x.min, 0);
     return { kicker: a.kicker, titulo: a.titulo, inicio: a.inicio, fim: f(h * 60 + m + total), total, data: config.evento.data, local: config.evento.local,
-      atos: config.atos.map((nome, k) => { const r = itens.filter(x => x.ato === k + 1); return { n: `ATO ${['I', 'II', 'III', 'IV'][k]}`, nome, de: r.length ? r[0].hora : '', ate: r.length ? r[r.length - 1].fim : '', min: r.reduce((s, x) => s + x.min, 0) }; }),
-      itens: itens.map(x => ({ ato: x.ato, t: x.t, d: x.d, min: x.min, hora: x.hora, estado: x.i === live ? 'agora' : live >= 0 && x.i < live ? 'feito' : '' })) };
+      atos: config.atos.map((nome, k) => { const r = itens.filter(x => x.ato === k + 1); return { n: `ACT ${['I', 'II', 'III', 'IV'][k]}`, nome, de: r.length ? r[0].hora : '', ate: r.length ? r[r.length - 1].fim : '', min: r.reduce((s, x) => s + x.min, 0) }; }),
+      itens: itens.map(x => ({ ato: x.ato, t: x.t, d: x.d, min: x.min, hora: x.hora, fone: PHONE_REFS.includes(x.ref), estado: x.i === live ? 'agora' : live >= 0 && x.i < live ? 'feito' : '' })) };
   }
 
   /* ---------- o que vai para todos (telão e celulares) ---------- */
-  const actOf = kind => { const k = META[kind].act; return k < 0 ? null : { n: `ATO ${['I', 'II', 'III', 'IV'][k]}`, nome: config.atos[k], k }; };
+  const actOf = kind => { const k = META[kind].act; return k < 0 ? null : { n: `ACT ${['I', 'II', 'III', 'IV'][k]}`, nome: config.atos[k], k }; };
   function publicState(kind, ctx) {
     if (!META[kind]) return null;
     const base = { kind, name: META[kind].name, ato: actOf(kind) };
     switch (kind) {
+      case 'abertura': return { ...base, ...config.abertura, live: { ...state.abertura } };
       case 'agenda': return { ...base, ...agendaView(ctx) };
-      case 'boasvindas': return { ...base, ...config.boasvindas };
+      case 'boasvindas': return { ...base, ...config.boasvindas, live: { ...state.boasvindas } };
       case 'almanaque': { const c = config.almanaque, s = state.almanaque; return { ...base, kicker: c.kicker, titulo: c.titulo, sub: c.sub, quem: names(hosts('almanaque')) || c.quem, kpis: c.kpis, kpiEntregas: c.kpiEntregas, kpiBeneficios: c.kpiBeneficios, itens: c.itens, fonte: c.fonte, pagina: c.pagina, stats: almanaqueStats(), meses: MONTHS, bus: BUS, tipos: TIPOS, live: { ...s } }; }
       case 'ia': { const { nota, ...c } = config.ia; return { ...base, ...c }; } // a nota é para quem apresenta: fica só no painel
       case 'reconhecimento': {
         const c = config.reconhecimento, s = state.reconhecimento, feitos = new Set(s.feitos);
         // o vencedor de cada prêmio só vai para os aparelhos quando o sorteio dele começa (o telão precisa saber onde o holofote para)
         const aberto = i => feitos.has(i) || (s.fase === 'cerimonia' && s.premio === i && ['sorteio', 'vencedor'].includes(s.passo));
-        return { ...base, kicker: c.kicker, abertura: c.abertura, aberturaSub: c.aberturaSub, tributo: c.tributo, fala: c.fala.replace(/\s*\(a confirmar\)/i, ''), video: c.video, premiosTitulo: c.premiosTitulo, hallTitulo: c.hallTitulo, hallSub: c.hallSub, exemplo: !!c.exemplo,
+        return { ...base, kicker: c.kicker, abertura: c.abertura, aberturaSub: c.aberturaSub, tributo: c.tributo, fala: c.fala.replace(/\s*\((a confirmar|to confirm)\)/i, ''), video: c.video, premiosTitulo: c.premiosTitulo, hallTitulo: c.hallTitulo, hallSub: c.hallSub, exemplo: !!c.exemplo,
           premios: c.premios.map((p, i) => ({ ic: p.ic, n: p.n, k: p.k, porque: p.porque, criterios: p.criterios, indicados: p.indicados, feito: feitos.has(i), ...(aberto(i) ? { vencedor: p.vencedor - 1, citacao: p.citacao } : {}) })),
           carga: c.carga || 'mic', quem: names(hosts('reconhecimento')),
           live: { fase: s.fase, premio: s.premio, passo: s.passo, at: s.at, carga: s.carga, nivel: s.passo === 'carga' ? s.nivel || 0 : 0, feitos: s.feitos, video: !!s.video, sorteioMs: DRAW_MS } };
@@ -352,7 +380,7 @@ function createCenas() {
   // quem conduz um bloco (nomes): o servidor junta a foto de perfil de cada um
   const hosts = key => (HOST_KEYS.includes(key) ? (config.anfitrioes[key] || []).slice() : []);
   const especial = () => ({ nomes: (config.anfitrioes.especial || []).slice(), nota: config.anfitrioes.especialNota || '' }); // participação especial (Conexões)
-  const names = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} e ${list[list.length - 1]}` : list[0] || '');
+  const names = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} & ${list[list.length - 1]}` : list[0] || '');
   const evento = () => ({ ...config.evento });
   const creditos = () => ({ ...config.creditos, titulo: config.evento.titulo, sub: config.evento.sub });
   const adminState = () => ({ kinds: KINDS, meta: META, config, state, stats: almanaqueStats(), months: MONTHS, bus: BUS, tipos: TIPOS, drawMs: DRAW_MS });
@@ -460,7 +488,7 @@ function createCenas() {
   function armBreak() {
     clearTimeout(breakT); breakT = null;
     const s = state.intervalo;
-    if (s.phase === 'run' && s.endsAt) breakT = setTimeout(() => { breakT = null; s.phase = 'done'; s.endsAt = null; s.remaining = 0; emit({ title: 'Fim do intervalo', body: 'A DeLorean está abastecida. Voltem aos seus lugares!' }); }, Math.max(0, s.endsAt - now()) + 50);
+    if (s.phase === 'run' && s.endsAt) breakT = setTimeout(() => { breakT = null; s.phase = 'done'; s.endsAt = null; s.remaining = 0; emit({ title: 'Break is over', body: 'The DeLorean is refueled. Back to your seats!' }); }, Math.max(0, s.endsAt - now()) + 50);
   }
   function intervalo(a) {
     const s = state.intervalo, left = () => (s.phase === 'run' && s.endsAt ? Math.max(0, Math.ceil((s.endsAt - now()) / 1000)) : s.remaining === null ? config.intervalo.min * 60 : s.remaining);
@@ -475,9 +503,24 @@ function createCenas() {
     armBreak(); emit();
   }
 
+  /* ---------- vídeo de abertura: tocar, pausar, recomeçar, terminou ---------- */
+  function abertura(a) {
+    const s = state.abertura;
+    switch (a.action) {
+      case 'play': s.play = a.on === undefined ? true : !!a.on; if (s.play) { s.fim = false; if (!s.at) s.at = now(); } break;
+      case 'reiniciar': s.play = true; s.fim = false; s.at = now(); break;   // "at" novo: o telão volta o vídeo para o começo
+      case 'fim': s.play = false; s.fim = true; break;                       // o vídeo chegou ao fim (o telão avisa) ou o Doc encerrou
+      case 'reset': Object.assign(s, defaultState().abertura); break;
+      default: fail('Comando inválido.', 400);
+    }
+    emit();
+  }
+
   function command(kind, a) {
     if (!a || typeof a !== 'object') fail('Comando inválido.', 400);
     switch (kind) {
+      case 'abertura': return abertura(a);
+      case 'boasvindas': if (a.action !== 'nuvem') fail('Comando inválido.', 400); state.boasvindas.nuvem = !!a.on; return emit();
       case 'almanaque': return almanaque(a);
       case 'reconhecimento': return reconhecimento(a);
       case 'intervalo': return intervalo(a);
@@ -489,6 +532,8 @@ function createCenas() {
   // A cena entrou no ar vinda de outro passo: começa do início, como no deck (o almanaque em branco, o reconhecimento
   // na abertura, o velocímetro em zero). Os prêmios já revelados e o cronômetro do intervalo ficam como estão.
   function enter(kind) {
+    if (kind === 'abertura') Object.assign(state.abertura, { play: !!config.abertura.auto, at: now(), fim: false }); // o vídeo começa do início
+    if (kind === 'boasvindas') state.boasvindas.nuvem = false;
     if (kind === 'almanaque') { stopPlay(); Object.assign(state.almanaque, { mes: -1, tocando: false, pagina: false, fim: 0 }); }
     if (kind === 'reconhecimento') { clearTimeout(drawT); drawT = null; Object.assign(state.reconhecimento, { fase: 'intro', premio: null, passo: 'categoria', carga: 0, at: now(), video: false }); }
     if (kind === 'mph') state.mph.at = null;
@@ -496,6 +541,7 @@ function createCenas() {
   }
   // O evento saiu de uma cena (outro passo, aviso, dinâmica): o que estava "tocando" para. O cronômetro do intervalo segue contando.
   function sync(onAir) {
+    if (onAir !== 'abertura' && state.abertura.play) { state.abertura.play = false; save(); }
     if (onAir !== 'almanaque' && state.almanaque.tocando) { stopPlay(); save(); }
     const s = state.reconhecimento;
     if (onAir !== 'reconhecimento' && (s.passo === 'carga' || s.passo === 'sorteio') && s.fase === 'cerimonia') { clearTimeout(drawT); drawT = null; s.passo = 'indicados'; s.carga = 0; save(); }
@@ -545,4 +591,4 @@ function createCenas() {
     onChange: fn => listeners.push(fn), onPulse: fn => pulses.push(fn), agendaView, config: () => config };
 }
 
-module.exports = { createCenas, KINDS, META, MONTHS, HOST_KEYS, DEFAULT_CONFIG };
+module.exports = { createCenas, KINDS, META, MONTHS, HOST_KEYS, PHONE_REFS, DEFAULT_CONFIG };

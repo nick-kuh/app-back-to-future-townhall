@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
-const { Engine, TOTAL_ROUNDS } = require('./engine');
+const { Engine, TOTAL_ROUNDS, CONFIDENTIAL_STEPS } = require('./engine');
 const { DB_PATH, DATA_DIR } = require('./db');
 const { createSucesso } = require('./sucesso');
 const { createReflexao } = require('./reflexao');
@@ -13,7 +13,20 @@ const { createCenas } = require('./cenas');
 const doc = require('./doc');
 
 const PORT = Number(process.env.PORT) || 3000;
+// Dois níveis de acesso ao painel:
+//   senha mestra (ADMIN_PASSWORD): o Painel do Doc completo, com todo o conteúdo do townhall (roteiro, cenas, prêmios, estratégia);
+//   senha das dinâmicas (DINAMICAS_PASSWORD, opcional): o "segundo app", só com Conexões, Reflexão e Sucesso. Quem entra com
+//   ela não vê nem mexe em nada do resto: o servidor não envia esse conteúdo e recusa os comandos.
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'doc1985';
+const TEAM_PASSWORD = (() => { const t = String(process.env.DINAMICAS_PASSWORD || '').trim(); return t && t !== ADMIN_PASSWORD ? t : ''; })();
+const sameText = (a, b) => { const x = Buffer.from(String(a ?? '')), y = Buffer.from(String(b ?? '')); return x.length === y.length && crypto.timingSafeEqual(x, y); };
+const roleOfKey = key => (typeof key !== 'string' || !key ? null : sameText(key, ADMIN_PASSWORD) ? 'master' : TEAM_PASSWORD && sameText(key, TEAM_PASSWORD) ? 'team' : null);
+// Versão dos arquivos do app (muda a cada publicação): os celulares abertos percebem e recarregam sozinhos.
+const BUILD = (() => {
+  const h = crypto.createHash('sha1'), dir = path.join(__dirname, '..', 'public');
+  try { for (const f of fs.readdirSync(dir).sort()) if (/\.(js|css|html)$/.test(f)) h.update(f).update(fs.readFileSync(path.join(dir, f))); } catch { /* segue com o que deu para ler */ }
+  return h.digest('hex').slice(0, 12);
+})();
 
 // Um bug em qualquer handler não pode derrubar o evento inteiro: registra e segue.
 process.on('uncaughtException', err => console.error('[uncaughtException]', err));
@@ -24,7 +37,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' }, pingInterval: 10000, pingTimeout: 20000 });
 
-const sucesso = createSucesso({ dbPath: process.env.SUCESSO_DB_PATH || path.join(DATA_DIR, 'sucesso.db'), adminPassword: ADMIN_PASSWORD });
+const sucesso = createSucesso({ dbPath: process.env.SUCESSO_DB_PATH || path.join(DATA_DIR, 'sucesso.db'), adminPassword: ADMIN_PASSWORD, teamPassword: TEAM_PASSWORD });
 // Bloco Reflexão (paradas com votação em projetos): está no ar quando o roteiro está nesse passo e não há dinâmica do Sucesso na tela
 const reflexao = createReflexao();
 const reflexaoOnAir = () => engine.state.block === 'reflexao' && !engine.state.presentation;
@@ -48,11 +61,19 @@ app.get('/fonts/logo.css', (req, res) => {
 // Three.js (carro 3D) servido da própria instalação, sem CDN
 app.get('/vendor/three/three.module.min.js', (req, res) => res.sendFile(path.join(__dirname, '..', 'node_modules', 'three', 'build', 'three.module.min.js'), { maxAge: '7d', immutable: true }));
 app.set('trust proxy', true); // Render/HTTPS: req.protocol correto para a checagem de origem da API do Sucesso
-// Admin: senha no cabeçalho (Painel do Doc) ou cookie do login (Painel do Sucesso, /painel).
-const isAdmin = req => (req.get('x-admin-key') || req.query.key) === ADMIN_PASSWORD || sucesso.hasCookie(req);
+// Quem está pedindo: senha no cabeçalho (painel) ou cookie do login (telão, painel do Sucesso). 'master', 'team' ou null.
+const roleOf = req => roleOfKey(req.get('x-admin-key') || req.query.key) || sucesso.cookieRole(req);
+const isAdmin = req => !!roleOf(req);              // qualquer um dos dois níveis
+const isMaster = req => roleOf(req) === 'master';  // só a senha mestra
+// Modo confidencial (Painel do Doc → 🔒): o conteúdo do townhall só vai para quem entrou com a senha mestra.
+const confidential = () => engine.settings.confidencial !== false;
 // O Sucesso lê o corpo cru das requisições: as rotas dele entram antes do express.json().
-sucesso.mount(app, { isAdmin });
+sucesso.mount(app, { isAdmin, roleOf });
 app.use(express.json({ limit: '5mb' }));
+// A Estratégia 2027 é conteúdo do townhall: no modo confidencial, só abre para a senha mestra (o telão do Doc).
+app.get('/estrategia-2027.html', (req, res, next) => (!confidential() || isMaster(req) ? next() : res.status(403).type('html').send('<!doctype html><meta charset="utf-8"><title>🔒</title><body style="background:#0b0618;color:#bcaee0;font:16px system-ui;display:grid;place-items:center;height:100vh;margin:0"><p>🔒 Confidential until the event.</p></body>')));
+// O "segundo app": o painel só das dinâmicas (Conexões, Reflexão e Sucesso). É a mesma página do painel; o que ela mostra depende da senha.
+app.get(['/dinamicas', '/dinamicas.html'], (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'admin.html')));
 app.use(express.static(path.join(__dirname, '..', 'public'), { etag: true, maxAge: 0 }));
 
 // Fotos nas cenas: quem fala nas boas-vindas e os indicados dos prêmios ganham a foto de perfil quando o nome escrito
@@ -63,9 +84,23 @@ function withPhotos(c) {
   if (c.kind === 'boasvindas') return { ...c, pessoas: (c.pessoas || []).map(p => ({ ...p, fotos: of(p.nome) })) };
   return { ...c, premios: c.premios.map(p => ({ ...p, indicados: p.indicados.map(x => ({ ...x, fotos: of(x.nome) })) })) };
 }
+// Modo confidencial: quem não entrou com a senha mestra não recebe as cenas do deck, os blocos de fala nem os créditos.
+// Enquanto um desses passos está no ar, os celulares e os outros telões veem a tela de "olhos no telão".
+function redact(s) {
+  const out = { ...s, cena: null, creditos: null, stage: { title: '', theme: '', speaker: '' } };
+  if (!s.presentation && ['cena', 'stage', 'closing'].includes(s.block)) { out.block = 'standby'; out.hosts = []; out.step = { ...s.step, type: 'standby', cena: null, transition: false }; }
+  else out.step = { ...s.step, cena: null };
+  return out;
+}
 // Estado público + situação da dinâmica do Sucesso em exibição (fase, cronômetro, quantidade de respostas)
-function publicState() {
+// master: quem pede entrou com a senha mestra (recebe tudo, mesmo no modo confidencial)
+function publicState(master = false) {
+  const s = fullState();
+  return master || !confidential() ? s : redact(s);
+}
+function fullState() {
   const s = engine.publicState();
+  s.build = BUILD;
   if (s.presentation) s.presentation.live = sucesso.ready() ? sucesso.live(engine.state.presentation) : null;
   s.reflexao = reflexaoOnAir() ? reflexao.publicState() : null;
   const kind = cenaOnAir();
@@ -99,7 +134,16 @@ const wrapAsync = fn => (req, res) => {
   Promise.resolve().then(() => fn(req, res)).then(out => { if (out !== undefined) res.json(out); })
     .catch(e => res.status(e.status && e.status >= 400 && e.status < 600 ? e.status : 400).json({ error: e.message || String(e) }));
 };
-const adminOnly = (req, res, next) => (isAdmin(req) ? next() : res.status(401).json({ error: 'Senha de admin inválida.' }));
+const adminOnly = (req, res, next) => { req.role = roleOf(req); return req.role ? next() : res.status(401).json({ error: 'Senha de admin inválida.' }); };
+// O que a senha das dinâmicas alcança: os passos do roteiro, os comandos, os ajustes e os reinícios de Conexões, Reflexão e Sucesso.
+const TEAM_STEPS = ['checkin', 'connections', 'reflexao', 'sucesso', 'doc']; // o check-in é a porta de entrada; o Doc fecha o Sucesso
+const TEAM_ACTIONS = new Set(['generate', 'reveal', 'startTalk', 'pause', 'resume', 'addTime', 'endTalk', 'skip', 'startJourney', 'openRanking', 'computeResults', 'resetConnections',
+  'testCheckinAll', 'testRandomRankings', 'setAudio', 'settings']);
+const TEAM_SETTINGS = ['roundSeconds', 'findSeconds', 'questionMode', 'breakSeconds', 'rankingSeconds', 'autoFlow', 'showMutualOnScreen', 'showFormHints', 'skip', 'docVoice', 'docVoiceName', 'docRate', 'docVideoUrl', 'docVideoFull'];
+const TEAM_SETTINGS_VIEW = [...TEAM_SETTINGS, 'eventName', 'musicUrl', 'ambientUrl', 'transitions', 'transitionSeconds'];
+const TEAM_RESET = scope => ['connections', 'reflexao', 'sucesso', 'doc'].includes(scope) || /^sucesso:d[1-4]$/.test(scope);
+const onlyMaster = () => Object.assign(new Error('Isto é conteúdo do townhall: só a senha mestra do Painel do Doc alcança.'), { status: 403 });
+const masterOnly = (req, res, next) => (req.role === 'master' ? next() : res.status(403).json({ error: onlyMaster().message }));
 
 /* ---------- participante ---------- */
 app.get('/api/people', wrap(() => engine.listPeople().filter(p => p.active).map(p => ({ id: p.id, name: p.name, checkedIn: !!p.checkedInAt, ...(p.photo ? { photo: p.photo } : {}) }))));
@@ -109,19 +153,27 @@ app.get('/api/photo/:id', (req, res) => {
   if (!f) return res.status(404).json({ error: 'Sem foto.' });
   res.set({ 'Content-Type': f.mime, 'Cache-Control': req.query.v === f.version ? 'public, max-age=31536000, immutable' : 'no-cache', 'X-Content-Type-Options': 'nosniff' }).send(f.data);
 });
-app.post('/api/checkin', wrap(req => engine.checkin(req.body.personId, req.body.token)));
+// name (opcional): o celular que refaz o check-in sozinho depois de o servidor reiniciar manda o nome guardado
+app.post('/api/checkin', wrap(req => ({ ...engine.checkin(req.body.personId, req.body.token, req.body.name), epoch: engine.epoch })));
+// "Duas palavras": como a pessoa está chegando (logo depois do login). Vale uma resposta por pessoa; enviar de novo troca.
+app.post('/api/words', wrap(req => {
+  const b = req.body || {}, person = engine.personByToken(b.token);
+  if (!person || !person.checkedInAt || !person.active) throw Object.assign(new Error('Your check-in is no longer active. Pick your name again.'), { status: 401 });
+  engine.setWords(person.id, b.words);
+  return { ok: true, me: meState(person.id) };
+}));
 app.post('/api/checkout', wrap(req => engine.checkout(req.body.token)));
 app.get('/api/me', wrap(req => {
   const p = engine.personByToken(req.query.token);
-  if (!p) return { ok: false };
-  return { ok: true, me: meState(p.id), state: publicState() };
+  if (!p || !p.checkedInAt || !p.active) return { ok: false, epoch: engine.epoch, state: publicState(isMaster(req)), now: Date.now() };
+  return { ok: true, me: meState(p.id), state: publicState(isMaster(req)), epoch: engine.epoch, now: Date.now() };
 }));
-app.get('/api/state', wrap(() => publicState()));
+app.get('/api/state', wrap(req => publicState(isMaster(req))));
 // Telão: dinâmica do Sucesso em exibição. Fase, cronômetro e contagem são públicos; os textos das
 // respostas (nuvem de palavras, sorteio) só vão para o telão aberto no navegador logado no Painel do Doc.
 app.get('/api/sucesso/screen', wrap(req => {
   const p = engine.state.presentation, admin = isAdmin(req), ready = sucesso.ready();
-  const out = { now: Date.now(), authenticated: admin, presentation: p ? { ...engine.presentation(), live: ready ? sucesso.live(p) : null } : null };
+  const out = { now: Date.now(), authenticated: admin, master: isMaster(req), presentation: p ? { ...engine.presentation(), live: ready ? sucesso.live(p) : null } : null };
   if (p && admin && ready) {
     out.responses = sucesso.responses(p).map(r => ({ id: r.id, name: r.name, answer: r.answer }));
     if (p.draw) out.drawAnswer = p.draw.answer;
@@ -152,13 +204,13 @@ app.get('/health', (req, res) => res.json({ ok: true, db: DB_PATH, phase: engine
 
 /* ---------- admin ---------- */
 app.post('/api/admin/login', wrap((req, res) => {
-  const ok = (req.body.password || '') === ADMIN_PASSWORD;
-  if (ok) sucesso.setCookie(req, res); // libera também o painel do Sucesso (/painel)
-  return { ok };
+  const role = roleOfKey(String((req.body || {}).password || ''));
+  if (role) sucesso.setCookie(req, res, role); // libera também o telão e o painel do Sucesso (/painel), no mesmo nível de acesso
+  return { ok: !!role, role };
 }));
 app.post('/api/admin/logout', wrap((req, res) => { sucesso.clearCookie(res); return { ok: true }; }));
 app.use('/api/admin', adminOnly);
-app.get('/api/admin/overview', wrap(() => adminOverview()));
+app.get('/api/admin/overview', wrap(req => overviewFor(req.role)));
 
 // Enquanto uma dinâmica do Sucesso está no telão, a viagem fica congelada (como no projeto do Lucas).
 const JOURNEY_ACTIONS = new Set(['setBlock', 'generate', 'reveal', 'startTalk', 'pause', 'resume', 'addTime', 'endTalk', 'skip',
@@ -171,6 +223,10 @@ function dropPresentation() {
 }
 app.post('/api/admin/action', wrap(req => {
   const a = req.body || {};
+  if (req.role !== 'master') { // senha das dinâmicas: só os comandos das dinâmicas e os ajustes delas
+    if (!TEAM_ACTIONS.has(a.type)) throw onlyMaster();
+    if (a.type === 'settings') a.settings = Object.fromEntries(Object.entries(a.settings || {}).filter(([k]) => TEAM_SETTINGS.includes(k)));
+  }
   if (isDetour(a) || a.type === 'resetEvent') dropPresentation();
   else if (JOURNEY_ACTIONS.has(a.type)) engine.requireJourney();
   switch (a.type) {
@@ -203,9 +259,10 @@ app.post('/api/admin/action', wrap(req => {
 // votos, respostas, prêmios revelados, cronômetros). Não mexe no que foi preparado: pessoas, fotos, perguntas, roteiro,
 // textos e conteúdo das cenas.
 //   scope: all (keepCheckins opcional) · checkin · connections · reflexao · sucesso · sucesso:d1..d4 · doc · cenas ·
-//          cena:<almanaque|reconhecimento|intervalo|visao|mph> · roteiro (só volta para o primeiro passo)
+//          cena:<abertura|boasvindas|almanaque|reconhecimento|intervalo|visao|mph> · words (as duas palavras) · roteiro (só volta para o primeiro passo)
 app.post('/api/admin/reset', wrapAsync(async req => {
   const b = req.body || {}, scope = String(b.scope || ''), room = engine.state.sucessoRoom, bad = () => { throw Object.assign(new Error('Não sei reiniciar isso.'), { status: 400 }); };
+  if (req.role !== 'master' && !TEAM_RESET(scope)) throw onlyMaster();
   if (scope === 'all') {
     dropPresentation(); reflexao.clearAll({ silent: true }); cenas.resetState({ silent: true });
     engine.resetEvent({ keepCheckins: !!b.keepCheckins });
@@ -216,6 +273,7 @@ app.post('/api/admin/reset', wrapAsync(async req => {
   else if (scope === 'sucesso') { if (!sucesso.ready()) bad(); await sucesso.clearRoom(room); }
   else if (/^sucesso:d[1-4]$/.test(scope)) { if (!sucesso.ready()) bad(); await sucesso.clearActivity(room, scope.slice(8)); }
   else if (scope === 'doc') engine.setDocMessage(null);
+  else if (scope === 'words') engine.clearWords();
   else if (scope === 'cenas') cenas.resetState();
   else if (scope.startsWith('cena:')) cenas.resetKind(scope.slice(5));
   else if (scope === 'roteiro') return goStep(engine.settings.steps[0].id);
@@ -252,7 +310,11 @@ async function goStep(id) {
   armExpiry();
   return { ok: true, step: engine.state.step };
 }
-app.post('/api/admin/step', wrapAsync(req => goStep(String((req.body || {}).id || ''))));
+app.post('/api/admin/step', wrapAsync(req => {
+  const id = String((req.body || {}).id || ''), step = engine.stepById(id);
+  if (req.role !== 'master' && step && !TEAM_STEPS.includes(step.type)) throw onlyMaster();
+  return goStep(id);
+}));
 
 // Painel 3D do Lucas ("Exibir no telão e nos celulares" / "Voltar ao Townhall"): o roteiro acompanha.
 app.post('/api/admin/presentation', wrapAsync(async req => {
@@ -326,7 +388,7 @@ app.post('/api/admin/reflexao', wrap(req => {
   return { ok: true };
 }));
 // Cenas do deck: comandos do Doc (mês do almanaque, cerimônia dos prêmios, cronômetro do intervalo, 88 MPH) e o conteúdo.
-app.post('/api/admin/cena', wrap(req => {
+app.post('/api/admin/cena', masterOnly, wrap(req => {
   const a = req.body || {};
   if (a.action === 'config') { cenas.setConfig(a.config || {}); return { ok: true }; }
   if (a.action === 'resetConfig') { cenas.resetConfig(a.key ? String(a.key) : null); return { ok: true }; }
@@ -334,6 +396,14 @@ app.post('/api/admin/cena', wrap(req => {
   const kind = String(a.kind || '');
   if (cenaOnAir() !== kind) throw Object.assign(new Error('Coloque essa cena no ar (no roteiro) antes.'), { status: 409 });
   cenas.command(kind, a);
+  return { ok: true };
+}));
+// "Duas palavras" (nuvem das boas-vindas): tirar a resposta de uma pessoa ou apagar todas
+app.post('/api/admin/words', masterOnly, wrap(req => {
+  const a = req.body || {};
+  if (a.action === 'remove') engine.removeWords(a.id);
+  else if (a.action === 'clear') engine.clearWords();
+  else throw Object.assign(new Error('Comando inválido.'), { status: 400 });
   return { ok: true };
 }));
 // Página de extração de dados (/dados.html): tudo o que o evento gerou, em um pedido só.
@@ -402,28 +472,30 @@ app.use('/api', (req, res) => res.status(404).json({ error: 'Rota não encontrad
 
 /* ---------- tempo real ---------- */
 function pushAll(notice) {
-  const state = publicState();
-  io.emit('state', state);
+  // quem entrou com a senha mestra (sala "master": o painel e o telão do Doc) recebe tudo; no modo confidencial,
+  // os outros aparelhos recebem o estado sem o conteúdo do townhall
+  const full = fullState(), secret = confidential();
+  if (secret) { io.to('master').emit('state', full); io.except('master').emit('state', redact(full)); } else io.emit('state', full);
   for (const [, socket] of io.of('/').sockets) {
     if (!socket.data.token && !socket.data.personId) continue;
     const pid = bind(socket); // revalida o token a cada push (check-in desfeito, reset, outro aparelho assumiu o nome)
     socket.emit('me', pid ? meState(pid) : null);
   }
-  if (notice) io.emit('notify', notice);
+  if (notice) { const { secret: hush, ...n } = notice; (hush && secret ? io.to('master') : io).emit('notify', n); } // aviso de uma cena: confidencial também
   pushAdmin();
 }
 let adminTimer = null;
 function pushAdmin() {
   if (adminTimer) return;
-  adminTimer = setTimeout(() => { adminTimer = null; io.to('admin').emit('admin:overview', adminOverview()); }, 500);
+  adminTimer = setTimeout(() => { adminTimer = null; io.to('admin').emit('admin:overview', overviewFor('master')); io.to('team').emit('admin:overview', overviewFor('team')); }, 500);
 }
 // O evento saiu da Reflexão (outro passo, aviso, dinâmica do Sucesso): a votação em andamento fica pausada.
 engine.onChange(() => { if (!reflexaoOnAir()) reflexao.hold(); });
 engine.onChange(() => cenas.sync(cenaOnAir())); // saiu de uma cena: o que estava tocando para
 engine.onChange(pushAll);
 reflexao.onChange(pushAll);
-cenas.onChange(pushAll);
-cenas.onPulse(p => io.emit('cena:pulse', p));   // carga do Flux Capacitor subindo com os toques dos celulares
+cenas.onChange(n => pushAll(n ? { ...n, secret: true } : null)); // tudo o que vem das cenas é conteúdo do townhall
+cenas.onPulse(p => (confidential() ? io.to('master') : io).emit('cena:pulse', p));   // carga do Flux Capacitor subindo com os toques dos celulares
 // Resposta nova ou comando numa dinâmica do Sucesso: celulares, telão e painel atualizam na hora.
 let pulseTimer = null, expiryTimer = null;
 function armExpiry() { // o prazo de recebimento acaba sem nenhum comando: avisa os aparelhos nessa hora
@@ -451,10 +523,20 @@ function telaoStatus() {
   const list = [];
   for (const [, s] of io.of('/').sockets) if (s.data.telao) list.push(s.data.telao);
   const doc = list.map(t => t.doc).filter(Boolean).sort((a, b) => b.at - a.at)[0] || null; // onde a cena do Doc está no telão
-  return { count: list.length, sound: list.some(t => !t.locked), auth: list.some(t => t.auth), doc };
+  return { count: list.length, sound: list.some(t => !t.locked), auth: list.some(t => t.auth), master: list.some(t => t.master), videos: { abertura: list.some(t => t.videos && t.videos.abertura), tributo: list.some(t => t.videos && t.videos.tributo) }, doc };
 }
-const adminOverview = () => ({ ...engine.adminOverview(), telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null, reflexao: reflexao.adminState(), cenas: cenas.adminState(),
+const adminOverview = () => ({ ...engine.adminOverview(), role: 'master', team: !!TEAM_PASSWORD, telao: telaoStatus(), sucesso: sucesso.ready() ? sucesso.overview(engine.state.sucessoRoom) : null, reflexao: reflexao.adminState(), cenas: cenas.adminState(),
   doc: { ai: doc.hasAI(), model: doc.MODEL, parts: doc.parts(engine.state.doc.message) } });
+// O painel de quem entrou com a senha das dinâmicas: só os passos de Conexões, Reflexão e Sucesso (mais o check-in e o Doc),
+// só os ajustes delas e nada das cenas. Se o que está no ar é um passo do townhall, o painel só fica sabendo que "há outro bloco no ar".
+function teamOverview() {
+  const o = adminOverview(), live = engine.currentStep(), st = o.state;
+  const hidden = !st.presentation && !st.detour && !TEAM_STEPS.includes(live.type);
+  return { ...o, role: 'team', cenas: null, words: [], hidden,
+    settings: { ...Object.fromEntries(TEAM_SETTINGS_VIEW.map(k => [k, o.settings[k]])), steps: o.settings.steps.filter(x => TEAM_STEPS.includes(x.type)) },
+    state: { ...st, block: hidden ? 'hidden' : st.block, step: TEAM_STEPS.includes(live.type) ? st.step : null, returnStep: null, message: st.detour === 'message' ? st.message : { title: '', body: '', emoji: '' } } };
+}
+const overviewFor = role => (role === 'master' ? adminOverview() : teamOverview());
 
 // Liga o socket à pessoa dona do token (do evento ou guardado no socket) e revalida sempre:
 // se o token foi trocado (outro aparelho assumiu o nome) ou o check-in foi desfeito, desliga.
@@ -472,11 +554,14 @@ function bind(socket, token) {
 }
 const safeAck = (ack, value) => { if (typeof ack === 'function') ack(value); };
 io.on('connection', socket => {
+  // o navegador que fez login com a senha mestra (cookie) entra na sala "master": é assim que o telão do Doc recebe as cenas no modo confidencial
+  if (sucesso.cookieRole(socket.request) === 'master') socket.join('master');
+  const master = () => socket.rooms.has('master');
   socket.on('hello', (payload, ack) => {
     try {
       const pid = bind(socket, payload && payload.token);
-      safeAck(ack, { ok: !!pid, state: publicState(), me: pid ? meState(pid) : null, now: Date.now() });
-    } catch (e) { console.error('[hello]', e); safeAck(ack, { ok: false, error: 'Erro no servidor.', state: publicState(), me: null, now: Date.now() }); }
+      safeAck(ack, { ok: !!pid, state: publicState(master()), me: pid ? meState(pid) : null, now: Date.now(), epoch: engine.epoch, master: master() });
+    } catch (e) { console.error('[hello]', e); safeAck(ack, { ok: false, error: 'Server error.', state: publicState(master()), me: null, now: Date.now(), epoch: engine.epoch }); }
   });
   socket.on('group:step', (payload, ack) => {
     try {
@@ -512,14 +597,20 @@ io.on('connection', socket => {
   });
   socket.on('admin:hello', (payload, ack) => {
     try {
-      const ok = !!payload && payload.key === ADMIN_PASSWORD;
-      if (ok) socket.join('admin');
-      safeAck(ack, ok ? { ok: true, overview: adminOverview() } : { ok: false, error: 'Senha inválida.' });
+      const role = roleOfKey(payload && payload.key);
+      socket.leave('admin'); socket.leave('team');
+      if (role === 'master') { socket.join('admin'); socket.join('master'); } else if (role === 'team') { socket.join('team'); socket.leave('master'); }
+      safeAck(ack, role ? { ok: true, role, overview: overviewFor(role) } : { ok: false, error: 'Senha inválida.' });
     } catch (e) { console.error('[admin:hello]', e); safeAck(ack, { ok: false, error: 'Erro no servidor.' }); }
+  });
+  // Vídeo de abertura: o telão do Doc avisa quando o vídeo chega ao fim (o painel mostra "terminou" e oferece o próximo passo)
+  socket.on('cena:fim', payload => {
+    try { if (master() && payload && payload.kind === 'abertura' && cenaOnAir() === 'abertura') cenas.command('abertura', { action: 'fim' }); } catch (e) { /* segue */ }
   });
   socket.on('telao:status', payload => {
     const d = payload && payload.doc && typeof payload.doc === 'object' ? { seq: Number(payload.doc.seq) || 0, part: Number(payload.doc.part) || 0, speaking: !!payload.doc.speaking, done: !!payload.doc.done, voice: String(payload.doc.voice || '').slice(0, 80), at: Date.now() } : null;
-    socket.data.telao = { locked: !!(payload && payload.locked), auth: !!(payload && payload.auth), doc: d }; pushAdmin();
+    const v = payload && payload.videos && typeof payload.videos === 'object' ? { abertura: !!payload.videos.abertura, tributo: !!payload.videos.tributo } : null; // vídeos já carregados neste telão
+    socket.data.telao = { locked: !!(payload && payload.locked), auth: !!(payload && payload.auth), master: master(), videos: v, doc: d }; pushAdmin();
   });
   socket.on('disconnect', () => { if (socket.data.telao) pushAdmin(); });
   socket.on('time', (payload, ack) => safeAck(ack, { now: Date.now() }));
@@ -534,7 +625,8 @@ sucesso.init().then(() => {
   return ensureRoom();
 }).catch(err => console.error('[sucesso] falhou ao iniciar:', err)).finally(() => server.listen(PORT, () => {
   console.log(`⚡ De Volta ao Futuro · townhall rodando em http://localhost:${PORT}`);
-  console.log(`   Painel do Doc: http://localhost:${PORT}/admin.html  (senha: ${ADMIN_PASSWORD === 'doc1985' ? 'doc1985 · defina ADMIN_PASSWORD para trocar' : 'definida via ADMIN_PASSWORD'})`);
+  console.log(`   Painel do Doc: http://localhost:${PORT}/admin.html  (senha mestra: ${ADMIN_PASSWORD === 'doc1985' ? 'doc1985 · defina ADMIN_PASSWORD para trocar' : 'definida via ADMIN_PASSWORD'})`);
+  console.log(`   Painel das dinâmicas (só Conexões, Reflexão e Sucesso): http://localhost:${PORT}/dinamicas  (${TEAM_PASSWORD ? 'senha definida via DINAMICAS_PASSWORD' : 'desligado · defina DINAMICAS_PASSWORD para ligar'})`);
   console.log(`   Banco: ${DB_PATH} · rodadas: ${TOTAL_ROUNDS}`);
   console.log(`   De Volta para o Sucesso: http://localhost:${PORT}/painel (mesma senha do Painel do Doc)`);
 }));

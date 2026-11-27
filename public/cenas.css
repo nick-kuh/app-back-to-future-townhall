@@ -383,3 +383,32 @@ body.cn-clean .crt{display:none}
 .nom .ph .av.foto{width:15.5vh;height:15.5vh;border-radius:50%;box-shadow:0 0 0 4px var(--yellow),0 0 26px rgba(255,210,31,.5)}
 .rc-cer[data-passo=carga] .nom .ph .av.foto{width:11vh;height:11vh}
 .nom .ph .avs .av+.av{margin-left:-3vh}
+
+/* ---- plano de voo: sem a duração de cada item; 📱 marca o que acontece no celular ---- */
+.ag-it .fone{font-style:normal;font-size:.9em;margin-left:.25em}
+.ag-note{flex:none;text-align:right;font:700 clamp(10px,1vw,16px) var(--led);letter-spacing:2px;color:var(--muted);margin-top:-.4vh}
+
+/* ---- boas-vindas: a nuvem das "duas palavras" cobre a cena quando o Doc clica em "Mostrar a nuvem" ---- */
+.bv-cloud{position:absolute;inset:-1vh -1vw;z-index:6;display:flex;flex-direction:column;gap:.6vh;padding:1vh 1vw;border-radius:20px;background:radial-gradient(ellipse at 50% 46%,rgba(24,12,60,.98),rgba(5,3,12,.985) 80%);box-shadow:0 0 0 2px rgba(46,230,214,.25);opacity:0;visibility:hidden;transform:scale(1.03);transition:opacity .6s,transform .6s,visibility 0s .6s}
+.cn-boasvindas.cloud .bv-cloud{opacity:1;visibility:visible;transform:none;transition:opacity .6s,transform .6s}
+.bv-cloud canvas{flex:1;min-height:0;width:100%;display:block}
+.bvc-h{flex:none}
+.bvc-n{flex:none;text-align:center;font:700 clamp(12px,1.3vw,22px) var(--led);letter-spacing:2px;color:var(--muted);padding-bottom:.6vh}
+.bvc-n b{color:var(--yellow)}
+
+/* ---- vídeo de abertura: o cartão do evento e, tocando, o vídeo em tela cheia ---- */
+.cn-abertura{align-items:center;justify-content:center;text-align:center}
+.ab-card{display:flex;flex-direction:column;align-items:center;gap:2vh;cursor:pointer}
+.ab-card .cn-head{justify-content:center}
+.ab-title{font-size:clamp(40px,6.3vw,124px);line-height:1.05;white-space:nowrap}
+.ab-title .bttf{padding:.04em .14em}
+.ab-hint{margin-top:3vh;display:flex;flex-direction:column;gap:1vh;align-items:center;padding:2vh 3vw;border:3px dashed rgba(255,210,31,.45);border-radius:18px;background:rgba(5,4,9,.6)}
+.ab-hint b{font:400 clamp(11px,1.2vw,19px) var(--pixel);color:var(--yellow);letter-spacing:2px}
+.ab-hint small{font:500 clamp(12px,1.2vw,19px) Inter;color:var(--muted)}
+.ab-hint em{font:900 clamp(14px,1.6vw,26px) var(--display);font-style:normal;color:var(--cyan);margin-top:.6vh;animation:abblink 1s steps(2) infinite}
+@keyframes abblink{50%{opacity:.35}}
+.cn-abertura.drag .ab-hint{border-color:var(--cyan);background:rgba(46,230,214,.1)}
+.ab-video{position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;opacity:0;visibility:hidden;transition:opacity .6s,visibility 0s .6s}
+.cn-abertura.playing .ab-video{opacity:1;visibility:visible;transition:opacity .6s}
+.cn-abertura.playing .ab-card{visibility:hidden}
+body.ab-playing .osd,body.ab-playing .crt,body.ab-playing .phonetag,body.ab-playing .sound-chip{display:none}

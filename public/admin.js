@@ -13,23 +13,24 @@
   const PHASE_LABEL = { idle: 'sem duplas', ready: 'duplas prontas', matching: 'duplas se encontrando', talk: 'conversa em andamento', roundEnd: '88 MPH (intervalo)', ranking: 'avaliação aberta', results: 'resultados publicados' };
   const TIMER_LABEL = { matching: 'encontro', talk: 'conversa', break: 'intervalo', ranking: 'avaliação' };
   // roteiro do evento
-  const STEP_ICONS = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', doc: '🧪', reflexao: '💭', cena: '🎬', message: '📣', standby: '📺', closing: '🏁' };
+  const STEP_ICONS = { checkin: '🚪', stage: '🎤', connections: '⚡', sucesso: '🚀', doc: '🧪', reflexao: '💭', cena: '🎬', message: '📣', standby: '📺', closing: '🏁', hidden: '🔒' };
+  const PHONE_STEPS = ['connections', 'reflexao', 'sucesso']; // dinâmicas que acontecem no celular (o telão e o roteiro avisam)
   // cenas do deck do townhall: nome, ícone e resumo vêm do servidor (server/cenas.js)
-  const cenaMeta = x => ((A.O && A.O.cenas && A.O.cenas.meta) || {})[x.cena] || { name: 'Cena', icon: '🎬', hint: '' };
+  const cenaMeta = x => { const m = ((A.O && A.O.cenas && A.O.cenas.meta) || {})[x.cena]; return m ? { ...m, name: m.label || m.name } : { name: 'Cena', icon: '🎬', hint: '' }; }; // no painel, o nome da cena em português
   const STEP_ICON = new Proxy({}, { get: (_, t) => STEP_ICONS[t] }); // por tipo (o editor do roteiro usa); stepIcon(x) sabe o ícone de cada cena
   const stepIcon = x => (x.type === 'cena' ? cenaMeta(x).icon : STEP_ICONS[x.type]);
-  const STEP_KIND = { checkin: 'Chegada · check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', doc: 'Encerramento do Sucesso', reflexao: 'Dinâmica · Reflexão', cena: 'Cena do townhall', message: 'Aviso', standby: 'Olhos no telão', closing: 'Créditos' };
+  const STEP_KIND = { checkin: 'Chegada · check-in', stage: 'Bloco de fala', connections: 'Dinâmica · Conexões', sucesso: 'Dinâmica · Sucesso', doc: 'Encerramento do Sucesso', reflexao: 'Dinâmica · Reflexão', cena: 'Cena do townhall', message: 'Aviso', standby: 'Olhos no telão', closing: 'Créditos', hidden: 'Bloco do townhall' };
   const STEP_HINT = { checkin: 'as pessoas entram pelo nome', connections: '3 viagens em duplas e avaliação', sucesso: 'pergunta ao vivo, nuvem de palavras', doc: 'o Doc chega de 2027 e resume tudo o que foi escrito', reflexao: 'paradas com votação em projetos e os 2 mais votados', standby: 'celulares em pausa, atenção no telão', closing: 'agradecimento e créditos' };
   const SUC_NAME = { d1: 'Antes de Partir', d2: 'Look Back', d3: 'Uso de IA', d4: 'Look Ahead' };
   const SUC_COLOR = { d1: 'var(--cyan)', d2: 'var(--yellow)', d3: 'var(--magenta)', d4: 'var(--orange)' };
   const SUC_PHASE = { idle: 'aguardando você iniciar', run: 'recebendo respostas', paused: 'recebimento pausado', done: 'recebimento encerrado' };
   const TALK = { d2: 120, d3: 180 }; // dinâmicas com sorteio e tempo de fala (como no painel do Lucas)
-  const stepTitle = x => (x.type === 'checkin' ? 'Chegada · Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : x.type === 'reflexao' ? 'Reflexão' : x.type === 'doc' ? 'Visão 2027 · o Doc' : x.type === 'cena' ? cenaMeta(x).name : 'Créditos');
+  const stepTitle = x => (x.type === 'checkin' ? 'Chegada · Check-in' : x.type === 'stage' ? x.title : x.type === 'connections' ? 'Conexões' : x.type === 'sucesso' ? `Sucesso ${x.activity.slice(1).padStart(2, '0')} · ${SUC_NAME[x.activity]}` : x.type === 'message' ? x.title : x.type === 'standby' ? 'Olhos no telão' : x.type === 'reflexao' ? 'Reflexão' : x.type === 'doc' ? 'Visão 2027 · o Doc' : x.type === 'cena' ? cenaMeta(x).name : x.type === 'hidden' ? 'um bloco do townhall' : 'Créditos');
   // roteiro padrão: a agenda do townhall em 4 atos (o mesmo do servidor)
   // ("Como a IA nos ajudou" é o próprio bloco Reflexão e o "Manifesto 2027" é o bloco Sucesso: um passo só para cada)
-  const NO_TRANSITION = x => ['sucesso', 'doc', 'closing'].includes(x.type) || (x.type === 'cena' && ['boasvindas', 'reconhecimento', 'intervalo', 'visao', 'mph'].includes(x.cena)); // passos que entram direto
+  const NO_TRANSITION = x => ['sucesso', 'doc', 'closing'].includes(x.type) || (x.type === 'cena' && ['abertura', 'boasvindas', 'reconhecimento', 'intervalo', 'visao', 'mph'].includes(x.cena)); // passos que entram direto
   const DEFAULT_STEPS = () => { const cena = k => ({ type: 'cena', cena: k }), suc = k => ({ type: 'sucesso', activity: k });
-    return [{ type: 'checkin' }, cena('agenda'), cena('boasvindas'), { type: 'connections' }, cena('almanaque'), { type: 'reflexao' }, cena('reconhecimento'), cena('intervalo'),
+    return [{ type: 'checkin' }, cena('abertura'), cena('boasvindas'), cena('agenda'), { type: 'connections' }, cena('almanaque'), { type: 'reflexao' }, cena('reconhecimento'), cena('intervalo'),
       cena('visao'), suc('d1'), suc('d2'), suc('d3'), suc('d4'), { type: 'doc' }, cena('mph'), { type: 'closing' }].map(x => (NO_TRANSITION(x) ? { ...x, transition: false } : x)); };
   const AUDIO_LABEL = { music: '🎵 Música', ambient: '🎼 Trilha', spotify: '🎧 Spotify', off: '🔇 Sem áudio' };
   const SP = window.Spoti || null; // Spotify de quem está no painel (public/spotify.js)
@@ -79,12 +80,22 @@
       const next = new URLSearchParams(location.search).get('next');
       if (next && next.startsWith('/') && !next.startsWith('//')) location.assign(next);
     }).catch(() => { A.cookie = false; }); }
-    A.connected = true; A.O = res.overview; A.offset = res.overview.now - Date.now(); render(true);
+    A.connected = true; A.O = res.overview; A.offset = res.overview.now - Date.now(); brand(); render(true);
+  }
+  // Dois níveis de acesso: a senha mestra abre o Painel do Doc completo; a senha das dinâmicas abre o "segundo app",
+  // só com Conexões, Reflexão e Sucesso (o servidor não envia o resto e recusa os comandos).
+  const team = () => !!(A.O && A.O.role === 'team');
+  function brand() {
+    document.body.classList.toggle('team', team());
+    document.title = team() ? 'Painel das Dinâmicas · Conexões, Reflexão e Sucesso' : 'Painel do Doc · De Volta ao Futuro';
+    const k = $('.brand .k'), n = $('.brand .n'); if (k) k.textContent = team() ? 'PAINEL DAS DINÂMICAS' : 'PAINEL DO DOC'; if (n) n.textContent = team() ? 'Conexões · Reflexão · Sucesso' : 'De Volta ao Futuro · Townhall';
+    if (team() && A.prep !== 'reflexao' && !PREP_TEAM.some(([key]) => key === A.prep)) A.prep = 'people';
   }
 
   /* ---------- render ---------- */
   // Duas áreas: "Ao vivo" (o roteiro e o passo que está no ar) e "Preparar" (roteiro, pessoas, perguntas, ajustes, testes).
   const PREP = [['roteiro', 'Roteiro'], ['cenas', 'Agenda e cenas'], ['reflexao', 'Reflexão'], ['people', 'Pessoas'], ['questions', 'Perguntas'], ['config', 'Ajustes'], ['tests', 'Testes']];
+  const PREP_TEAM = PREP.filter(([k]) => !['roteiro', 'cenas'].includes(k)); // a senha das dinâmicas não vê o roteiro nem as cenas
   function render(force) {
     if (!A.O) return;
     if (SP) spConfigure();
@@ -93,7 +104,7 @@
     const view = A.tab === 'live' ? 'live' : 'prep-' + A.prep;
     if (!force && ['prep-config', 'prep-tests', 'prep-reflexao', 'prep-cenas'].includes(view) && $('#main').dataset.view === view) return;
     const html = A.tab === 'live' ? vLive()
-      : `<div class="subtabs prepnav">${PREP.map(([k, l]) => `<button class="${A.prep === k ? 'on' : ''}" data-prep="${k}">${l}</button>`).join('')}<a class="datalink" href="/dados.html" target="_blank" title="Página de extração: Conexões, Reflexão e Sucesso, com download em .csv">📊 Dados do evento ↗</a></div>` + ({ roteiro: vRoteiro, cenas: vCenasCfg, reflexao: vReflexaoCfg, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.prep]();
+      : `<div class="subtabs prepnav">${(team() ? PREP_TEAM : PREP).map(([k, l]) => `<button class="${A.prep === k ? 'on' : ''}" data-prep="${k}">${l}</button>`).join('')}<a class="datalink" href="/dados.html" target="_blank" title="Página de extração: Conexões, Reflexão e Sucesso, com download em .csv">📊 Dados do evento ↗</a></div>` + ({ roteiro: vRoteiro, cenas: vCenasCfg, reflexao: vReflexaoCfg, people: vPeople, questions: vQuestions, config: vConfig, tests: vTests })[A.prep]();
     if (!force && $('#main').dataset.view === view && html === A.lastHtml) return;
     A.lastHtml = html;
     const y = window.scrollY;
@@ -108,7 +119,12 @@
   }
   function timerLeft(t) { return t ? (t.paused ? t.remaining : Math.max(0, Math.round((t.endsAt - (Date.now() + A.offset)) / 1000))) : null; }
   function talkLeft(t) { return t ? (t.endsAt ? Math.max(0, Math.ceil((t.endsAt - Date.now() - A.offset) / 1000)) : t.remaining) : 0; }
-  const liveStep = () => { const steps = A.O.settings.steps, i = Math.max(0, steps.findIndex(x => x.id === A.O.state.step)); return { steps, i, step: steps[i], next: steps[i + 1] || null, prev: steps[i - 1] || null }; };
+  const HIDDEN_STEP = { id: '__townhall', type: 'hidden' }; // senha das dinâmicas: o que está no ar é um bloco do townhall, que este painel não vê
+  const liveStep = () => {
+    const steps = A.O.settings.steps, at = steps.findIndex(x => x.id === A.O.state.step);
+    if (team() && at < 0) return { steps, i: -1, step: HIDDEN_STEP, next: null, prev: null };
+    const i = Math.max(0, at); return { steps, i, step: steps[i], next: steps[i + 1] || null, prev: steps[i - 1] || null };
+  };
   const sucAct = k => (A.O.sucesso && A.O.sucesso.acts[k]) || {};
   const sucEff = a => (a.phase === 'run' && a.endsAt && a.endsAt <= Date.now() + A.offset ? 'done' : a.phase || null); // o prazo pode acabar entre dois avisos do servidor
   const sucLeft = a => (a.phase === 'run' && a.endsAt ? Math.max(0, Math.ceil((a.endsAt - Date.now() - A.offset) / 1000)) : a.remainingSeconds || 0);
@@ -120,6 +136,7 @@
   function nowText() {
     const O = A.O, { steps, i, step } = liveStep();
     if (O.state.detour) return `fora do roteiro · ${O.state.detour === 'message' ? 'aviso: ' + (O.state.message.title || '') : 'olhos no telão'}`;
+    if (step.type === 'hidden') return 'um bloco do townhall (fora das dinâmicas)';
     let extra = '';
     if (step.type === 'connections') { const c = O.state.conn, t = c.timer; extra = ` · ${c.round ? `viagem ${c.round}/3 · ` : ''}${t ? `${TIMER_LABEL[t.kind] || t.kind} ${fmt(timerLeft(t))}${t.paused ? ' ⏸' : ''}` : PHASE_LABEL[c.phase] || c.phase}`; }
     if (step.type === 'sucesso') { const a = sucAct(step.activity), ph = sucEff(a); if (ph) extra = ` · ${ph === 'run' ? 'recebendo' + (a.endsAt ? ' ' + fmt(sucLeft(a)) : '') : ph === 'done' ? 'encerrado' : ph === 'paused' ? 'pausado' : 'não iniciado'} · ${a.responseCount} resp.`; }
@@ -135,9 +152,14 @@
       ${A.connected ? '' : '<span class="pill off">sem conexão</span>'}
       <span class="nowchip" title="No ar agora: ${esc(nowText())}"><small>NO AR</small><span>${esc(nowText())}</span></span>
       <span class="pill" title="Pessoas que já fizeram check-in">👥 ${O.counts.checkedIn}/${O.counts.total}</span>
-      ${micMode() === 'toques' ? '' : Mic.on ? '<a class="pill on" href="#" data-go="tests" title="O microfone deste aparelho está ouvindo a sala (aplausos do Reconhecimento). O som não é gravado. Clique para ver a barra do som.">🎤 ouvindo</a>'
+      ${team() ? '<span class="pill" title="Você entrou com a senha das dinâmicas: este painel alcança só Conexões, Reflexão e Sucesso.">🔑 dinâmicas</span>'
+        : `<button type="button" class="pill ${O.settings.confidencial !== false ? 'hot' : 'on'}" data-act="confOpen" title="${O.settings.confidencial !== false ? 'Modo confidencial LIGADO: as cenas do townhall só aparecem neste painel e no telão aberto neste navegador. Os celulares veem “olhe para o telão”. Clique para liberar no dia do evento.' : 'Conteúdo do townhall liberado para todos os celulares e telões. Clique para voltar ao modo confidencial.'}">${O.settings.confidencial !== false ? '🔒 confidencial' : '🔓 liberado para todos'}</button>`}
+      ${team() || micMode() === 'toques' ? '' : Mic.on ? '<a class="pill on" href="#" data-go="tests" title="O microfone deste aparelho está ouvindo a sala (aplausos do Reconhecimento). O som não é gravado. Clique para ver a barra do som.">🎤 ouvindo</a>'
         : `<button type="button" class="pill ${Mic.perm === 'denied' ? 'off' : 'hot'}" data-act="micTop" title="Microfone dos aplausos (Reconhecimento): clique para liberar e testar">🎤 ${Mic.starting ? 'aguardando…' : Mic.perm === 'granted' ? 'microfone liberado ✓' : Mic.perm === 'denied' ? 'microfone bloqueado' : 'liberar microfone'}</button>`}
-      <a class="pill ${tl.count ? (tl.auth ? 'on' : 'hot') : 'off'}" href="/telao.html" target="_blank" title="${tl.count ? (tl.auth ? 'Telão aberto e logado' : 'Telão aberto sem login: não mostra as respostas do Sucesso') : 'Nenhum telão aberto. Clique para abrir.'}">📽 Telão ${tl.count ? (tl.auth ? '✓' : 'sem login') : 'fechado'}</a>`;
+      ${(() => { // o telão precisa estar aberto neste navegador (logado). No modo confidencial, só o telão logado com a senha mestra mostra as cenas.
+        const noMaster = !team() && O.settings.confidencial !== false && tl.count && tl.auth && !tl.master;
+        const tip = !tl.count ? 'Nenhum telão aberto. Clique para abrir.' : !tl.auth ? 'Telão aberto sem login: não mostra as respostas do Sucesso' + (team() ? '' : ' nem as cenas do townhall (modo confidencial)') : noMaster ? 'O telão está logado com a senha das dinâmicas: no modo confidencial ele não mostra as cenas do townhall. Abra o telão neste navegador.' : 'Telão aberto e logado';
+        return `<a class="pill ${tl.count ? (tl.auth && !noMaster ? 'on' : 'hot') : 'off'}" href="/telao.html" target="_blank" title="${tip}">📽 Telão ${tl.count ? (!tl.auth ? 'sem login' : noMaster ? 'sem a senha mestra' : '✓') : 'fechado'}</a>`; })()}`;
     if (html !== A.statusHtml) { A.statusHtml = html; $('#status').innerHTML = html; }
   }
   setInterval(renderStatus, 500);
@@ -207,8 +229,12 @@
     const held = x => x.type === 'connections' && ['matching', 'talk', 'roundEnd', 'ranking'].includes(O.state.conn.phase);
     const road = steps.map((x, n) => `<button class="rs ${n === i ? 'now' : held(x) ? 'held' : n < i ? 'done' : ''} ${sel && sel.id === x.id ? 'sel' : ''}" data-act="jumpStep" data-id="${x.id}" title="${n === i ? 'Este passo está no ar' : 'Abrir este passo aqui no painel (o telão só muda quando você clicar em Mostrar)'}">
         <span class="n">${n === i ? n + 1 : held(x) ? '⏸' : n < i ? '✓' : n + 1}</span><span class="ic">${stepIcon(x)}</span>
-        <span class="tx"><b>${esc(stepTitle(x))}</b><small>${esc(stepSub(x))}</small></span>${n === i ? `<span class="air">${detour ? 'pausado' : 'no ar'}</span>` : ''}</button>`).join('');
-    const extras = `<div class="road-extra">
+        <span class="tx"><b>${esc(stepTitle(x))}${PHONE_STEPS.includes(x.type) ? ' <i class="fone" title="Esta dinâmica acontece no celular: o telão avisa “pegue o celular”">📱</i>' : ''}</b><small>${esc(stepSub(x))}</small></span>${n === i ? `<span class="air">${detour ? 'pausado' : 'no ar'}</span>` : ''}</button>`).join('');
+    const extras = team() ? `<div class="road-extra">
+        <div class="small">🔑 Painel das dinâmicas: aqui ficam só Conexões, Reflexão e Sucesso (com o check-in e o Doc). O resto do townhall é conduzido pelo Painel do Doc.</div>
+        <div class="actions">${btn('↺ Reiniciar…', 'resetOpen', { cls: 'ghost sm' })}</div>
+        <label class="sw" style="margin-top:8px"><input type="checkbox" data-act="toggleMutual" ${O.settings.showMutualOnScreen ? 'checked' : ''}> Mostrar no telão os nomes das conexões mútuas</label>
+      </div>` : `<div class="road-extra">
         <div class="small">Fora do roteiro</div>
         <div class="actions">${btn('📣 Aviso rápido', 'quickMessage', { cls: 'ghost sm' })}${btn('📺 Olhos no telão', 'standbyNow', { cls: 'ghost sm' })}</div>
         <div class="actions">${btn('↺ Reiniciar…', 'resetOpen', { cls: 'ghost sm' })}</div>
@@ -216,13 +242,13 @@
           <label class="sw" style="margin-top:8px"><input type="checkbox" data-act="toggleMutual" ${O.settings.showMutualOnScreen ? 'checked' : ''}> Mostrar no telão os nomes das conexões mútuas</label>`)}
         <a href="#" class="small" data-go="roteiro">✎ Editar roteiro</a>
       </div>`;
-    const panel = sel ? panelPreview(sel, steps.indexOf(sel), steps.length, step, detour) : detour ? panelDetour(detour, step) : panelStep(step, i, steps.length, next, prev);
+    const panel = sel ? panelPreview(sel, steps.indexOf(sel), steps.length, step, detour) : detour ? panelDetour(detour, step) : step.type === 'hidden' ? panelHidden() : panelStep(step, i, steps.length, next, prev);
     return `<div class="live"><aside class="road"><div class="road-title">Roteiro</div>${road}${extras}</aside>${panel}</div>`;
   }
   // Passo aberto no painel, mas ainda fora do ar: mostra o que ele é e o botão para colocar no telão e nos celulares
   function panelPreview(x, n, total, live, detour) {
     const ed = editing(x), O = A.O;
-    const what = { checkin: 'Celulares: cada pessoa digita o nome e embarca · Telão: QR do app', stage: 'Celulares: nome e tema do bloco · Telão calmo, com o título do bloco', connections: 'Celulares: dupla, perguntas e avaliação · Telão: cronômetros',
+    const what = { checkin: 'Celulares: cada pessoa digita o nome, embarca e responde as duas palavras · Telão: QR do app e a nuvem das duas palavras', stage: 'Celulares: nome e tema do bloco · Telão calmo, com o título do bloco', connections: 'Celulares: dupla, perguntas e avaliação · Telão: cronômetros',
       reflexao: 'Celulares: escolher 1 projeto por parada · Telão: Flux Capacitor e os 2 mais votados', doc: 'Celulares: "olhe para o telão" e, depois, a mensagem · Telão: o Doc chega de 2027 e lê o resumo das 4 dinâmicas', sucesso: 'Celulares: pergunta e resposta · Telão: carro carregando; a nuvem só quando você revelar', message: 'Celulares e telão: este aviso', standby: 'Celulares em pausa · Telão: logo', closing: 'Celulares: agradecimento e a conexão de cada um · Telão: as frases finais e os créditos', cena: x.type === 'cena' ? CENA_AIR[x.cena] : '' }[x.type];
     let body = `<p class="lead">${esc(what)}</p>`;
     if (x.type === 'stage') body += ed ? `<div class="form editstep">${editField('Nome do bloco', 'title', ed.title)}${editField('Tema (aparece no celular e no telão)', 'theme', ed.theme)}${editField('Quem fala (opcional)', 'speaker', ed.speaker)}${editActions}</div>`
@@ -239,6 +265,7 @@
       <h1>${stepIcon(x)} ${esc(stepTitle(x))}</h1>
       ${body}
       <div class="sb-actions">${btn('📺 Mostrar no telão e nos celulares', 'goStep', { cls: 'big', data: { id: x.id } })}</div>
+      ${PHONE_STEPS.includes(x.type) ? '<p class="small" style="margin-top:8px">📱 Esta dinâmica acontece no celular: quando ela entra no ar, o telão avisa “PEGUE O CELULAR” (em português e espanhol) e deixa uma etiqueta no canto enquanto o celular é necessário.</p>' : ''}
       <div class="sb-nav"><a href="#" data-act="jumpStep" data-id="${live.id}">← voltar para o que está no ar: ${esc(detour ? (detour === 'message' ? 'aviso' : 'olhos no telão') : stepTitle(live))}</a><span></span></div>
     </section>`;
   }
@@ -260,22 +287,42 @@
       ${(r => (r ? `<div class="sb-reset"><a href="#" data-act="resetOne" data-id="${step.id}" class="${r.dirty ? '' : 'off'}" title="${esc(r.what)}">↺ Reiniciar este bloco</a><span class="small">${r.dirty ? esc(r.what) : 'este bloco já está no começo'}</span><a href="#" data-act="resetOpen" class="small">reiniciar outro bloco ou tudo…</a></div>` : ''))(resetInfo(step))}
     </section>`;
   }
+  // Senha das dinâmicas: o que está no ar é um bloco do townhall. O painel não mostra qual; só oferece os seus passos.
+  function panelHidden() {
+    const steps = A.O.settings.steps.filter(x => PHONE_STEPS.includes(x.type) && (x.type !== 'sucesso' || x.activity === 'd1'));
+    return `<section class="stepbox t-detour">
+      <div class="sb-head"><span class="kick">Fora das dinâmicas</span><span class="offair">no ar: um bloco do townhall</span></div>
+      <h1>🔒 O townhall está em outro bloco</h1>
+      <p class="lead">Agora está no ar uma parte do townhall que é conduzida pelo Painel do Doc. Este painel alcança só <b>Conexões, Reflexão e Sucesso</b>.</p>
+      <p class="small">Abra um dos passos no roteiro ao lado para conferir ou preparar. Ele só vai para o telão e os celulares quando você clicar em <b>📺 Mostrar</b>: combine o momento com quem está no Painel do Doc.</p>
+      <div class="actions" style="margin-top:12px">${steps.map(x => btn(`${stepIcon(x)} Abrir ${esc(x.type === 'sucesso' ? 'Sucesso' : stepTitle(x))}`, 'jumpStep', { cls: 'ghost', data: { id: x.id } })).join('')}</div>
+    </section>`;
+  }
   function panelDetour(kind, step) {
     const O = A.O, m = O.state.message;
     return `<section class="stepbox t-detour">
       <div class="sb-head"><span class="kick">Fora do roteiro</span><span class="onair">Celulares e telão: ${kind === 'message' ? 'este aviso' : 'tela de pausa'}</span></div>
       <h1>${kind === 'message' ? `${esc(m.emoji || '📣')} ${esc(m.title)}` : '📺 Olhos no telão'}</h1>
       <p class="lead">${esc(kind === 'message' ? m.body : O.settings.standbyText || '')}</p>
-      <div class="sb-actions">${btn(`↩ Voltar ao roteiro: ${esc(stepTitle(step))}`, 'goStep', { cls: 'big', data: { id: step.id } })}${kind === 'message' ? btn('✎ Editar aviso', 'quickMessage', { cls: 'ghost' }) : ''}</div>
+      <div class="sb-actions">${step.type === 'hidden' ? '<span class="small">Quem volta ao roteiro é o Painel do Doc.</span>' : btn(`↩ Voltar ao roteiro: ${esc(stepTitle(step))}`, 'goStep', { cls: 'big', data: { id: step.id } })}${kind === 'message' && !team() ? btn('✎ Editar aviso', 'quickMessage', { cls: 'ghost' }) : ''}</div>
     </section>`;
   }
 
+  // "Duas palavras": o que cada pessoa responde logo depois do login (como está chegando). Só a senha mestra vê e modera.
+  function wordsBox() {
+    const O = A.O, W = O.words || [], live = O.settings.wordsLive !== false;
+    if (team()) return '';
+    return `<div class="wordsbox"><p style="margin-top:12px">☁️ <b>Duas palavras</b> · ${W.length} de ${O.counts.checkedIn} a bordo já responderam <span class="small">(é a primeira tela depois do login; quem já respondeu não vê de novo, mesmo entrando por outro celular)</span></p>
+      <label class="sw" style="margin-top:6px"><input type="checkbox" data-act="wordsLive" ${live ? 'checked' : ''}> Mostrar a nuvem ao vivo no telão do check-in e nos celulares (desligada, ela só aparece quando você mostrar nas Boas-vindas)</label>
+      ${W.length ? det('words', `Ver e moderar as respostas (${W.length})`, `<div class="tblwrap" style="margin-top:8px;max-height:40vh;overflow:auto"><table class="tbl">${W.map(w => `<tr><td>${esc(w.name)}</td><td><b>${esc(w.words.join(' · '))}</b></td><td class="r"><button class="btn xs ghost" data-act="wordsRemove" data-id="${w.id}" title="Tira esta resposta da nuvem. A pessoa pode responder de novo.">remover</button></td></tr>`).join('')}</table></div>
+        <div class="actions" style="margin-top:8px">${btn('🗑 Apagar todas as respostas', 'wordsClear', { cls: 'red sm' })}</div>`) : ''}</div>`;
+  }
   function pCheckin() {
     const O = A.O, missing = O.people.filter(p => p.active && !p.checkedInAt);
-    return { onair: 'Celulares: cada pessoa digita o nome e embarca · Telão: QR do app',
+    return { onair: 'Celulares: cada pessoa digita o nome, embarca e responde as duas palavras · Telão: QR do app e a nuvem',
       body: `<div class="bigstat"><b>${O.counts.checkedIn}</b><span>de ${O.counts.total} a bordo</span></div>
         <div class="bar"><i style="width:${Math.round(100 * O.counts.checkedIn / Math.max(1, O.counts.total))}%"></i></div>
-        ${missing.length ? det('missing', `Quem ainda não entrou (${missing.length})`, `<p class="small" style="margin-top:6px">${esc(missing.map(p => p.name).join(' · '))}</p>`) : '<p class="ok">✔ Todo mundo a bordo</p>'}` };
+        ${missing.length ? det('missing', `Quem ainda não entrou (${missing.length})`, `<p class="small" style="margin-top:6px">${esc(missing.map(p => p.name).join(' · '))}</p>`) : '<p class="ok">✔ Todo mundo a bordo</p>'}${wordsBox()}` };
   }
   // edição rápida do passo que está no ar (tema do bloco, texto do aviso)
   const editing = step => (A.edit && A.edit.id === step.id ? A.edit : null);
@@ -301,7 +348,7 @@
         <div class="actions" style="align-items:center"><span class="small">Respostas do Sucesso:</span>${['d1', 'd2', 'd3', 'd4'].map(k => btn(`${k.slice(1).padStart(2, '0')} · ${SUC_NAME[k]}`, 'sucAnswers', { cls: 'ghost xs', data: { k } })).join('')}</div>` };
   }
   /* ---------- cenas do deck do townhall: o que cada uma mostra e os comandos do Doc ---------- */
-  const CENA_AIR = { agenda: 'Celulares: a agenda do dia · Telão: o plano de voo em 4 atos', boasvindas: 'Celulares: "olhe para o telão" · Telão: a frase de abertura e quem fala',
+  const CENA_AIR = { abertura: 'Celulares: "olhe para o telão" · Telão: o vídeo de abertura em tela cheia', agenda: 'Celulares: a agenda do dia · Telão: o plano de voo em 4 atos', boasvindas: 'Celulares: "olhe para o telão" (e a nuvem, quando você mostrar) · Telão: a frase de abertura, quem fala e a nuvem das duas palavras',
     almanaque: 'Celulares: "olhe para o telão" · Telão: o almanaque 2026, mês a mês', ia: 'Celulares: "olhe para o telão" · Telão: abertura da Frente 2 e o QR do app',
     reconhecimento: 'Celulares: o prêmio, o botão de carregar e o vencedor · Telão: a cerimônia', intervalo: 'Celulares e telão: o cronômetro do intervalo · a música entra',
     visao: 'Celulares: "olhe para o telão" · Telão: a Estratégia CDIO LATAM 2027 (interativa)', manifesto: 'Celulares: "olhe para o telão" · Telão: a pergunta do manifesto e o QR do app', mph: 'Celulares e telão: o velocímetro até 88 MPH e a chegada a 2027' };
@@ -314,6 +361,8 @@
   // resumo de uma linha (roteiro e "no ar")
   function cenaSub(x, live) {
     const C = A.O.cenas; if (!C) return '';
+    if (x.cena === 'abertura') { const s = C.state.abertura || {}; return s.play ? 'vídeo tocando' : s.fim ? 'o vídeo terminou' : live ? 'vídeo parado' : ''; }
+    if (x.cena === 'boasvindas') { const n = (A.O.words || []).length; return C.state.boasvindas && C.state.boasvindas.nuvem ? 'nuvem das duas palavras no telão' : n ? `${n} respostas para a nuvem` : ''; }
     if (x.cena === 'almanaque') { const s = C.state.almanaque; return s.pagina ? 'o ano em uma página' : s.mes >= 0 ? `${C.months[s.mes]}${s.tocando ? ' · tocando o ano' : ''}` : live ? 'em branco' : ''; }
     if (x.cena === 'reconhecimento') { const s = C.state.reconhecimento, n = C.config.reconhecimento.premios.length; return s.feitos.length || live ? `${live ? REC_FASE[s.fase] + ' · ' : ''}${s.feitos.length} de ${n} prêmios revelados` : ''; }
     if (x.cena === 'intervalo') { const ph = ivPhase(); return ph === 'run' ? `faltam ${fmt(ivLeft())}` : ph === 'paused' ? `pausado em ${fmt(ivLeft())}` : ph === 'done' ? 'terminou' : live ? 'cronômetro parado' : `${C.config.intervalo.min} min`; }
@@ -505,13 +554,29 @@
   function pCena(step) {
     const O = A.O, C = O.cenas, k = step.cena, cfg = C.config[k], st = C.state[k] || {}, note = `<p class="small" style="margin-top:10px">${cfgLink(k)} em Preparar → Agenda e cenas.</p>`;
     const out = { onair: CENA_AIR[k] };
-    if (k === 'agenda') {
+    if (k === 'abertura') { // vídeo de abertura: o arquivo é arrastado para a tela do telão (fica guardado lá) ou vem de um endereço
+      const tl = O.telao || { count: 0 }, onTelao = !!(tl.videos && tl.videos.abertura), ready = !!cfg.video || onTelao;
+      out.body = `<div class="phase">${st.play ? (ready ? '▶ O vídeo está tocando no telão' : '⏳ No ar, esperando o vídeo: assim que o arquivo for carregado no telão, ele começa') : st.fim ? '✔ O vídeo terminou' : 'No telão: o cartão do evento, pronto para o vídeo'}</div>
+        <p class="lead">${cfg.video ? 'Vídeo configurado por endereço.' : onTelao ? '✔ O vídeo já está carregado no telão (guardado no navegador do telão).' : !tl.count ? '⚠ Nenhum telão aberto. Abra o telão e arraste o arquivo do vídeo para a tela dele.' : '⚠ Ainda não há vídeo no telão: <b>arraste o arquivo do vídeo para a tela do telão</b> (ou clique na tela do telão para escolher o arquivo).'}</p>
+        <p class="small">O arquivo fica guardado no navegador do telão: pode carregar antes do evento, fechar e abrir de novo, que ele continua lá. No dia, use o mesmo computador e navegador. O vídeo toca com som depois de um clique na tela do telão (o mesmo clique que libera o som). ${cfg.auto ? 'Ele começa sozinho quando este passo entra no ar.' : 'Ele só começa quando você clicar em Tocar.'}</p>`;
+      out.primary = st.play ? cenaBtn('⏸ Pausar o vídeo', k, 'play', { cls: 'big', data: { on: '' } }) : st.fim ? null : cenaBtn('▶ Tocar o vídeo de abertura', k, 'play', { cls: 'big', data: { on: 1 }, disabled: !ready });
+      out.secondary = [cenaBtn('↺ Tocar do começo', k, 'reiniciar', { cls: 'ghost', disabled: !ready }), st.play ? cenaBtn('⏹ Encerrar o vídeo', k, 'fim', { cls: 'ghost' }) : ''];
+      out.busy = st.play ? 'O vídeo ainda está tocando no telão. Avançar mesmo assim?' : '';
+      if (!ready) out.warn = '⚠ Sem vídeo carregado, o telão mostra só o cartão do evento com o pedido do arquivo.';
+      out.more = `<p class="small">Endereço do vídeo (opcional) e se ele começa sozinho: ${cfgLink('abertura', 'Preparar → Agenda e cenas → Vídeo de abertura')}.</p>`;
+    } else if (k === 'agenda') {
       const v = C.config.agenda; let t = v.inicio.split(':').reduce((h, m) => +h * 60 + +m);
       const hm = x => `${pad(Math.floor(x / 60) % 24)}:${pad(x % 60)}`;
-      out.body = `<p class="lead">O plano de voo de hoje, em 4 atos. No telão, um destaque suave passeia por todos os itens, um de cada vez.</p>
-        <div class="tblwrap"><table class="tbl">${v.itens.map(x => { const h = hm(t); t += x.min; return `<tr><td class="mono">${h}</td><td><b>${esc(x.t)}</b><div class="small">${esc(x.d)}</div></td><td class="small">ATO ${['I', 'II', 'III', 'IV'][x.ato - 1]}</td><td class="r mono">${x.min}′</td></tr>`; }).join('')}</table></div>${note}`;
+      out.body = `<p class="lead">O plano de voo de hoje, em 4 atos, só com os horários (a duração de cada bloco não aparece). No telão, um destaque suave passeia por todos os itens; 📱 marca o que acontece no celular.</p>
+        <div class="tblwrap"><table class="tbl">${v.itens.map(x => { const h = hm(t); t += x.min; return `<tr><td class="mono">${h}</td><td><b>${esc(x.t)}</b>${PHONE_STEPS.includes(x.ref) ? ' 📱' : ''}<div class="small">${esc(x.d)}</div></td><td class="small">ATO ${['I', 'II', 'III', 'IV'][x.ato - 1]}</td></tr>`; }).join('')}</table></div>${note}`;
     } else if (k === 'boasvindas') {
-      out.body = `<div class="theme">${esc(cfg.frase.replace(/\*/g, ''))}</div><div class="speaker">com ${esc(cfg.pessoas.map(p => p.nome).join(', '))} · ${cfg.min} min</div>${note}`;
+      const n = (O.words || []).length;
+      out.body = `<div class="theme">${esc(cfg.frase.replace(/\*/g, ''))}</div><div class="speaker">com ${esc(cfg.pessoas.map(p => p.nome).join(', '))}</div>
+        <div class="phase" style="margin-top:12px">${st.nuvem ? '☁️ No telão: a nuvem das duas palavras' : 'No telão: a frase de abertura e quem fala'}</div>
+        <p class="small">A nuvem mostra como a sala chegou: as duas palavras que cada pessoa respondeu logo depois do login (${n} ${n === 1 ? 'resposta' : 'respostas'} até agora). Com a nuvem no telão, os celulares também a mostram.</p>${wordsBox()}`;
+      out.primary = st.nuvem ? null : cenaBtn(`☁️ Mostrar a nuvem das duas palavras (${n})`, k, 'nuvem', { cls: n ? 'big' : 'ghost', data: { on: 1 } });
+      out.secondary = st.nuvem ? [cenaBtn('← Voltar para a frase de abertura', k, 'nuvem', { cls: 'ghost', data: { on: '' } })] : [];
+      out.more = note;
     } else if (k === 'almanaque') {
       const m = st.mes, its = m >= 0 ? cfg.itens.filter(x => x.m === m) : [], dl = its.filter(x => x.k === 'E').length, off = new Set(st.off || []);
       out.body = `<div class="phase">${st.pagina ? 'No telão: o ano em uma página' : m >= 0 ? `No telão: ${C.months[m]} · ${dl} ${dl === 1 ? 'entregue' : 'entregues'} de ${its.length} ${its.length === 1 ? 'item' : 'itens'}${st.tocando ? ' · tocando o ano' : ''}` : 'No telão: o almanaque em branco, pronto para começar'}</div>
@@ -524,7 +589,7 @@
       out.more = `<div class="actions" style="align-items:center"><span class="small">Mostrar nos cartões:</span>${[...Object.keys(C.bus).map(u => [u, C.bus[u]]), ['E', 'Entregue'], ['M', 'Marco'], ['C', 'Contexto']].map(([key, l]) => `<button class="btn xs ${off.has(key) ? 'ghost' : ''}" data-act="cena" data-kind="almanaque" data-a="filtro" data-key="${key}">${off.has(key) ? '○' : '●'} ${esc(l)}</button>`).join('')}</div>
         ${note}`;
     } else if (k === 'ia') {
-      out.body = `<div class="theme">${esc(cfg.titulo.replace(/\*/g, ''))}</div><div class="speaker">com ${esc(cfg.quem)} · ${cfg.min} min</div><p class="lead">${esc(cfg.texto)}</p>
+      out.body = `<div class="theme">${esc(cfg.titulo.replace(/\*/g, ''))}</div><div class="speaker">com ${esc(cfg.quem)}</div><p class="lead">${esc(cfg.texto)}</p>
         ${cfg.nota ? `<div class="sb-warn">📝 Para quem apresenta (não aparece no telão): ${esc(cfg.nota)}</div>` : ''}<p class="small" style="margin-top:8px">O telão mostra o QR do app. A parte interativa da Frente 2 é o próximo passo: a Reflexão.</p>${note}`;
     } else if (k === 'reconhecimento') {
       const P = cfg.premios, done = new Set(st.feitos), p = st.premio !== null ? P[st.premio] : null, w = p ? p.indicados[p.vencedor - 1] : null, next = P.findIndex((x, i) => !done.has(i));
@@ -569,14 +634,14 @@
       out.more = `<div class="actions" style="align-items:center"><span class="small">Começar com:</span>${[5, 10, 15, 20].map(n => cenaBtn(`${n} min`, k, 'start', { cls: 'ghost xs', data: { min: n } })).join('')}</div><p class="small" style="margin-top:8px">O cronômetro continua contando se você mostrar outro passo. A música entra sozinha neste passo${O.settings.spotifyBreak ? ' (o seu Spotify, como escolhido em Ajustes → Spotify)' : ''}; para não entrar, desligue em Ajustes → "Desligar o som ao exibir um bloco de fala". Para trocar a música do app pelo seu Spotify aqui, veja <a href="#" data-go="config">Ajustes → Spotify</a>.</p>${note}`;
       out.busy = ph === 'run' ? 'O intervalo ainda não terminou. Avançar mesmo assim?' : '';
     } else if (k === 'visao') {
-      out.body = `<div class="theme">${esc(cfg.titulo)}</div><div class="speaker">com ${esc(hostNames(k) || cfg.quem)} · ${cfg.min} min</div>
+      out.body = `<div class="theme">${esc(cfg.titulo)}</div><div class="speaker">com ${esc(hostNames(k) || cfg.quem)}</div>
         <p class="lead">O telão mostra a <b>Estratégia CDIO LATAM 2027</b> (o arquivo original, sem alterações) dentro de uma moldura. Ela é interativa: os filtros e os pilares são clicados <b>direto na tela do telão</b>.</p>
-        <div class="actions"><a class="btn ghost sm" href="/estrategia-2027.html" target="_blank">Abrir a estratégia em outra aba ↗</a></div>
+        <div class="actions"><a class="btn ghost sm" href="/estrategia-2027.html" target="_blank">Abrir a estratégia em outra aba ↗</a><span class="small">${O.settings.confidencial !== false ? '🔒 No modo confidencial, este endereço só abre no navegador logado com a senha mestra.' : ''}</span></div>
         <label class="sw" style="margin-top:10px"><input type="checkbox" data-act="cena" data-kind="visao" data-a="intro" ${st.intro ? 'checked' : ''}> Começar pela abertura em vídeo da página (senão, vai direto para o mapa da estratégia, como no deck)</label>${note}`;
     } else if (k === 'manifesto') {
-      out.body = `<div class="theme">${esc(cfg.titulo)} ${esc(cfg.pergunta)}</div><div class="speaker">com ${esc(cfg.quem)} · ${cfg.min} min</div><p class="small">O telão mostra o calendário de ${esc(cfg.dia)} ${esc(cfg.mes)} ${esc(cfg.ano)}, a pergunta e o QR do app. O manifesto coletivo acontece nos próximos passos: as dinâmicas do Sucesso e a mensagem do Doc.</p>${note}`;
+      out.body = `<div class="theme">${esc(cfg.titulo)} ${esc(cfg.pergunta)}</div><div class="speaker">com ${esc(cfg.quem)}</div><p class="small">O telão mostra o calendário de ${esc(cfg.dia)} ${esc(cfg.mes)} ${esc(cfg.ano)}, a pergunta e o QR do app. O manifesto coletivo acontece nos próximos passos: as dinâmicas do Sucesso e a mensagem do Doc.</p>${note}`;
     } else if (k === 'mph') {
-      out.body = `<div class="phase">${st.at ? 'Chegamos: "' + esc(cfg.chegada) + '"' : 'No telão: o velocímetro em 0 MPH'}</div><p class="lead">${esc(st.at ? cfg.depois : cfg.antes)}</p><p class="small">${esc(cfg.quem)} · ${cfg.min} min</p>`;
+      out.body = `<div class="phase">${st.at ? 'Chegamos: "' + esc(cfg.chegada) + '"' : 'No telão: o velocímetro em 0 MPH'}</div><p class="lead">${esc(st.at ? cfg.depois : cfg.antes)}</p><p class="small">${esc(cfg.quem)}</p>`;
       out.primary = st.at ? null : cenaBtn('🏎️ Acelerar até 2027 (88 MPH)', k, 'go', { cls: 'big' });
       out.secondary = st.at ? [cenaBtn('↺ Voltar a 0 MPH', k, 'reset', { cls: 'ghost' })] : [];
       out.more = note;
@@ -874,17 +939,17 @@
   /* ====================== REINICIAR: tudo ou um bloco ======================
    * Reiniciar apaga o que foi feito durante o evento ou o ensaio; não mexe no que foi preparado (pessoas, fotos,
    * perguntas, roteiro, textos e conteúdo das cenas). Cada bloco do roteiro tem o seu "escopo" no servidor. */
-  const CENA_RESET = { almanaque: 'Volta o almanaque para o começo (em branco, sem filtros).', reconhecimento: 'Lacra todos os prêmios de novo e volta para a abertura.', intervalo: 'Zera o cronômetro do intervalo.', visao: 'Volta a página da estratégia para o modo padrão (direto no mapa).', mph: 'Volta o velocímetro para 0 MPH.' };
+  const CENA_RESET = { abertura: 'Volta o vídeo de abertura para o começo (parado).', boasvindas: 'Tira a nuvem das duas palavras do telão (as respostas ficam).', almanaque: 'Volta o almanaque para o começo (em branco, sem filtros).', reconhecimento: 'Lacra todos os prêmios de novo e volta para a abertura.', intervalo: 'Zera o cronômetro do intervalo.', visao: 'Volta a página da estratégia para o modo padrão (direto no mapa).', mph: 'Volta o velocímetro para 0 MPH.' };
   // o que dá para reiniciar em um passo do roteiro: escopo, como está agora, se há algo para apagar e o que o reinício faz
   function resetInfo(x) {
     const O = A.O, C = O.cenas;
-    if (x.type === 'checkin') return { scope: 'checkin', now: `${O.counts.checkedIn} de ${O.counts.total} a bordo`, dirty: O.counts.checkedIn > 0 || !!O.state.conn.generatedAt, what: 'Desfaz o check-in de todo mundo: cada pessoa escolhe o nome de novo. As Conexões são reiniciadas junto, porque as duplas dependem de quem está a bordo.' };
+    if (x.type === 'checkin') return team() ? null : { scope: 'checkin', now: `${O.counts.checkedIn} de ${O.counts.total} a bordo`, dirty: O.counts.checkedIn > 0 || !!O.state.conn.generatedAt, what: 'Desfaz o check-in de todo mundo: cada pessoa escolhe o nome de novo e responde as duas palavras de novo. As Conexões são reiniciadas junto, porque as duplas dependem de quem está a bordo.' };
     if (x.type === 'connections') { const c = O.state.conn; return { scope: 'connections', now: c.phase === 'idle' ? 'sem duplas' : c.phase === 'ready' ? 'duplas sorteadas' : c.phase === 'results' ? 'conexões enviadas' : `${PHASE_LABEL[c.phase]}${c.round ? ` · viagem ${c.round}/3` : ''}`, dirty: c.phase !== 'idle', what: 'Apaga as duplas sorteadas, as perguntas já vistas, as avaliações e as conexões calculadas. Os check-ins ficam.' }; }
     if (x.type === 'reflexao' && O.reflexao) { const R = O.reflexao, votes = R.paradas.reduce((a, p) => a + p.votes, 0), done = R.paradas.filter(p => p.top.length).length; return { scope: 'reflexao', now: `${votes} ${votes === 1 ? 'voto' : 'votos'} · ${done} de ${R.paradas.length} paradas reveladas`, dirty: votes > 0 || done > 0 || R.open !== null || R.paradas.some(p => p.phase !== 'idle'), what: 'Apaga os votos e os mais votados de todas as paradas e volta para o menu das paradas.' }; }
     if (x.type === 'sucesso') { const a = sucAct(x.activity), n = a.responseCount || 0; return { scope: 'sucesso:' + x.activity, now: `${n} ${n === 1 ? 'resposta' : 'respostas'}`, dirty: n > 0 || ['paused', 'done'].includes(a.phase) || (a.phase === 'run' && !!a.endsAt), what: 'Apaga as respostas desta dinâmica, o sorteio e a nuvem revelada. O recebimento volta ao começo.' }; }
     if (x.type === 'doc') { const d = O.state.doc || {}; return { scope: 'doc', now: d.message ? `mensagem pronta${d.play ? ' · cena no telão' : ''}` : 'sem mensagem', dirty: !!d.message || d.status === 'generating', what: 'Apaga a mensagem do Doc e tira a cena do telão. Dá para gerar de novo.' }; }
     if (x.type === 'cena' && C && CENA_RESET[x.cena]) { const st = C.state[x.cena] || {};
-      const dirty = x.cena === 'almanaque' ? st.mes >= 0 || !!st.pagina || (st.off || []).length > 0 : x.cena === 'reconhecimento' ? (st.feitos || []).length > 0 || st.fase !== 'intro' : x.cena === 'intervalo' ? st.phase !== 'idle' : x.cena === 'visao' ? !!st.intro : !!st.at;
+      const dirty = x.cena === 'abertura' ? !!st.play || !!st.fim : x.cena === 'boasvindas' ? !!st.nuvem : x.cena === 'almanaque' ? st.mes >= 0 || !!st.pagina || (st.off || []).length > 0 : x.cena === 'reconhecimento' ? (st.feitos || []).length > 0 || st.fase !== 'intro' : x.cena === 'intervalo' ? st.phase !== 'idle' : x.cena === 'visao' ? !!st.intro : !!st.at;
       return { scope: 'cena:' + x.cena, now: cenaSub(x, true) || 'no começo', dirty, what: CENA_RESET[x.cena] }; }
     return null;
   }
@@ -894,8 +959,8 @@
     for (const x of steps) { const r = resetInfo(x); if (r && !seen.has(r.scope)) { seen.add(r.scope); rows.push({ x, ...r }); } }
     const dirtyN = rows.filter(r => r.dirty).length, atStart = i === 0 && !O.state.detour;
     dialog(`<h3>↺ Reiniciar</h3>
-      <p class="small">Reiniciar apaga o que foi feito durante o evento ou o ensaio: check-ins, duplas, votos, respostas, prêmios revelados e cronômetros. <b>Não mexe no que foi preparado</b>: lista de pessoas e fotos, perguntas, roteiro, textos e conteúdo das cenas. Para guardar os dados antes, use <a href="/dados.html" target="_blank">📊 Dados</a>.</p>
-      <div class="rs-all"><div><b>Reiniciar tudo</b><span class="small">O roteiro volta para o primeiro passo e todos os blocos abaixo voltam ao começo, de uma vez.</span>
+      <p class="small">Reiniciar apaga o que foi feito durante o evento ou o ensaio: ${team() ? 'duplas, votos e respostas' : 'check-ins, duplas, votos, respostas, prêmios revelados e cronômetros'}. <b>Não mexe no que foi preparado</b>: lista de pessoas e fotos, perguntas${team() ? ' e textos' : ', roteiro, textos e conteúdo das cenas'}. Para guardar os dados antes, use <a href="/dados.html" target="_blank">📊 Dados</a>.</p>
+      <div class="rs-all" ${team() ? 'hidden' : ''}><div><b>Reiniciar tudo</b><span class="small">O roteiro volta para o primeiro passo e todos os blocos abaixo voltam ao começo, de uma vez.</span>
           <label class="sw" style="margin-top:8px"><input type="checkbox" id="rsKeep"> Manter os check-ins (as ${O.counts.checkedIn} pessoas a bordo continuam a bordo)</label></div>
         <button class="btn red" id="rsAll">↺ Reiniciar tudo</button></div>
       <h3 style="margin-top:16px">Reiniciar um bloco</h3>
@@ -903,18 +968,38 @@
       <div class="tblwrap" style="margin-top:8px;max-height:46vh;overflow:auto"><table class="tbl rs-tbl">
         ${rows.map(r => `<tr class="${r.dirty ? '' : 'clean'}"><td>${stepIcon(r.x)} <b>${esc(stepTitle(r.x))}</b><div class="small">${esc(r.what)}</div></td><td class="small" style="white-space:nowrap">${r.dirty ? esc(r.now) : '✓ no começo'}</td>
           <td class="r"><button class="btn xs ${r.dirty ? 'red' : 'ghost'}" data-reset="1" data-scope="${r.scope}" data-title="${esc(stepTitle(r.x))}" data-what="${esc(r.what)}" ${r.dirty ? '' : 'disabled'}>↺ Reiniciar</button></td></tr>`).join('')}
-        <tr class="${atStart ? 'clean' : ''}"><td>🧭 <b>Roteiro</b><div class="small">Volta o telão e os celulares para o primeiro passo, sem apagar nada.</div></td><td class="small" style="white-space:nowrap">${atStart ? '✓ no começo' : `passo ${i + 1} de ${steps.length}`}</td>
+        <tr class="${atStart ? 'clean' : ''}" ${team() ? 'hidden' : ''}><td>🧭 <b>Roteiro</b><div class="small">Volta o telão e os celulares para o primeiro passo, sem apagar nada.</div></td><td class="small" style="white-space:nowrap">${atStart ? '✓ no começo' : `passo ${i + 1} de ${steps.length}`}</td>
           <td class="r"><button class="btn xs ghost" data-reset="1" data-scope="roteiro" data-title="o roteiro" data-what="O telão e os celulares voltam para o primeiro passo. Nada é apagado." ${atStart ? 'disabled' : ''}>↺ Voltar ao início</button></td></tr>
       </table></div>
       <div class="actions" style="margin-top:12px"><button class="btn ghost" data-close>Fechar</button></div>`, () => {
       $('#dlg').classList.add('wide'); // esta janela tem uma tabela: fica mais larga
-      const again = () => setTimeout(() => { if ($('#dlg').open && $('#rsAll')) resetDialog(); }, 800); // mostra como ficou depois de reiniciar
-      $('#rsAll').onclick = () => { const keep = $('#rsKeep').checked;
+      const again = () => setTimeout(() => { if ($('#dlg').open && $('#dlg [data-reset]')) resetDialog(); }, 800); // mostra como ficou depois de reiniciar
+      if (!team()) $('#rsAll').onclick = () => { const keep = $('#rsKeep').checked;
         if (!confirm(`Reiniciar TUDO? O roteiro volta para o primeiro passo e são apagados ${keep ? '' : 'os check-ins, '}as duplas e avaliações, os votos da Reflexão, as respostas do Sucesso, a mensagem do Doc, os prêmios revelados e os cronômetros.${keep ? ' Os check-ins ficam.' : ''} Não dá para desfazer.`)) return;
         run(async () => { await resetScope('all', { keepCheckins: keep }); A.sel = null; again(); }, 'Tudo reiniciado'); };
       document.querySelectorAll('#dlg [data-reset]').forEach(b => { b.onclick = () => { const d = b.dataset;
         if (!confirm(`Reiniciar ${d.title}? ${d.what}${d.scope === 'roteiro' ? '' : ' Não dá para desfazer.'}`)) return;
         run(async () => { await resetScope(d.scope); again(); }, d.scope === 'roteiro' ? 'Roteiro no primeiro passo' : `${d.title}: reiniciado`); }; });
+    });
+  }
+
+  // Modo confidencial: explica e liga/desliga
+  function confDialog() {
+    const O = A.O, conf = O.settings.confidencial !== false;
+    dialog(`<h3>${conf ? '🔒 Modo confidencial ligado' : '🔓 Conteúdo liberado para todos'}</h3>
+      <p class="small">${conf ? 'O conteúdo do townhall (vídeo de abertura, boas-vindas, plano de voo, Jornada 2026, prêmios, estratégia 2027, 88 MPH e créditos) só aparece <b>neste painel e no telão aberto neste navegador</b>. Enquanto uma dessas cenas está no ar, os celulares e os outros telões veem só “olhe para o telão”. Quem entra com a senha das dinâmicas não vê nada disso.' : 'Quando uma cena do townhall entra no ar, <b>todos os celulares e telões</b> a veem. É como deve ficar no dia do evento.'}</p>
+      <p class="small" style="margin-top:8px">Conexões, Reflexão e Sucesso não são confidenciais: aparecem para todos nos dois modos.</p>
+      <div class="actions" style="margin-top:12px"><button class="btn" data-act="confSet" data-on="${conf ? '' : 1}">${conf ? '🔓 Liberar para todos (dia do evento)' : '🔒 Voltar ao modo confidencial'}</button><button class="btn ghost" data-close>Fechar</button></div>`);
+  }
+  // Uma cena do townhall vai entrar no ar com o modo confidencial ligado: é o evento (libera para todos) ou é ensaio?
+  function confStepDialog(x) {
+    dialog(`<h3>🔒 ${esc(stepTitle(x))}: é o evento ou é ensaio?</h3>
+      <p class="small">O modo confidencial está ligado. Este passo é conteúdo do townhall.</p>
+      <div class="rs-all" style="margin-top:10px"><div><b>É o evento</b><span class="small">Libera o conteúdo para todos os celulares e telões e coloca o passo no ar. Daqui em diante tudo aparece para todos.</span></div><button class="btn" id="cfGo">🔓 Liberar e mostrar</button></div>
+      <div class="rs-all" style="margin-top:8px"><div><b>É ensaio</b><span class="small">Mostra só para você: neste painel e no telão aberto neste navegador. Os celulares veem “olhe para o telão”.</span></div><button class="btn ghost" id="cfRehearse">🔒 Mostrar só para mim</button></div>
+      <div class="actions" style="margin-top:12px"><button class="btn ghost" data-close>Cancelar</button></div>`, () => {
+      const go = free => run(async () => { if (free) await act('settings', { settings: { confidencial: false } }); await api('POST', '/api/admin/step', { id: x.id }); closeDialog(); A.sel = null; A.edit = null; render(true); }, free ? '🔓 Liberado para todos · passo no ar' : '🔒 No ar só para você (ensaio)');
+      $('#cfGo').onclick = () => go(true); $('#cfRehearse').onclick = () => go(false);
     });
   }
 
@@ -935,19 +1020,19 @@
       const f = (field, ph, cls) => `<input class="input ${cls}" data-rs="${i}" data-f="${field}" id="rs-${field}-${i}" value="${esc(x[field] || '')}" placeholder="${ph}" aria-label="${ph}">`;
       const fields = x.type === 'stage' ? `${f('title', 'Nome do bloco', 'w1')}${f('theme', 'Tema (aparece no celular e no telão)', 'w3')}${f('speaker', 'Quem fala (opcional)', 'w2')}`
         : x.type === 'message' ? `${f('emoji', '📣', 'w0')}${f('title', 'Título do aviso', 'w2')}${f('body', 'Texto do aviso', 'w3')}`
-        : `<span class="fixed">${esc(stepTitle(x))}<small>${x.type === 'cena' ? esc(cenaMeta(x).hint) : x.type === 'sucesso' && TALK[x.activity] ? 'pergunta ao vivo, nuvem, sorteio e tempo de fala' : STEP_HINT[x.type]}</small></span>${SKIP_OF[x.type] ? `<button class="btn ghost xs" data-act="skipEdit" data-block="${x.type}" title="Quem coordena ou não participa deste bloco">🚫 Fora deste bloco (${skipIds(x.type).length})</button>` : ''}`;
+        : `<span class="fixed">${esc(stepTitle(x))}${PHONE_STEPS.includes(x.type) ? ' 📱' : ''}<small>${x.type === 'cena' ? esc(cenaMeta(x).hint) : x.type === 'sucesso' && TALK[x.activity] ? 'pergunta ao vivo, nuvem, sorteio e tempo de fala' : STEP_HINT[x.type]}</small></span>${SKIP_OF[x.type] ? `<button class="btn ghost xs" data-act="skipEdit" data-block="${x.type}" title="Quem coordena ou não participa deste bloco">🚫 Fora deste bloco (${skipIds(x.type).length})</button>` : ''}`;
       return `<div class="rrow ${!dirty && x.id === O.state.step ? 'now' : ''}"><span class="n">${i + 1}</span><span class="ic" title="${STEP_KIND[x.type]}">${stepIcon(x)}</span><div class="rf">${fields}</div>
         <div class="rc">${!dirty && x.id === O.state.step ? '<span class="pill hot">no ar</span>' : ''}${['message', 'standby'].includes(x.type) ? '' : `<button class="btn ghost xs trb ${x.transition === false ? 'off' : ''}" data-act="rsTr" data-i="${i}" title="${x.transition === false ? 'Este passo entra direto, sem a transição do filme. Clique para ligar a transição.' : 'Este passo entra com a transição do filme (88 MPH). Clique para ele entrar direto.'}">${x.transition === false ? '⏭ direto' : '⚡ transição'}</button>`}<button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'} title="Subir">↑</button><button class="btn ghost xs" data-act="rsMove" data-i="${i}" data-d="1" ${i < list.length - 1 ? '' : 'disabled'} title="Descer">↓</button><button class="btn ghost xs" data-act="rsDel" data-i="${i}" ${list.length > 1 ? '' : 'disabled'} title="Remover">✕</button></div></div>`;
     };
     const add = (label, type, extra = '') => `<button class="btn ghost xs" data-act="rsAdd" data-type="${type}" ${extra}>＋ ${label}</button>`;
     return `<div class="card"><h2>Roteiro do evento</h2>
-      <p class="small">O roteiro padrão segue a agenda do townhall em 4 atos (as cenas do deck mais Conexões, Reflexão e Sucesso). O conteúdo de cada cena fica em <a href="#" data-go="cenas">Agenda e cenas</a>.</p>
+      <p class="small">O roteiro padrão segue a agenda do townhall em 4 atos: check-in → vídeo de abertura → boas-vindas → plano de voo → Conexões e o resto (as cenas do deck mais Conexões, Reflexão e Sucesso). O conteúdo de cada cena fica em <a href="#" data-go="cenas">Agenda e cenas</a>. 📱 marca as dinâmicas que acontecem no celular.</p>
       <p class="small">Em cada passo, o botão <b>⚡ transição</b> / <b>⏭ direto</b> escolhe se ele entra com a viagem no tempo (os segundos de 88 MPH no telão e nos celulares) ou direto. Os nomes e as fotos de quem conduz cada bloco ficam em <a href="#" data-go="cenas" data-sec="anfitrioes">Agenda e cenas → Quem conduz</a>.</p>
       <p class="small">A ordem dos passos do evento. No <a href="#" data-go="live">Ao vivo</a> você abre cada passo e clica em "Mostrar" para ele ir para o telão e os celulares. Dá para mudar a qualquer momento, inclusive durante o evento. Em Conexões, Reflexão e Sucesso, o botão 🚫 marca quem coordena e não participa.</p>
       <div class="rlist">${list.map(row).join('')}</div>
       <div class="actions radd"><span class="small">Adicionar:</span>${add('Bloco de fala', 'stage')}${add('Aviso / intervalo', 'message')}${add('Olhos no telão', 'standby')}${add('Check-in', 'checkin')}${has('connections') ? '' : add('Conexões', 'connections')}${has('reflexao') ? '' : add('Reflexão', 'reflexao')}${has('doc') ? '' : add('Visão 2027 · o Doc', 'doc')}${['d1', 'd2', 'd3', 'd4'].filter(k => !hasAct(k)).map(k => add(`Sucesso ${k.slice(1).padStart(2, '0')}`, 'sucesso', `data-activity="${k}"`)).join('')}${add('Créditos', 'closing')}</div>
-      ${(O.cenas ? O.cenas.kinds : []).some(k => !hasCena(k) && !EXTRA_CENAS.includes(k)) ? `<div class="actions radd"><span class="small">Cenas do townhall:</span>${O.cenas.kinds.filter(k => !hasCena(k) && !EXTRA_CENAS.includes(k)).map(k => add(`${O.cenas.meta[k].icon} ${O.cenas.meta[k].name}`, 'cena', `data-cena="${k}"`)).join('')}</div>` : ''}
-      ${(O.cenas ? O.cenas.kinds : []).some(k => !hasCena(k) && EXTRA_CENAS.includes(k)) ? det('rsExtras', 'Cenas extras (telas de abertura que hoje fazem parte dos blocos Reflexão e Sucesso)', `<div class="actions radd" style="margin-top:8px">${O.cenas.kinds.filter(k => !hasCena(k) && EXTRA_CENAS.includes(k)).map(k => add(`${O.cenas.meta[k].icon} ${O.cenas.meta[k].name}`, 'cena', `data-cena="${k}"`)).join('')}</div>`) : ''}
+      ${(O.cenas ? O.cenas.kinds : []).some(k => !hasCena(k) && !EXTRA_CENAS.includes(k)) ? `<div class="actions radd"><span class="small">Cenas do townhall:</span>${O.cenas.kinds.filter(k => !hasCena(k) && !EXTRA_CENAS.includes(k)).map(k => add(`${O.cenas.meta[k].icon} ${O.cenas.meta[k].label}`, 'cena', `data-cena="${k}"`)).join('')}</div>` : ''}
+      ${(O.cenas ? O.cenas.kinds : []).some(k => !hasCena(k) && EXTRA_CENAS.includes(k)) ? det('rsExtras', 'Cenas extras (telas de abertura que hoje fazem parte dos blocos Reflexão e Sucesso)', `<div class="actions radd" style="margin-top:8px">${O.cenas.kinds.filter(k => !hasCena(k) && EXTRA_CENAS.includes(k)).map(k => add(`${O.cenas.meta[k].icon} ${O.cenas.meta[k].label}`, 'cena', `data-cena="${k}"`)).join('')}</div>`) : ''}
       <div class="actions" style="margin-top:14px;align-items:center">${dirty ? '<button class="btn" data-act="rsSave">Salvar roteiro</button><button class="btn ghost" data-act="rsDiscard">Descartar alterações</button><span class="warn">alterações não salvas</span>' : '<span class="ok">✔ Roteiro salvo</span>'}<button class="btn ghost sm" data-act="rsDefault" style="margin-left:auto">Restaurar o roteiro padrão</button></div>
     </div>`;
   }
@@ -967,24 +1052,26 @@
     anfitrioes: ['🎙️ Quem conduz cada bloco', 'Aparecem no telão com a foto de perfil e o nome (como nas boas-vindas), e nos celulares. Um nome por linha, escrito como na lista de pessoas (é assim que a foto é encontrada). Deixe em branco para não mostrar ninguém.',
       [LIST('connections', '⚡ Conexões'), LIST('almanaque', '📅 Jornada 2026 · almanaque'), LIST('reflexao', '💭 Reflexão'), LIST('reconhecimento', '🏆 Reconhecimento 2026'), LIST('visao', '🔭 Visão 2027'), LIST('sucesso', '🚀 Sucesso'),
         LIST('especial', '★ Conexões · participação especial (aparece em uma placa dourada, abaixo de quem conduz)'), T('especialNota', '★ Participação especial · frase que aparece embaixo do nome')]],
-    agenda: ['🗺️ Plano de voo (agenda)', 'Os horários são calculados a partir do início e dos minutos de cada item.',
-      [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('inicio', 'Início (HH:MM)'), LINES('itens', 'Itens, um por linha: ato (1 a 4) | título | detalhe | minutos', ['ato', 't', 'd', 'min'])]],
-    boasvindas: ['👋 Boas-vindas e jornada', '', [T('kicker', 'Linha de cima'), AREA('frase', 'Frase de abertura'), LINES('pessoas', 'Quem fala, um por linha: nome | papel', ['nome', 'papel']), NUM('min', 'Minutos'), T('faixa', 'Faixa de baixo')]],
+    abertura: ['🎬 Vídeo de abertura', 'O vídeo toca em tela cheia no telão. O jeito mais seguro é arrastar o arquivo para a tela do telão (ele fica guardado no navegador do telão, mesmo fechando e abrindo de novo). O endereço abaixo é opcional: só para um arquivo de vídeo que esteja em um endereço direto (.mp4 ou .webm).',
+      [T('kicker', 'Linha de cima'), T('titulo', 'Título do cartão (antes de o vídeo tocar)'), T('sub', 'Subtítulo'), T('video', 'Endereço do vídeo (opcional: https://… ou caminho do site; vazio = arrastar o arquivo para o telão)'), CHECK('auto', 'Começar a tocar assim que o passo entrar no ar (senão, só no botão Tocar)')]],
+    agenda: ['🗺️ Plano de voo (agenda)', 'Os horários são calculados a partir do início e dos minutos de cada item. Os minutos servem só para essa conta: na tela aparecem os horários, não a duração de cada bloco.',
+      [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('inicio', 'Início (HH:MM)'), LINES('itens', 'Itens, um por linha: ato (1 a 4) | título | detalhe | minutos (só para calcular os horários)', ['ato', 't', 'd', 'min'])]],
+    boasvindas: ['👋 Boas-vindas e jornada', 'A nuvem das duas palavras (o que cada pessoa responde logo depois do login) entra no telão pelo botão do passo, no Ao vivo.', [T('kicker', 'Linha de cima'), AREA('frase', 'Frase de abertura'), LINES('pessoas', 'Quem fala, um por linha: nome | papel', ['nome', 'papel']), T('faixa', 'Faixa de baixo'), T('nuvemTitulo', 'Título da nuvem das duas palavras')]],
     almanaque: ['📅 Jornada 2026 · almanaque', 'Os números "entregues" e "benefícios" são calculados a partir dos itens: contam os do tipo E (entregue) e somam o valor em euros.',
-      [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('sub', 'Subtítulo'), NUM('min', 'Minutos'),
+      [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('sub', 'Subtítulo'),
         LINES('kpis', 'Indicadores fixos, um por linha: valor | rótulo', ['v', 'l']), T('kpiEntregas', 'Rótulo do total de entregas'), T('kpiBeneficios', 'Rótulo do total de benefícios'),
         LINES('itens', 'Itens do ano, um por linha: mês | tipo (E entregue · M marco · R resultado · C contexto) | BU (HC, BPC, X ou -) | benefício somado em € (0 se não soma) | texto', ['m', 'k', 'bu', 'v', 't'], { m: MONTH_MAP, k: TIPO_MAP, bu: BU_MAP }),
         AREA('fonte', 'Fonte (rodapé)'), T('pagina.kicker', 'Uma página · linha de cima'), T('pagina.titulo', 'Uma página · título'), AREA('pagina.nota', 'Uma página · nota dos benefícios'), AREA('pagina.lideranca', 'Uma página · aprendizados da liderança')]],
-    ia: ['🦋 Como a IA nos ajudou em 2026', '', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), AREA('texto', 'Texto'), T('quem', 'Quem apresenta'), NUM('min', 'Minutos'), T('faixa', 'Faixa de baixo'), AREA('nota', 'Nota para quem apresenta (só aparece no painel)')]],
+    ia: ['🦋 Como a IA nos ajudou em 2026', '', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), AREA('texto', 'Texto'), T('quem', 'Quem apresenta'), T('faixa', 'Faixa de baixo'), AREA('nota', 'Nota para quem apresenta (só aparece no painel)')]],
     reconhecimento: ['🏆 Reconhecimento 2026', 'Os vencedores já ficam definidos aqui: o "sorteio" no telão é o suspense da cerimônia. Só o Painel do Doc vê o vencedor antes da revelação.',
-      [T('kicker', 'Linha de cima'), NUM('min', 'Minutos'), LIST('abertura', 'Frases da abertura, uma por linha'), T('aberturaSub', 'Abertura · frase menor'), T('tributo', 'Tributo · título'), T('fala', 'Tributo · quem fala'),
-        T('video', 'Vídeo-tributo (endereço https://… ou caminho do site; vazio = arrastar o arquivo para o telão)'), T('premiosTitulo', 'Prêmios · título'), T('hallTitulo', 'Hall da Fama · título'), T('hallSub', 'Hall da Fama · frase'),
+      [T('kicker', 'Linha de cima'), LIST('abertura', 'Frases da abertura, uma por linha'), T('aberturaSub', 'Abertura · frase menor'), T('tributo', 'Tributo · título'), T('fala', 'Tributo · quem fala'),
+        T('video', 'Vídeo-tributo (endereço https://… ou caminho do site; vazio = arrastar o arquivo para o telão, onde ele fica guardado)'), T('premiosTitulo', 'Prêmios · título'), T('hallTitulo', 'Hall da Fama · título'), T('hallSub', 'Hall da Fama · frase'),
         SEL('carga', 'Na cerimônia, o Flux Capacitor carrega com…', [['mic', '🎤 Os aplausos da sala (o microfone do Painel do Doc ouve)'], ['ambos', '🎤 + 📱 Os aplausos e os toques nos celulares'], ['toques', '📱 Só os toques no botão dos celulares']]),
         CHECK('exemplo', 'Os nomes ainda são de exemplo (mostra o aviso "NOMES DE EXEMPLO" no telão)')]],
     intervalo: ['☕ Intervalo', '', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), NUM('min', 'Duração (minutos)'), AREA('texto', 'Texto')]],
-    visao: ['🔭 Visão 2027 · Estratégia', 'A página da estratégia é o arquivo original (public/estrategia-2027.html): aqui só mudam o título e a linha de cima da moldura.', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('nota', 'Nota à direita'), NUM('min', 'Minutos')]],
-    manifesto: ['📜 Manifesto 2027', '', [T('kicker', 'Linha de cima'), T('mes', 'Calendário · mês'), T('dia', 'Calendário · dia'), T('ano', 'Calendário · ano'), T('titulo', 'Título'), T('pergunta', 'Pergunta (aparece sendo digitada)'), T('faixa', 'Faixa de baixo'), T('quem', 'Quem conduz'), NUM('min', 'Minutos')]],
-    mph: ['🏎️ 88 MPH · Encerramento', '', [T('kicker', 'Linha de cima'), T('antes', 'Frase antes de acelerar'), T('chegada', 'Chegada (em letras do logo)'), T('depois', 'Frase da chegada'), T('quem', 'Quem conduz'), NUM('min', 'Minutos')]],
+    visao: ['🔭 Visão 2027 · Estratégia', 'A página da estratégia é o arquivo original (public/estrategia-2027.html): aqui só mudam o título e a linha de cima da moldura.', [T('kicker', 'Linha de cima'), T('titulo', 'Título'), T('nota', 'Nota à direita')]],
+    manifesto: ['📜 Manifesto 2027', '', [T('kicker', 'Linha de cima'), T('mes', 'Calendário · mês'), T('dia', 'Calendário · dia'), T('ano', 'Calendário · ano'), T('titulo', 'Título'), T('pergunta', 'Pergunta (aparece sendo digitada)'), T('faixa', 'Faixa de baixo'), T('quem', 'Quem conduz')]],
+    mph: ['🏎️ 88 MPH · Encerramento', '', [T('kicker', 'Linha de cima'), T('antes', 'Frase antes de acelerar'), T('chegada', 'Chegada (em letras do logo)'), T('depois', 'Frase da chegada'), T('quem', 'Quem conduz')]],
     creditos: ['🏁 Créditos', 'O elenco (todos os nomes do check-in) entra sozinho depois destes blocos.',
       [LINES('blocos', 'Blocos, um por linha: TÍTULO | nome | nome…', ['h', 'l'], { l: BLOCO_MAP }), LINES('final', 'Frases finais (passam antes dos créditos), uma por linha: palavra | frase', ['0', '1']), T('fim', 'Última palavra'), T('fimSub', 'Última frase')]],
   };
@@ -1021,7 +1108,8 @@
     return patch;
   }
   function vCenasCfg() {
-    const C = A.O.cenas, sec = CENA_FORM[A.cenaSec] ? A.cenaSec : 'agenda', [title, hint, fields] = CENA_FORM[sec], cfg = C.config[sec];
+    const C = A.O.cenas; if (!C) return ''; // (a senha das dinâmicas não recebe as cenas)
+    const sec = CENA_FORM[A.cenaSec] ? A.cenaSec : 'agenda', [title, hint, fields] = CENA_FORM[sec], cfg = C.config[sec];
     A.cenaSec = sec;
     let extra = '';
     if (sec === 'agenda') extra = `<div class="grid" style="grid-template-columns:repeat(4,1fr);gap:10px">${C.config.atos.map((a, i) => `<label class="f">Ato ${['I', 'II', 'III', 'IV'][i]}<input class="input" id="cf-ato${i}" value="${esc(a)}"></label>`).join('')}</div>`;
@@ -1033,7 +1121,7 @@
         <label class="f">Vencedor: a posição na lista de indicados (1 = primeira linha)<input class="input" id="pf-${i}-vencedor" type="number" min="1" max="6" value="${p.vencedor}"><span class="small">Hoje: <b>${esc((p.indicados[p.vencedor - 1] || {}).nome || '?')}</b></span></label>
         ${f('citacao', 'Citação lida na revelação', 'area')}</div></div>`; }).join('');
     return `<div class="card"><h2>Agenda e cenas</h2>
-        <p class="small">O conteúdo do deck do townhall, em português. Cada seção é uma cena do roteiro; o que você salvar aqui vai para o telão e os celulares. <span class="mono">*Asteriscos*</span> marcam as palavras em destaque. Nas listas, uma linha por item, com as colunas separadas por <span class="mono"> | </span>.</p>
+        <p class="small">O conteúdo do deck do townhall, <b>em inglês</b> (como no deck original; as dinâmicas Conexões, Reflexão e Sucesso continuam em português). Cada seção é uma cena do roteiro; o que você salvar aqui vai para o telão e os celulares. <span class="mono">*Asteriscos*</span> marcam as palavras em destaque. Nas listas, uma linha por item, com as colunas separadas por <span class="mono"> | </span>.</p>
         <div class="subtabs" style="margin-top:10px;flex-wrap:wrap">${Object.keys(CENA_FORM).filter(k => !EXTRA_CENAS.includes(k) || k === sec || A.O.settings.steps.some(x => x.type === 'cena' && x.cena === k)).map(k => `<button class="${k === sec ? 'on' : ''}" data-act="cenaSec" data-sec="${k}">${esc(CENA_FORM[k][0])}</button>`).join('')}</div></div>
       <div class="card"><h2>${esc(title)}</h2>${hint ? `<p class="small" style="margin-bottom:10px">${esc(hint)}</p>` : ''}
         <div class="form">${extra && sec === 'agenda' ? extra : ''}${fields.map(f => cenaField(f, cfg)).join('')}
@@ -1145,6 +1233,7 @@
             <button class="btn sm ghost" data-act="resetQuestions">↺ Restaurar banco padrão</button>
           </div>
         </div>
+        <p class="small" style="margin-top:8px">Cada pergunta tem a versão em português e em espanhol: a dupla vê a mesma pergunta, cada pessoa no idioma que escolheu no login.</p>
         <p class="small" style="margin-top:8px">As perguntas são <b>sorteadas</b>: cada dupla recebe a sua própria ordem e ninguém recebe a mesma pergunta duas vezes. No celular aparece só a pergunta (sem "pergunta 2 de 10").</p>
         <div class="actions" style="margin-top:10px;align-items:center"><span class="small">Como sortear:</span>
           <button class="btn sm ${mix ? 'ghost' : ''}" data-act="questionMode" data-mode="rodada" title="Viagem 1: Quebra-gelo · Viagem 2: Conexão · Viagem 3: Além do óbvio. Dentro da categoria, a ordem é sorteada para cada dupla.">Uma categoria por viagem</button>
@@ -1153,14 +1242,39 @@
         <p class="small" style="margin-top:8px">${mix ? 'Agora: em toda viagem a dupla recebe as três categorias intercaladas (uma de cada, em ordem sorteada).' : 'Agora: viagem 1 sorteia do <b>Quebra-gelo</b>, viagem 2 da <b>Conexão</b> e viagem 3 do <b>Além do óbvio</b>. Se a dupla passar por todas as da categoria, entram as outras.'}</p>
       </div>
       ${CAT_ORDER.map(k => `<div class="card"><h2>${esc(catName(k))} <span class="small">(${(byCat[k] || []).length})</span></h2><p class="small" style="margin:-4px 0 8px">${esc(((O.cats || {})[k] || {}).hint || '')}</p>
-        <table class="tbl">${(byCat[k] || []).map(q => `<tr style="${q.active ? '' : 'opacity:.45'}"><td>${esc(q.text)}</td><td class="r" style="white-space:nowrap"><div class="actions" style="justify-content:flex-end">
+        <table class="tbl">${(byCat[k] || []).map(q => `<tr style="${q.active ? '' : 'opacity:.45'}"><td>${esc(q.text)}${q.es ? `<div class="small">ES · ${esc(q.es)}</div>` : '<div class="small warn">sem versão em espanhol</div>'}</td><td class="r" style="white-space:nowrap"><div class="actions" style="justify-content:flex-end">
           <button class="btn xs ghost" data-act="editQuestion" data-id="${q.id}">editar</button>
           <button class="btn xs ghost" data-act="toggleQuestion" data-id="${q.id}" data-v="${q.active ? 0 : 1}">${q.active ? 'desativar' : 'ativar'}</button>
           <button class="btn xs red" data-act="deleteQuestion" data-id="${q.id}">excluir</button></div></td></tr>`).join('') || '<tr><td class="muted">Nenhuma pergunta nesta categoria.</td></tr>'}</table></div>`).join('')}`;
   }
 
+  // Acesso: as duas senhas, os endereços e o modo confidencial
+  function accessCard() {
+    const O = A.O, conf = O.settings.confidencial !== false, o = esc(location.origin);
+    if (team()) return `<div class="card"><h2>Acesso</h2><p class="small">Você entrou com a <b>senha das dinâmicas</b>: este painel alcança só Conexões, Reflexão e Sucesso. Link do app para os viajantes: <span class="mono">${o}/</span> · Telão: <span class="mono">${o}/telao.html</span></p>
+      <div class="actions" style="margin-top:10px"><button class="btn ghost sm" data-act="logout">Sair do painel</button></div></div>`;
+    return `<div class="card"><h2>🔐 Acesso e modo confidencial</h2>
+      <p class="small"><b>Senha mestra</b> (variável <span class="mono">ADMIN_PASSWORD</span> no servidor): abre este Painel do Doc completo, em <span class="mono">${o}/admin.html</span>.</p>
+      <p class="small" style="margin-top:6px"><b>Senha das dinâmicas</b> (variável <span class="mono">DINAMICAS_PASSWORD</span>): abre o painel só com Conexões, Reflexão e Sucesso, em <span class="mono copy" data-act="copy" data-text="${o}/dinamicas" title="Clique para copiar">${o}/dinamicas 📋</span>. Quem entra com ela não vê o roteiro, a agenda, as cenas, os prêmios nem a estratégia, e não consegue mexer neles. ${O.team ? '<span class="ok">✔ ligada</span>' : '<span class="warn">⚠ ainda não definida no servidor: hoje só a senha mestra entra</span>'}</p>
+      <p class="small" style="margin-top:6px"><b>Modo confidencial:</b> ${conf ? '<span class="warn">🔒 ligado</span>. As cenas do townhall (vídeo, boas-vindas, plano de voo, Jornada 2026, prêmios, estratégia 2027, créditos) só aparecem neste painel e no telão aberto neste navegador. Os celulares e os outros telões veem “olhe para o telão”.' : '<span class="ok">🔓 liberado</span>. Quando uma cena entra no ar, todos os celulares e telões a veem (é assim no dia do evento).'}</p>
+      <div class="actions" style="margin-top:10px"><button class="btn ${conf ? '' : 'ghost'} sm" data-act="confSet" data-on="${conf ? '' : 1}">${conf ? '🔓 Liberar para todos (dia do evento)' : '🔒 Voltar ao modo confidencial'}</button><button class="btn ghost sm" data-act="logout">Sair do painel</button></div>
+      <p class="small" style="margin-top:8px">Link do app para os viajantes: <span class="mono">${o}/</span> · Telão: <span class="mono">${o}/telao.html</span> (abra o telão neste navegador, já logado).</p></div>`;
+  }
   function vConfig() {
     const O = A.O, s = O.settings;
+    if (team()) return `
+      <div class="grid">
+        <div class="card"><h2>Tempos das viagens (Conexões)</h2><div class="form">
+          <label class="sw"><input type="checkbox" id="cfgAuto" ${s.autoFlow ? 'checked' : ''}> Fluxo automático (encontro → conversa → próxima dupla → avaliação, sem precisar liberar)</label>
+          <label class="f">Conversa de cada viagem (segundos)<input class="input" id="cfgSeconds" type="number" min="10" max="3600" value="${s.roundSeconds}"><span class="small">120 = 2 minutos</span></label>
+          <label class="f">Tempo para a dupla se encontrar (segundos)<input class="input" id="cfgFind" type="number" min="0" max="600" value="${s.findSeconds}"></label>
+          <label class="f">Intervalo "88 MPH" entre viagens (segundos)<input class="input" id="cfgBreak" type="number" min="0" max="120" value="${s.breakSeconds}"></label>
+          <label class="f">Avaliação fecha em (segundos)<input class="input" id="cfgRanking" type="number" min="0" max="1800" value="${s.rankingSeconds}"><span class="small">Fecha antes se todos avaliarem. 0 = só quando você clicar em "Calcular".</span></label>
+          <label class="sw"><input type="checkbox" id="cfgHints" ${s.showFormHints ? 'checked' : ''}> Mostrar respostas do forms na tela da dupla ("para puxar assunto")</label>
+          <div class="actions"><button class="btn" data-act="saveSettings">Salvar</button></div>
+        </div></div>
+        ${accessCard()}
+      </div>`;
     return `
       <div class="grid">
         <div class="card"><h2>Tempos das viagens</h2><div class="form">
@@ -1205,8 +1319,7 @@
           <div class="actions" style="align-items:center"><button class="btn" data-act="saveSettings">Salvar</button><span id="spCfgState" style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap">${spCfgState()}</span></div>
           <p class="small">A conexão fica guardada só neste navegador (o servidor do townhall não vê a sua conta). No dia, use o mesmo computador e navegador em que conectou. A música sai do aparelho em que o seu Spotify estiver tocando (celular ligado na caixa de som, computador…) ou deste computador, com "Tocar neste computador".</p>
         </div></div>
-        <div class="card"><h2>Acesso</h2><p class="small">A senha do painel é definida pela variável de ambiente <span class="mono">ADMIN_PASSWORD</span> no servidor. Link do app para os viajantes: <span class="mono">${esc(location.origin)}/</span> · Telão: <span class="mono">${esc(location.origin)}/telao.html</span></p>
-          <div class="actions" style="margin-top:10px"><button class="btn ghost sm" data-act="logout">Sair do painel</button></div></div>
+        ${accessCard()}
       </div>`;
   }
 
@@ -1219,15 +1332,15 @@
           <button class="btn ghost" data-act="normalTime">⏱ Tempos normais (40s encontro · 2 min conversa · 6s intervalo · 2 min avaliação)</button>
           <button class="btn cyan" data-act="testRandomRankings">🎲 Avaliações aleatórias (na fase de avaliação)</button>
         </div></div>
-      <div class="card"><h2>🎤 Microfone dos aplausos (Reconhecimento)</h2>
+      ${team() ? '' : `<div class="card"><h2>🎤 Microfone dos aplausos (Reconhecimento)</h2>
         <p class="small" style="margin-bottom:4px">Na cerimônia dos prêmios, os aplausos da sala carregam o Flux Capacitor do telão. Quem ouve é o microfone <b>deste aparelho</b>. Libere aqui uma vez, antes do evento, no mesmo computador e navegador que você vai usar no dia; depois é automático.</p>
-        ${micBox('test')}</div>
+        ${micBox('test')}</div>`}
       <div class="card"><h2>↺ Reiniciar</h2>
-        <p class="small" style="margin-bottom:10px">Depois do ensaio, reinicie tudo para o evento começar do zero. Dá para reiniciar tudo de uma vez ou um bloco por vez; o que foi preparado (pessoas, fotos, perguntas, roteiro e textos) não é apagado.</p>
+        <p class="small" style="margin-bottom:10px">${team() ? 'Depois do ensaio, reinicie o bloco que você testou (Conexões, Reflexão ou cada dinâmica do Sucesso). O que foi preparado (pessoas, fotos e perguntas) não é apagado.' : 'Depois do ensaio, reinicie tudo para o evento começar do zero. Dá para reiniciar tudo de uma vez ou um bloco por vez; o que foi preparado (pessoas, fotos, perguntas, roteiro e textos) não é apagado.'}</p>
         <div class="actions">
-          <button class="btn red" data-act="resetOpen">↺ Reiniciar tudo ou um bloco…</button>
+          <button class="btn red" data-act="resetOpen">${team() ? '↺ Reiniciar um bloco…' : '↺ Reiniciar tudo ou um bloco…'}</button>
         </div>
-        <p class="small" style="margin-top:8px">Resetar o evento volta o roteiro para o primeiro passo e apaga check-ins, duplas, avaliações e as respostas do Sucesso (bom para usar depois do ensaio). A lista de pessoas, as perguntas e o roteiro são mantidos.</p></div>`;
+        ${team() ? '' : '<p class="small" style="margin-top:8px">Resetar o evento volta o roteiro para o primeiro passo e apaga check-ins, as duas palavras, duplas, avaliações e as respostas do Sucesso (bom para usar depois do ensaio). A lista de pessoas, as perguntas e o roteiro são mantidos.</p>'}</div>`;
   }
 
   /* ---------- diálogos ---------- */
@@ -1346,6 +1459,7 @@
         const num = (id, min, max) => { const v = +$(id).value; return Number.isFinite(v) && v >= min && v <= max ? v : null; };
         const secs = num('#cfgSeconds', 10, 3600), find = num('#cfgFind', 0, 600), brk = num('#cfgBreak', 0, 120), rk = num('#cfgRanking', 0, 1800);
         if ([secs, find, brk, rk].some(v => v === null)) return toast('Confira os tempos: conversa 10–3600 s, encontro 0–600 s, intervalo 0–120 s, avaliação 0–1800 s.', true);
+        if (team()) return run(async () => { await act('settings', { settings: { autoFlow: $('#cfgAuto').checked, roundSeconds: secs, findSeconds: find, breakSeconds: brk, rankingSeconds: rk, showFormHints: $('#cfgHints').checked } }); setTimeout(() => render(true), 600); }, 'Configurações salvas'); // senha das dinâmicas: só os ajustes das Conexões
         const spId = $('#cfgSpotifyId').value.trim();
         if (spId && !/^[0-9a-zA-Z]{20,64}$/.test(spId)) return toast('O Client ID do Spotify tem 32 letras e números, sem espaços. Copie de novo da página do app.', true);
         if (!spId) { A.spRestored = true; try { localStorage.removeItem('bttf.spotify.cid'); } catch { /* segue */ } } // apagou de propósito: o navegador não devolve
@@ -1384,8 +1498,20 @@
       case 'audioVol': if ((O.state.audio || {}).mode === 'spotify' && spState().connected) SP.volume(+el.value).catch(() => {}); // no modo Spotify, o volume também vai para o Spotify (quando o aparelho deixa)
         return run(() => act('setAudio', { volume: +el.value }));
       // --- roteiro: ao vivo ---
+      // --- modo confidencial e duas palavras (só a senha mestra) ---
+      case 'confOpen': return confDialog();
+      case 'confSet': { const on = !!el.dataset.on;
+        if (!on && !confirm('Liberar o conteúdo do townhall para todos? A partir de agora, quando uma cena entrar no ar, todos os celulares e telões vão ver (é o que se quer no dia do evento).')) return;
+        return run(async () => { await act('settings', { settings: { confidencial: on } }); if ($('#dlg').open) closeDialog(); setTimeout(() => render(true), 600); }, on ? '🔒 Modo confidencial ligado' : '🔓 Conteúdo liberado para todos'); }
+      case 'wordsLive': return run(() => act('settings', { settings: { wordsLive: el.checked } }), el.checked ? 'Nuvem ao vivo no check-in' : 'Nuvem guardada até as Boas-vindas');
+      case 'wordsRemove': return run(() => api('POST', '/api/admin/words', { action: 'remove', id: +id }), 'Resposta removida da nuvem');
+      case 'wordsClear': return confirmRun('Apagar as duas palavras de todo mundo? Cada pessoa volta a ver a pergunta no celular (enquanto o evento estiver na abertura).', () => api('POST', '/api/admin/words', { action: 'clear' }), 'Respostas apagadas');
       case 'goStep': { // coloca o passo no ar: é aqui (e só aqui) que o telão e os celulares mudam
         if (el.dataset.guard && !confirm(el.dataset.guard)) return;
+        { // modo confidencial: este passo é conteúdo do townhall. Antes de pôr no ar, pergunta se é ensaio ou o evento.
+          const x = O.settings.steps.find(y => y.id === id), cur = liveStep().step;
+          if (!team() && x && ['cena', 'stage', 'closing'].includes(x.type) && O.settings.confidencial !== false && !el.dataset.ok && x.id !== cur.id) return confStepDialog(x);
+        }
         { // o Reconhecimento vai entrar no ar: aproveita este clique para já pedir/ligar o microfone dos aplausos
           const x = O.settings.steps.find(y => y.id === id);
           if (x && x.type === 'cena' && x.cena === 'reconhecimento' && micMode() !== 'toques' && !Mic.on) { Mic.userOff = false; Mic.autoTried = true; micStart(true); }
@@ -1497,19 +1623,20 @@
       case 'importForm': return importFormDialog();
       case 'exportCsv': return exportCsv();
       case 'addQuestion': case 'editQuestion': {
-        const q = id ? O.questions.find(x => x.id === +id) : { text: '', cat: 'quebragelo' };
+        const q = id ? O.questions.find(x => x.id === +id) : { text: '', es: '', cat: 'quebragelo' };
         return dialog(`<h3>${id ? 'Editar pergunta' : 'Nova pergunta'}</h3><div class="form">
-          <label class="f">Pergunta<textarea class="input" id="qText">${esc(q.text)}</textarea></label>
+          <label class="f">Pergunta (português)<textarea class="input" id="qText">${esc(q.text)}</textarea></label>
+          <label class="f">A mesma pergunta em espanhol (para quem escolhe "Español" no login; vazio = aparece em português)<textarea class="input" id="qEs">${esc(q.es || '')}</textarea></label>
           <label class="f">Categoria<select class="input" id="qCat">${CAT_ORDER.map(k => `<option value="${k}" ${q.cat === k ? 'selected' : ''}>${esc(catName(k))}</option>`).join('')}</select></label>
           <div class="actions"><button class="btn" id="qSave">Salvar</button><button class="btn ghost" data-close>Cancelar</button></div></div>`, () => {
-          $('#qSave').onclick = () => run(async () => { const body = { text: $('#qText').value, cat: $('#qCat').value }; if (id) await api('PUT', `/api/admin/questions/${id}`, body); else await api('POST', '/api/admin/questions', body); closeDialog(); }, 'Pergunta salva');
+          $('#qSave').onclick = () => run(async () => { const body = { text: $('#qText').value, es: $('#qEs').value, cat: $('#qCat').value }; if (id) await api('PUT', `/api/admin/questions/${id}`, body); else await api('POST', '/api/admin/questions', body); closeDialog(); }, 'Pergunta salva');
         });
       }
       case 'toggleQuestion': return run(() => api('PUT', `/api/admin/questions/${id}`, { active: el.dataset.v === '1' }));
       case 'deleteQuestion': return confirmRun('Excluir esta pergunta?', () => api('DELETE', `/api/admin/questions/${id}`), 'Excluída');
       case 'resetQuestions': return confirmRun('Restaurar o banco de perguntas padrão? As edições atuais serão perdidas.', () => api('POST', '/api/admin/questions/reset'), 'Banco restaurado');
-      case 'bulkQuestions': return dialog(`<h3>Substituir perguntas em massa</h3><p class="small">Uma pergunta por linha. Use um prefixo para a categoria: <span class="mono">[quebra-gelo]</span>, <span class="mono">[conexão]</span> ou <span class="mono">[além do óbvio]</span>. Sem prefixo, a linha herda a última categoria usada (começa em quebra-gelo). <span class="mono">[off]</span> marca uma pergunta desativada. Perguntas cujo texto não mudou mantêm o histórico (quem já viu não vê de novo).</p>
-        <textarea class="input" id="bulkText" style="min-height:220px;margin:10px 0">${esc(O.questions.map(q => `[${{ quebragelo: 'quebra-gelo', conexao: 'conexão', alem: 'além do óbvio' }[q.cat] || q.cat}]${q.active ? '' : '[off]'} ${q.text}`).join('\n'))}</textarea>
+      case 'bulkQuestions': return dialog(`<h3>Substituir perguntas em massa</h3><p class="small">Uma pergunta por linha. Use um prefixo para a categoria: <span class="mono">[quebra-gelo]</span>, <span class="mono">[conexão]</span> ou <span class="mono">[além do óbvio]</span>. Sem prefixo, a linha herda a última categoria usada (começa em quebra-gelo). <span class="mono">[off]</span> marca uma pergunta desativada. Perguntas cujo texto não mudou mantêm o histórico (quem já viu não vê de novo). Para a versão em espanhol, escreva depois de <span class="mono"> || </span> na mesma linha (opcional).</p>
+        <textarea class="input" id="bulkText" style="min-height:220px;margin:10px 0">${esc(O.questions.map(q => `[${{ quebragelo: 'quebra-gelo', conexao: 'conexão', alem: 'além do óbvio' }[q.cat] || q.cat}]${q.active ? '' : '[off]'} ${q.text}${q.es ? ' || ' + q.es : ''}`).join('\n'))}</textarea>
         <div class="actions"><button class="btn red" id="bulkGo">Substituir todas</button><button class="btn ghost" data-close>Cancelar</button></div>`, () => {
         $('#bulkGo').onclick = () => confirmRun('Substituir TODO o banco de perguntas?', async () => {
           let cat = 'quebra-gelo'; const list = [];
@@ -1518,7 +1645,8 @@
             let active = true;
             const m = t.match(/^\[(?!off\])([^\]]{3,20})\]\s*(.*)$/i); if (m) { cat = m[1]; t = m[2]; } // o servidor entende o nome da categoria (e as eras do banco antigo)
             const off = t.match(/^\[off\]\s*(.*)$/i); if (off) { active = false; t = off[1]; }
-            if (t) list.push({ cat, text: t, active });
+            const at = t.indexOf('||'), es = at < 0 ? '' : t.slice(at + 2).trim(); if (at >= 0) t = t.slice(0, at).trim(); // "pergunta || pregunta": a versão em espanhol
+            if (t) list.push({ cat, text: t, es, active });
           }
           await api('POST', '/api/admin/questions/replace', { questions: list }); closeDialog();
         }, 'Banco substituído');

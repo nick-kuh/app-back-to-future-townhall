@@ -127,7 +127,7 @@ const waitUp = async () => { for (let i = 0; i < 50; i++) { try { await fetch(B 
     let ov = (await call('GET', '/api/admin/overview')).json; let steps = ov.settings.steps;
     // roteiro padrão: a agenda do townhall em 4 atos (cenas do deck + Conexões, Reflexão e Sucesso)
     assert.deepEqual(steps.map(x => (x.type === 'cena' ? 'cena:' + x.cena : x.type === 'sucesso' ? x.activity : x.type)),
-      ['checkin', 'cena:agenda', 'cena:boasvindas', 'connections', 'cena:almanaque', 'reflexao', 'cena:reconhecimento', 'cena:intervalo', 'cena:visao', 'd1', 'd2', 'd3', 'd4', 'doc', 'cena:mph', 'closing']);
+      ['checkin', 'cena:abertura', 'cena:boasvindas', 'cena:agenda', 'connections', 'cena:almanaque', 'reflexao', 'cena:reconhecimento', 'cena:intervalo', 'cena:visao', 'd1', 'd2', 'd3', 'd4', 'doc', 'cena:mph', 'closing']);
     const of = (type, activity) => steps.find(x => x.type === type && (!activity || x.activity === activity)).id;
     assert.equal(ov.state.step, of('connections'));                 // as viagens levaram o cursor para o passo Conexões
     assert.ok(ov.sucesso.roomId); assert.equal(ov.sucesso.acts.d3.responseCount, 3);

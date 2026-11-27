@@ -1,7 +1,7 @@
 // Motor do evento: estado do townhall (blocos), bloco de conexões (fases, timer,
 // duplas, filas de perguntas, ranking e resultados), pessoas e perguntas.
 const crypto = require('crypto');
-const { db, kvGet, kvSet, seedIfEmpty, resetQuestions } = require('./db');
+const { db, kvGet, kvSet, seedIfEmpty, resetQuestions, dbEpoch } = require('./db');
 const { generateRounds, checkGroups, pairKey } = require('./matching');
 const { buildQueues, ERAS, eraOfRound, CATEGORIES, catKey, catOfRound, QUESTION_MODES } = require('./queues');
 const { computeResults, POINTS } = require('./results');
@@ -23,7 +23,7 @@ const SUCESSO_ACTS = ['d1', 'd2', 'd3', 'd4'];
 const clip = (v, n) => String(v ?? '').trim().slice(0, n);
 // Roteiro padrão: a agenda do townhall (deck v18) em 4 atos. Conexões, Reflexão e as dinâmicas do Sucesso são os
 // blocos interativos de sempre; os outros passos são as cenas do deck.
-//   ATO I · Reconectar: chegada (check-in) · plano de voo · boas-vindas · Conexões
+//   ATO I · Reconectar: chegada (check-in) · vídeo de abertura · boas-vindas · plano de voo · Conexões
 //   ATO II · Rebobinar 2026: Jornada 2026 (almanaque) · IA em 2026 + Reflexão
 //   ATO III · Reconhecer: Reconhecimento 2026 · intervalo
 //   ATO IV · Avançar para 2027: Visão 2027 (estratégia) · Manifesto 2027 + Sucesso 01 a 04 + o Doc · 88 MPH · créditos
@@ -32,7 +32,8 @@ function defaultSteps() {
   const cena = k => ({ type: 'cena', cena: k });
   return [
     { type: 'checkin' },                // a porta de entrada: é por aqui que todo mundo faz o login
-    cena('agenda'), cena('boasvindas'),
+    cena('abertura'),                   // quando o evento começa: o vídeo de abertura
+    cena('boasvindas'), cena('agenda'), // boas-vindas e, em seguida, o plano de voo do dia
     { type: 'connections' },
     cena('almanaque'),
     { type: 'reflexao' },
@@ -44,9 +45,9 @@ function defaultSteps() {
     { type: 'closing' },                // créditos
   ].map((x, i) => ({ id: 'p' + (i + 1), ...x, ...(noTransition(x) ? { transition: false } : {}) }));
 }
-// Passos que entram direto, sem a "viagem no tempo" de transição (pedido da organização): boas-vindas, reconhecimento,
+// Passos que entram direto, sem a "viagem no tempo" de transição (pedido da organização): vídeo de abertura, boas-vindas, reconhecimento,
 // intervalo, Visão 2027, as dinâmicas do Sucesso e o Doc, 88 MPH e os créditos. Em Preparar → Roteiro dá para ligar e desligar em cada passo.
-const NO_TRANSITION_CENAS = ['boasvindas', 'reconhecimento', 'intervalo', 'visao', 'mph'];
+const NO_TRANSITION_CENAS = ['abertura', 'boasvindas', 'reconhecimento', 'intervalo', 'visao', 'mph'];
 function noTransition(x) { return ['sucesso', 'doc', 'closing'].includes(x.type) || (x.type === 'cena' && NO_TRANSITION_CENAS.includes(x.cena)); }
 // Valida o roteiro vindo do painel: tipos conhecidos, textos com limite, ids únicos; Conexões, Reflexão,
 // Visão 2027 e cada dinâmica do Sucesso só entram uma vez (o estado delas é um só).
@@ -83,14 +84,19 @@ const DEFAULT_SETTINGS = {
   autoFlow: true,         // viagens e avaliação avançam sozinhas
   showMutualOnScreen: false,
   showFormHints: true,
-  welcomeText: 'Aguarde: a viagem começa em breve.',
-  closingText: 'Obrigado por viajar com a gente. Marque aquele café com a sua conexão!',
-  standbyText: 'Agora você não precisa do celular.',
+  welcomeText: 'Hang tight: the journey is about to begin.',
+  closingText: 'Thank you for travelling with us. Now go grab that coffee with your connection!',
+  standbyText: 'You don\'t need your phone right now.',
   steps: null,            // roteiro do evento (montado no construtor; editável em Preparar → Roteiro)
-  stageText: 'Agora a atenção é no palco.',
+  stageText: 'All eyes on the stage.',
   stageMutes: true,       // exibir um bloco de fala desliga o som do telão
   transitions: true,      // transição do filme no telão e nos celulares ao trocar de bloco
   transitionSeconds: 15,  // quanto dura a transição entre blocos (avisos e "olhos no telão" entram em 3 s)
+  // Modo confidencial: o conteúdo do townhall (cenas do deck, blocos de fala, créditos e a estratégia 2027) só aparece para
+  // quem entrou com a senha mestra (Painel do Doc e o telão aberto nesse navegador). Os celulares e os outros telões veem
+  // "olhe para o telão". No dia do evento o Doc libera para todos (Painel do Doc → 🔒 Confidencial).
+  confidencial: true,
+  wordsLive: true,        // a nuvem das "duas palavras" aparece ao vivo no telão do check-in e nos celulares
   // quem não participa de cada bloco (ex.: quem coordena): faz o login e conta presença, mas fica fora das duplas, da votação ou das respostas
   skip: { connections: [], reflexao: [], sucesso: [] },
   musicUrl: '',           // opcional: arquivo de áudio próprio para "Música" (senão, toca a trilha gerada no navegador)
@@ -109,7 +115,15 @@ const DEFAULT_SETTINGS = {
     { time: '', title: 'Encerramento' },
   ],
 };
-const DEFAULT_MESSAGE = { title: 'Intervalo', body: 'Voltamos em 15 minutos.', emoji: '☕' };
+const DEFAULT_MESSAGE = { title: 'Break', body: 'Back in 15 minutes.', emoji: '☕' };
+// Textos padrão antigos (em português): quem ainda os tem guardados passa para os novos, em inglês (o app agora é em inglês)
+const OLD_TEXTS = { welcomeText: 'Aguarde: a viagem começa em breve.', closingText: 'Obrigado por viajar com a gente. Marque aquele café com a sua conexão!', standbyText: 'Agora você não precisa do celular.', stageText: 'Agora a atenção é no palco.' };
+// Passos do roteiro com conteúdo do townhall (confidencial até o Doc liberar): cenas do deck, blocos de fala e créditos
+const CONFIDENTIAL_STEPS = ['cena', 'stage', 'closing'];
+// Passos em que o celular pede as "duas palavras" de quem ainda não respondeu: a abertura do evento, antes das Conexões
+const wordsOpenAt = step => !!step && (step.type === 'checkin' || (step.type === 'cena' && ['abertura', 'boasvindas', 'agenda'].includes(step.cena)));
+// Uma das "duas palavras": sem quebras de linha nem símbolos soltos, até 20 letras
+const cleanWord = v => String(v ?? '').normalize('NFC').replace(/[\u0000-\u001f<>"`{}\[\]\\|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 20);
 const defaultConn = () => ({ phase: 'idle', round: 0, played: 0, timer: null, generatedAt: null, worstLevel: null, levels: {}, resultsAt: null, repeats: false });
 const DEFAULT_SCREEN = { scene: 'auto' }; // telão: auto (segue o bloco) | clock | logo | quote
 // Visão 2027: a mensagem do Doc (gerada no servidor) e a cena no telão (play: qual parte, pausada ou não)
@@ -118,7 +132,7 @@ const defaultDoc = () => ({ status: 'idle', message: null, error: '', rev: 0, pl
 const now = () => Date.now();
 const iso = () => new Date().toISOString();
 const bool = v => (v ? 1 : 0);
-const human = s => (s >= 60 ? `${Math.floor(s / 60)} min${s % 60 ? ` e ${s % 60} s` : ''}` : `${s} s`);
+const human = (s, and = 'e') => (s >= 60 ? `${Math.floor(s / 60)} min${s % 60 ? ` ${and} ${s % 60} s` : ''}` : `${s} s`);
 const parse = (s, fb) => { try { return s ? JSON.parse(s) : fb; } catch { return fb; } };
 
 function normalizeWl(s) {
@@ -171,6 +185,7 @@ class Engine {
       else if (r && !quiet) console.log(`[fotos] ${r.matched} fotos de perfil carregadas do pacote da instalação.`);
     }
     const saved = kvGet('state', {});
+    if (saved.message && saved.message.title === 'Intervalo' && saved.message.body === 'Voltamos em 15 minutos.') delete saved.message; // aviso padrão antigo
     this.state = {
       block: BLOCKS.includes(saved.block) ? saved.block : 'welcome',
       message: Object.assign({}, DEFAULT_MESSAGE, saved.message || {}),
@@ -217,6 +232,28 @@ class Engine {
       steps = steps.filter(x => !(x.type === 'cena' && ['ia', 'manifesto'].includes(x.cena))).map(x => (noTransition(x) ? { ...x, transition: false } : x));
       this.settings.roteiroV19 = true;
     }
+    // Novo começo do evento (vale uma vez para roteiros guardados): check-in → vídeo de abertura → boas-vindas → plano de voo.
+    if (!this.settings.roteiroV20) {
+      if (steps.length && !steps.some(x => x.type === 'cena' && x.cena === 'abertura')) {
+        const at = steps.findIndex(x => x.type === 'checkin');
+        steps.splice(at < 0 ? 0 : at + 1, 0, { id: 'p' + crypto.randomBytes(4).toString('hex'), type: 'cena', cena: 'abertura', transition: false });
+      }
+      const ag = steps.findIndex(x => x.type === 'cena' && x.cena === 'agenda'), bv = steps.findIndex(x => x.type === 'cena' && x.cena === 'boasvindas');
+      if (ag >= 0 && bv === ag + 1) [steps[ag], steps[bv]] = [steps[bv], steps[ag]]; // a agenda passa para depois das boas-vindas
+      this.settings.roteiroV20 = true;
+    }
+    // O app passou para o inglês: quem ainda tem os textos padrão antigos (em português) guardados recebe os novos, uma vez.
+    if (!this.settings.enV1) {
+      for (const [k, old] of Object.entries(OLD_TEXTS)) if (this.settings[k] === old) this.settings[k] = DEFAULT_SETTINGS[k];
+      this.settings.enV1 = true;
+    }
+    // Perguntas guardadas antes de existir a versão em espanhol recebem a tradução do banco padrão (pelo texto em português)
+    if (!kvGet('questionsEs', false)) {
+      const es = new Map(require('./seed/questions').map(q => [normText(q.text), q.es])), upd = db.prepare("UPDATE questions SET text_es = ? WHERE id = ? AND COALESCE(text_es, '') = ''");
+      for (const q of db.prepare('SELECT id, text FROM questions').all()) if (es.has(normText(q.text))) upd.run(es.get(normText(q.text)), q.id);
+      kvSet('questionsEs', true);
+    }
+    this.epoch = dbEpoch(); // muda quando o banco nasce de novo (servidor reiniciado sem disco): os celulares refazem o check-in sozinhos
     this.settings.steps = steps.length ? steps : defaultSteps();
     delete this.settings.stages;
     // roteiros salvos antes de existir o bloco Reflexão ganham o passo uma vez (depois do primeiro bloco de fala)
@@ -282,8 +319,11 @@ class Engine {
     return out;
   }
 
-  checkin(personId, existingToken) {
-    const p = this.personById(personId);
+  // name (opcional): o celular que refaz o check-in sozinho (o servidor reiniciou e esqueceu todo mundo) manda também
+  // o nome guardado. Se o número daquela pessoa mudou no banco novo, vale o nome.
+  checkin(personId, existingToken, name) {
+    let p = this.personById(personId);
+    if (name !== undefined && name !== null && (!p || normName(p.name) !== normName(name))) p = this.listPeople().find(x => normName(x.name) === normName(name)) || null;
     if (!p) throw new Error('Pessoa não encontrada.');
     if (!p.active) throw new Error('Essa pessoa está marcada como ausente. Fale com o apresentador.');
     const token = (p.token && existingToken && existingToken === p.token) ? p.token : crypto.randomBytes(16).toString('hex');
@@ -301,6 +341,30 @@ class Engine {
     this.commit();
     return { ok: true };
   }
+
+  /* ---------------- "duas palavras" (logo depois do login) ---------------- */
+  // Cada pessoa conta, em duas palavras, como está chegando. A resposta fica ligada à pessoa: quem entrar de novo
+  // (outro celular, navegador limpo) não responde de novo. As palavras formam a nuvem das boas-vindas.
+  wordsOf(personId) { const r = db.prepare('SELECT w1, w2 FROM words WHERE person_id = ?').get(Number(personId)); return r ? [r.w1, r.w2].filter(Boolean) : null; }
+  setWords(personId, words) {
+    const list = (Array.isArray(words) ? words : [words]).map(cleanWord).filter(Boolean).slice(0, 2);
+    if (!list.length) throw Object.assign(new Error('Write at least one word.'), { status: 400 });
+    db.prepare('INSERT INTO words (person_id, w1, w2, at) VALUES (?, ?, ?, ?) ON CONFLICT(person_id) DO UPDATE SET w1 = excluded.w1, w2 = excluded.w2, at = excluded.at').run(Number(personId), list[0], list[1] || '', iso());
+    this.commit();
+    return list;
+  }
+  removeWords(personId) { db.prepare('DELETE FROM words WHERE person_id = ?').run(Number(personId)); this.commit(); }
+  clearWords({ silent = false } = {}) { db.exec('DELETE FROM words'); if (!silent) this.commit(); }
+  // A nuvem: cada palavra com quantas pessoas a escreveram (sem nomes). Maiúsculas e minúsculas contam como a mesma palavra.
+  wordsCloud() {
+    const m = new Map(); let count = 0;
+    for (const r of db.prepare('SELECT w.w1, w.w2 FROM words w JOIN people p ON p.id = w.person_id ORDER BY w.at').all()) {
+      count++;
+      for (const w of [r.w1, r.w2]) { if (!w) continue; const k = w.toLocaleLowerCase('pt-BR'), t = m.get(k); if (t) t[1]++; else m.set(k, [w, 1]); }
+    }
+    return { count, top: [...m.values()].sort((a, b) => b[1] - a[1]).slice(0, 120) };
+  }
+  wordsList() { return db.prepare('SELECT w.person_id AS id, p.name, w.w1, w.w2, w.at FROM words w JOIN people p ON p.id = w.person_id ORDER BY w.at').all().map(r => ({ id: r.id, name: r.name, words: [r.w1, r.w2].filter(Boolean), at: r.at })); }
 
   addPerson(f) {
     const name = String(f.name || '').trim();
@@ -336,6 +400,7 @@ class Engine {
     db.prepare('DELETE FROM rankings WHERE person_id = ?').run(Number(id));
     db.prepare('DELETE FROM results WHERE person_id = ?').run(Number(id));
     db.prepare('DELETE FROM seen WHERE person_id = ?').run(Number(id));
+    db.prepare('DELETE FROM words WHERE person_id = ?').run(Number(id));
     this.fotos.remove(id);
     this.commit();
   }
@@ -355,7 +420,7 @@ class Engine {
     try {
       let inserted = 0, updated = 0;
       if (mode === 'replace') {
-        db.exec('DELETE FROM people; DELETE FROM groups; DELETE FROM seen; DELETE FROM rankings; DELETE FROM results;');
+        db.exec('DELETE FROM people; DELETE FROM groups; DELETE FROM seen; DELETE FROM rankings; DELETE FROM results; DELETE FROM words;');
         this.state.conn = defaultConn();
       }
       const existing = this.listPeople();
@@ -404,7 +469,7 @@ class Engine {
   /* ---------------- perguntas ---------------- */
   listQuestions() {
     // a coluna "era" do banco guarda a categoria da pergunta (quebragelo | conexao | alem)
-    return db.prepare('SELECT * FROM questions ORDER BY sort_order, id').all().map(q => ({ id: q.id, text: q.text, cat: catKey(q.era) || 'quebragelo', active: !!q.active, sortOrder: q.sort_order }));
+    return db.prepare('SELECT * FROM questions ORDER BY sort_order, id').all().map(q => ({ id: q.id, text: q.text, es: q.text_es || '', cat: catKey(q.era) || 'quebragelo', active: !!q.active, sortOrder: q.sort_order }));
   }
   guardQuestions() {
     if (this.state.conn.phase === 'talk') throw new Error('Há uma conversa em andamento. Encerre-a antes de mexer no banco de perguntas.');
@@ -413,18 +478,19 @@ class Engine {
     if (this.state.conn.phase === 'matching') this.assignQueues(this.state.conn.round);
     this.commit();
   }
-  addQuestion({ text, cat, era }) {
+  addQuestion({ text, cat, era, es }) {
     this.guardQuestions();
     const t = String(text || '').trim();
     if (!t) throw new Error('Texto da pergunta obrigatório.');
     const max = db.prepare('SELECT COALESCE(MAX(sort_order),0) AS m FROM questions').get().m;
-    db.prepare('INSERT INTO questions (text, era, sort_order) VALUES (?, ?, ?)').run(t, catKey(cat ?? era) || 'quebragelo', max + 1);
+    db.prepare('INSERT INTO questions (text, text_es, era, sort_order) VALUES (?, ?, ?, ?)').run(t, String(es || '').trim(), catKey(cat ?? era) || 'quebragelo', max + 1);
     this.afterQuestionsChange();
   }
   updateQuestion(id, f) {
     this.guardQuestions();
     const fields = [], vals = [];
     if (f.text !== undefined) { const t = String(f.text).trim(); if (!t) throw new Error('Texto da pergunta obrigatório.'); fields.push('text = ?'); vals.push(t); }
+    if (f.es !== undefined) { fields.push('text_es = ?'); vals.push(String(f.es).trim()); } // a mesma pergunta em espanhol (opcional)
     if (f.cat !== undefined || f.era !== undefined) { fields.push('era = ?'); vals.push(catKey(f.cat ?? f.era) || 'quebragelo'); }
     if (f.active !== undefined) { fields.push('active = ?'); vals.push(bool(f.active)); }
     if (fields.length) { vals.push(Number(id)); db.prepare(`UPDATE questions SET ${fields.join(', ')} WHERE id = ?`).run(...vals); }
@@ -439,8 +505,8 @@ class Engine {
     db.exec('BEGIN');
     try {
       const keep = new Set();
-      const upd = db.prepare('UPDATE questions SET text = ?, era = ?, active = ?, sort_order = ? WHERE id = ?');
-      const ins = db.prepare('INSERT INTO questions (text, era, active, sort_order) VALUES (?, ?, ?, ?)');
+      const upd = db.prepare('UPDATE questions SET text = ?, text_es = ?, era = ?, active = ?, sort_order = ? WHERE id = ?');
+      const ins = db.prepare('INSERT INTO questions (text, text_es, era, active, sort_order) VALUES (?, ?, ?, ?, ?)');
       let i = 0;
       for (const q of list) {
         const t = String(q.text || '').trim();
@@ -448,8 +514,10 @@ class Engine {
         const cat = catKey(q.cat ?? q.era) || 'quebragelo';
         const active = (q.active === false || q.active === 0) ? 0 : 1;
         const found = byText.get(normText(t));
-        if (found && !keep.has(found.id)) { upd.run(t, cat, active, ++i, found.id); keep.add(found.id); }
-        else { const r = ins.run(t, cat, active, ++i); keep.add(Number(r.lastInsertRowid)); }
+        // espanhol: o que veio na lista; sem isso, a pergunta cujo texto não mudou mantém a tradução que já tinha
+        const es = q.es !== undefined ? String(q.es || '').trim() : (found && !keep.has(found.id) ? found.es : '');
+        if (found && !keep.has(found.id)) { upd.run(t, es, cat, active, ++i, found.id); keep.add(found.id); }
+        else { const r = ins.run(t, es, cat, active, ++i); keep.add(Number(r.lastInsertRowid)); }
       }
       const del = db.prepare('DELETE FROM questions WHERE id = ?');
       for (const q of existing) if (!keep.has(q.id)) del.run(q.id);
@@ -552,7 +620,7 @@ class Engine {
     this.state.block = 'connections'; this.state.detour = null; this.syncCursor('connections');
     this.assignQueues(round);
     if (this.auto() && Number(this.settings.findSeconds) > 0) this.startTimer('matching', this.settings.findSeconds);
-    this.commit({ title: `Viagem ${round} · ${eraOfRound(round).year}`, body: 'Sua dupla foi revelada. Encontre essa pessoa na sala!' });
+    this.commit({ title: `Viagem ${round} · ${eraOfRound(round).year}`, body: 'Sua dupla foi revelada. Encontre essa pessoa na sala!', es: { title: `Viaje ${round} · ${eraOfRound(round).year}`, body: '¡Tu pareja fue revelada! Encuéntrala en la sala.' } });
   }
   // Botão único do painel: sorteia (se preciso) e começa a viagem 1.
   startJourney() {
@@ -568,7 +636,7 @@ class Engine {
     c.phase = 'talk';
     c.played = Math.max(c.played || 0, c.round);
     this.startTimer('talk', dur);
-    this.commit({ title: 'Conversa liberada!', body: `Vocês têm ${human(dur)}. Boa viagem!` });
+    this.commit({ title: 'Conversa liberada!', body: `Vocês têm ${human(dur)}. Boa viagem!`, es: { title: '¡A conversar!', body: `Tienen ${human(dur, 'y')}. ¡Buen viaje!` } });
   }
   pause() {
     const t = this.state.conn.timer;
@@ -619,7 +687,7 @@ class Engine {
       const brk = Number(this.settings.breakSeconds);
       if (brk > 0) this.startTimer('break', brk); else { this.commit(); return this.afterBreak(); }
     }
-    this.commit({ title: '88 MPH!', body: last ? 'Fim das viagens. Avalie as conversas no celular.' : 'Tempo esgotado. Próxima viagem chegando!' });
+    this.commit({ title: '88 MPH!', body: last ? 'Fim das viagens. Avalie as conversas no celular.' : 'Tempo esgotado. Próxima viagem chegando!', es: { title: '88 MPH!', body: last ? 'Fin de los viajes. Evalúa las conversaciones en tu celular.' : '¡Se acabó el tiempo! Ya viene el próximo viaje.' } });
   }
   afterBreak() {
     const c = this.state.conn;
@@ -637,7 +705,7 @@ class Engine {
     c.phase = 'ranking';
     this.state.block = 'connections';
     if (this.auto() && Number(this.settings.rankingSeconds) > 0) this.startTimer('ranking', this.settings.rankingSeconds);
-    this.commit({ title: 'Hora de avaliar', body: 'Coloque suas conversas em ordem: 1º, 2º e 3º lugar.' });
+    this.commit({ title: 'Hora de avaliar', body: 'Coloque suas conversas em ordem: 1º, 2º e 3º lugar.', es: { title: 'Hora de evaluar', body: 'Ordena tus conversaciones: 1.º, 2.º y 3.º lugar.' } });
   }
   everyoneRanked() {
     const c = this.state.conn;
@@ -693,7 +761,7 @@ class Engine {
     this.stopTimer();
     c.phase = 'results'; c.resultsAt = iso();
     this.state.block = 'connections';
-    this.commit({ title: 'Sua conexão do futuro chegou!', body: 'Abra o app para descobrir com quem você deve continuar o papo.' });
+    this.commit({ title: 'Sua conexão do futuro chegou!', body: 'Abra o app para descobrir com quem você deve continuar o papo.', es: { title: '¡Llegó tu conexión del futuro!', body: 'Abre la app para descubrir con quién debes seguir la charla.' } });
   }
   resultOf(personId) {
     const r = db.prepare('SELECT * FROM results WHERE person_id = ?').get(Number(personId));
@@ -725,9 +793,9 @@ class Engine {
     else { this.state.detour = null; this.syncCursor({ welcome: 'checkin', connections: 'connections', closing: 'closing', stage: 'stage', reflexao: 'reflexao', doc: 'doc' }[block]); if (block === 'connections') this.releaseJourney(); else this.holdJourney(); }
     const notices = {
       message: { title: this.state.message.title, body: this.state.message.body },
-      welcome: wasOff ? { title: 'Circuitos ligados', body: 'Estamos de volta. Olhe para o seu celular.' } : null,
-      connections: wasOff ? { title: 'Circuitos ligados', body: 'O bloco Conexões está começando.' } : null,
-      closing: { title: 'Fim da viagem', body: this.settings.closingText },
+      welcome: wasOff ? { title: 'Time circuits on', body: 'We are back. Check your phone.' } : null,
+      connections: wasOff ? { title: 'Circuitos ligados', body: 'O bloco Conexões está começando.', es: { title: 'Circuitos encendidos', body: 'El bloque Conexiones está por comenzar.' } } : null,
+      closing: { title: 'End of the journey', body: this.settings.closingText, secret: true },
     };
     this.commit(notices[block] || null);
   }
@@ -748,6 +816,8 @@ class Engine {
     if (partial.showFormHints !== undefined) s.showFormHints = !!partial.showFormHints;
     for (const k of ['eventName', 'welcomeText', 'closingText', 'standbyText', 'stageText']) if (partial[k] !== undefined) s[k] = String(partial[k]);
     if (partial.stageMutes !== undefined) s.stageMutes = !!partial.stageMutes;
+    if (partial.confidencial !== undefined) s.confidencial = !!partial.confidencial; // modo confidencial (só a senha mestra muda)
+    if (partial.wordsLive !== undefined) s.wordsLive = !!partial.wordsLive;
     if (partial.transitions !== undefined) s.transitions = !!partial.transitions;
     if (partial.transitionSeconds !== undefined) s.transitionSeconds = Math.max(3, Math.min(30, Math.round(Number(partial.transitionSeconds) || 15)));
     if (partial.skip !== undefined) s.skip = this.cleanSkip({ ...s.skip, ...(partial.skip && typeof partial.skip === 'object' ? partial.skip : {}) });
@@ -787,7 +857,7 @@ class Engine {
   // roteiro e textos não são tocados. (Reflexão, Sucesso e cenas são reiniciados pelo servidor, que conhece esses blocos.)
   resetEvent({ keepCheckins = false } = {}) {
     this.resetConnections();
-    if (!keepCheckins) db.exec("UPDATE people SET checked_in_at = NULL, token = NULL");
+    if (!keepCheckins) db.exec("UPDATE people SET checked_in_at = NULL, token = NULL; DELETE FROM words;"); // as "duas palavras" vão junto com os check-ins
     this.state.presentation = null; this.state.returnStep = null; this.state.drawn = {};
     this.state.doc = defaultDoc();
     this.state.screen = Object.assign({}, DEFAULT_SCREEN);
@@ -797,7 +867,7 @@ class Engine {
   resetCheckins() {
     db.exec('DELETE FROM groups; DELETE FROM seen; DELETE FROM rankings; DELETE FROM results;');
     this.clearTimer(); this.state.conn = defaultConn();
-    db.exec("UPDATE people SET checked_in_at = NULL, token = NULL");
+    db.exec("UPDATE people SET checked_in_at = NULL, token = NULL; DELETE FROM words;");
     this.commit();
   }
   // utilidades de teste
@@ -840,13 +910,13 @@ class Engine {
     if (!selection) {
       if (!previous) return null;
       this.state.presentation = null;
-      if (!silent) this.commit({ title: 'De volta ao townhall', body: 'Olhe para o seu celular.' });
+      if (!silent) this.commit({ title: 'Back to the townhall', body: 'Check your phone.' });
       return null;
     }
     this.holdJourney();
     const { roomId, activityId, title, question, ownerId } = selection;
     this.state.presentation = { roomId, activityId, title, question, ownerId };
-    this.commit({ title: 'De Volta para o Sucesso', body: title });
+    this.commit({ title: 'De Volta para o Sucesso', body: `📱 ${title}` });
     return this.presentation();
   }
   presentation() {
@@ -867,7 +937,7 @@ class Engine {
     (this.state.drawn[key] = this.state.drawn[key] || []).push(winner.id);
     const s = Math.max(10, Number(talkSeconds) || 120);
     p.draw = { responseId: winner.id, name: winner.name, answer: winner.answer, personId: winner.personId || null, at: now(), talk: { duration: s, remaining: s, endsAt: null } };
-    this.commit({ title: 'Viajante sorteado', body: winner.name });
+    this.commit({ title: 'Viajante sorteado', body: winner.name, es: { title: 'Viajero sorteado', body: winner.name } });
     return p.draw;
   }
   drawTalk(action) {
@@ -890,7 +960,7 @@ class Engine {
     const p = this.state.presentation;
     if (!p) throw new Error('Nenhuma dinâmica em exibição.');
     p.revealed = !!on;
-    this.commit(on ? { title: 'Respostas reveladas', body: 'Olhe para o telão.' } : null);
+    this.commit(on ? { title: 'Respostas reveladas', body: 'Olhe para o telão.', es: { title: 'Respuestas reveladas', body: 'Mira la pantalla.' } } : null);
   }
 
   /* ---------------- Visão 2027 (o Doc) ---------------- */
@@ -923,12 +993,12 @@ class Engine {
     else if (action === 'prev') d.play = { seq, part: Math.max(0, p.part - 1), paused: false, at };
     else if (action === 'goto') d.play = { seq, part: Math.max(0, Math.min(last, Math.round(Number(part) || 0))), paused: false, at };
     else throw Object.assign(new Error('Comando inválido.'), { status: 400 });
-    this.commit(action === 'start' ? { title: 'Visão 2027', body: 'O Doc chegou de 2027. Olhe para o telão!' } : null);
+    this.commit(action === 'start' ? { title: 'Visão 2027', body: 'O Doc chegou de 2027. Olhe para o telão!', es: { title: 'Visión 2027', body: '¡El Doc llegó de 2027! Mira la pantalla.' } } : null);
   }
   setDocPhones(on) {
     const d = this.state.doc;
     if (on && !d.message) throw Object.assign(new Error('Gere a mensagem do Doc antes.'), { status: 409 });
-    d.phones = !!on; this.commit(on ? { title: 'Mensagem do Doc', body: 'A visão de 2027 chegou no seu celular.' } : null);
+    d.phones = !!on; this.commit(on ? { title: 'Mensagem do Doc', body: 'A visão de 2027 chegou no seu celular.', es: { title: 'Mensaje del Doc', body: 'La visión de 2027 llegó a tu celular.' } } : null);
   }
   // O que vai para todos (telão e celulares): a mensagem só depois que a cena começa ou é enviada aos celulares
   docPublic() {
@@ -956,17 +1026,17 @@ class Engine {
     let notice = null;
     switch (step.type) {
       case 'checkin': this.state.block = 'welcome'; break;
-      case 'stage': this.state.block = 'stage'; if (this.settings.stageMutes) this.state.audio.mode = 'off'; notice = { title: step.title, body: step.theme || this.settings.stageText }; break;
-      case 'connections': this.state.block = 'connections'; notice = { title: 'Conexões', body: 'Olhe para o seu celular.' }; break;
+      case 'stage': this.state.block = 'stage'; if (this.settings.stageMutes) this.state.audio.mode = 'off'; notice = { title: step.title, body: step.theme || this.settings.stageText, secret: true }; break;
+      case 'connections': this.state.block = 'connections'; notice = { title: 'Conexões', body: '📱 Pegue o celular: esta dinâmica acontece no app.', es: { title: 'Conexiones', body: '📱 Toma tu celular: esta dinámica ocurre en la app.' } }; break;
       case 'message': this.state.message = { title: step.title, body: step.body, emoji: step.emoji }; this.state.block = 'message'; notice = { title: step.title, body: step.body }; break;
       case 'standby': this.state.block = 'standby'; break;
-      case 'closing': this.state.block = 'closing'; notice = { title: 'Fim da viagem', body: this.settings.closingText }; break;
-      case 'reflexao': this.state.block = 'reflexao'; notice = { title: 'Reflexão', body: 'Olhe para o seu celular.' }; break;
-      case 'doc': this.state.block = 'doc'; notice = { title: 'Visão 2027', body: 'Olhe para o telão: o Doc está chegando de 2027.' }; break;
+      case 'closing': this.state.block = 'closing'; notice = { title: 'End of the journey', body: this.settings.closingText, secret: true }; break;
+      case 'reflexao': this.state.block = 'reflexao'; notice = { title: 'Reflexão', body: '📱 Pegue o celular: esta dinâmica acontece no app.', es: { title: 'Reflexión', body: '📱 Toma tu celular: esta dinámica ocurre en la app.' } }; break;
+      case 'doc': this.state.block = 'doc'; notice = { title: 'Visão 2027', body: 'Olhe para o telão: o Doc está chegando de 2027.', es: { title: 'Visión 2027', body: 'Mira la pantalla: el Doc está llegando de 2027.' } }; break;
       case 'cena': // cena do deck: atenção no telão; o som segue a regra dos blocos de fala (no intervalo, a música entra)
         this.state.block = 'cena';
         if (this.settings.stageMutes) this.state.audio.mode = step.cena === 'intervalo' ? (this.settings.spotifyBreak ? 'spotify' : 'music') : 'off';
-        notice = { title: CENA_META[step.cena].name, body: 'Olhe para o telão.' }; break;
+        notice = { title: CENA_META[step.cena].name, body: 'Look at the big screen.', secret: true }; break; // secret: no modo confidencial, só quem tem a senha mestra recebe
       default: break; // sucesso: a apresentação entra em seguida
     }
     if (step.type === 'connections') this.releaseJourney(); else this.holdJourney();
@@ -1014,6 +1084,9 @@ class Engine {
       presentation: this.presentation(),
       doc: this.docPublic(),
       stage: this.stageInfo(),
+      // "duas palavras": se o celular deve perguntar agora (abertura do evento) e a nuvem (palavra, quantas pessoas)
+      words: { open: wordsOpenAt(this.currentStep()), live: this.settings.wordsLive !== false, ...this.wordsCloud() },
+      epoch: this.epoch,
       step: { index: Math.max(0, this.settings.steps.findIndex(x => x.id === this.state.step)), count: this.settings.steps.length, type: this.currentStep().type, cena: this.currentStep().cena || null, transition: this.currentStep().transition !== false },
       audio: { mode: this.state.audio.mode, volume: this.state.audio.volume, out: this.state.audio.out || 'telao', beeps: this.state.audio.beeps !== false, musicUrl: this.settings.musicUrl || '', ambientUrl: this.settings.ambientUrl || '' },
       settings: { roundSeconds: this.settings.roundSeconds, findSeconds: this.settings.findSeconds, questionMode: this.settings.questionMode, breakSeconds: this.settings.breakSeconds, rankingSeconds: this.settings.rankingSeconds, autoFlow: !!this.settings.autoFlow, showFormHints: this.settings.showFormHints, transitions: this.settings.transitions !== false, transitionSeconds: this.settings.transitionSeconds || 15,
@@ -1045,7 +1118,7 @@ class Engine {
         group = {
           id: g.id, round: c.round, code: String(g.idx + 1).padStart(2, '0'),
           partners: g.members.filter(id => id !== p.id).map(id => this.publicPerson(people[id], true)).filter(Boolean),
-          queue: g.queue.map(id => questions[id]).filter(Boolean).map(q => ({ id: q.id, text: q.text, cat: q.cat })),
+          queue: g.queue.map(id => questions[id]).filter(Boolean).map(q => ({ id: q.id, text: q.text, ...(q.es ? { es: q.es } : {}), cat: q.cat })),
           position: Math.min(g.position, Math.max(0, g.queue.length - 1)),
           flags: checkGroups([g.members], people).detail[0],
         };
@@ -1058,7 +1131,7 @@ class Engine {
     const ranking = rk.length ? Object.fromEntries(rk.map(r => [r.round, r.rank])) : null;
     const result = c.phase === 'results' ? this.resultOf(p.id) : null;
     const skip = { connections: this.skips('connections', p.id), reflexao: this.skips('reflexao', p.id), sucesso: this.skips('sucesso', p.id) };
-    return { person: { ...this.publicPerson(p), checkedInAt: p.checkedInAt }, group, conversations, ranking, result, skip };
+    return { person: { ...this.publicPerson(p), checkedInAt: p.checkedInAt }, group, conversations, ranking, result, skip, words: this.wordsOf(p.id) };
   }
   // Extração de dados das Conexões: duplas de cada viagem com as perguntas que tiveram, a avaliação
   // (ranking) de cada pessoa e a conexão sugerida (match) de cada uma.
@@ -1117,10 +1190,10 @@ class Engine {
     return {
       state: this.state, settings: this.settings, now: now(),
       people: people.map(p => ({ id: p.id, name: p.name, photo: p.photo, email: p.email, wl: p.wl, team: p.team, manager: p.manager, area: p.area, active: p.active, checkedInAt: p.checkedInAt, hasForm: !!(p.form && Object.keys(p.form).length), form: p.form, inRounds: inRounds.has(p.id), ranked: !!rankings[p.id], late: !!(generatedAt && p.active && p.checkedInAt && !inRounds.has(p.id) && !this.skips('connections', p.id)) })),
-      rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, cats: CATEGORIES, points: POINTS, fotosSeed: this.fotos.seedStatus(),
+      rounds, rankings, results, questions: this.listQuestions(), eras: ERAS, cats: CATEGORIES, points: POINTS, fotosSeed: this.fotos.seedStatus(), words: this.wordsList(),
       counts: this.publicState().counts,
     };
   }
 }
 
-module.exports = { Engine, TOTAL_ROUNDS, BLOCKS, PHASES, STEP_TYPES, normalizeWl, defaultSteps };
+module.exports = { Engine, TOTAL_ROUNDS, BLOCKS, PHASES, STEP_TYPES, CONFIDENTIAL_STEPS, normalizeWl, defaultSteps };

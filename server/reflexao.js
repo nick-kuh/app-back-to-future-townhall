@@ -36,6 +36,19 @@ const DEFAULT_CONFIG = () => ({
   ],
   projects: PROJECTS.map((name, i) => ({ name, owner: OWNERS[i] })),
 });
+// A Reflexão é em português. Quem escolhe "Español" no login vê os mesmos títulos e perguntas em espanhol: a tradução vale
+// para os textos originais (se um título ou pergunta for editado em Preparar → Reflexão, aparece como foi escrito).
+const ES = new Map([
+  ['Ato 1 · O Combustível do Futuro', 'Acto 1 · El Combustible del Futuro'], ['As 6 paradas da jornada', 'Las 6 paradas del viaje'],
+  ['O Capacitor de Fluxo', 'El Condensador de Flujo'], ['Que ideias testamos e o que aprendemos?', '¿Qué ideas probamos y qué aprendimos?'],
+  ['Mudamos a Linha do Tempo', 'Cambiamos la Línea del Tiempo'], ['O que passou a funcionar de outro jeito?', '¿Qué empezó a funcionar de otra manera?'],
+  ['Dobra no Tempo', 'Pliegue en el Tiempo'], ['Onde devolvemos tempo às pessoas?', '¿Dónde les devolvimos tiempo a las personas?'],
+  ['Conexões', 'Conexiones'], ['Que fronteiras aproximamos?', '¿Qué fronteras acercamos?'],
+  ['Reação em Cadeia', 'Reacción en Cadena'], ['O que começou pequeno e ganhou escala?', '¿Qué empezó pequeño y ganó escala?'],
+  ['Doc & Marty', 'Doc & Marty'], ['Quem ajudou cada conquista a acontecer?', '¿Quién ayudó a que cada logro sucediera?'],
+  [NO_OWNER, 'Responsable no identificado en la planilla'],
+]);
+const es = v => ES.get(String(v || '').trim()) || '';
 // modo ensaio: votos fictícios para testar sem os celulares (os nomes vão marcados como teste)
 const FAKE_NAMES = ['Ana Souza', 'Bruno Lima', 'Carla Mendes', 'Diego Rocha', 'Eduarda Alves', 'Felipe Costa', 'Gabriela Nunes', 'Hugo Martins', 'Isabela Ramos', 'João Pereira', 'Larissa Dias', 'Marcos Teixeira',
   'Nina Barros', 'Otávio Pinto', 'Paula Freitas', 'Rafael Gomes', 'Sofia Cardoso', 'Tiago Moreira', 'Vitória Lopes', 'William Araújo', 'Yasmin Rocha', 'Lucas Prado'];
@@ -85,6 +98,7 @@ function createReflexao() {
   const need = () => cur() || fail('Abra uma parada antes.');
   const left = p => (p.endsAt ? Math.max(0, Math.ceil((p.endsAt - Date.now()) / 1000)) : p.remaining);
   const themeName = i => `Parada ${pad(i + 1)} · ${config.themes[i].t}`;
+  const themeNameEs = i => `Parada ${pad(i + 1)} · ${es(config.themes[i].t) || config.themes[i].t}`;
 
   function arm() { // o prazo acaba sem nenhum comando: o servidor encerra a votação sozinho
     clearTimeout(timer); timer = null;
@@ -96,7 +110,7 @@ function createReflexao() {
     if (!p || p.phase === 'done') return;
     p.remaining = left(p); p.endsAt = null; p.phase = 'done';
     arm();
-    commit({ title: 'Votação encerrada', body: `${themeName(i)} · ${p.votes.length} ${p.votes.length === 1 ? 'voto' : 'votos'}` });
+    commit({ title: 'Votação encerrada', body: `${themeName(i)} · ${p.votes.length} ${p.votes.length === 1 ? 'voto' : 'votos'}`, es: { title: 'Votación cerrada', body: `${themeNameEs(i)} · ${p.votes.length} ${p.votes.length === 1 ? 'voto' : 'votos'}` } });
   }
   // pausa em silêncio a votação em andamento (o evento saiu da Reflexão ou o Doc trocou de parada)
   function hold() {
@@ -136,14 +150,14 @@ function createReflexao() {
       state.open = i;
       const p = P(i);
       if (p.phase === 'done' && p.top.length) p.show = true; // parada já revelada: volta mostrando os mais votados
-      arm(); commit({ title: 'Reflexão', body: themeName(i) });
+      arm(); commit({ title: 'Reflexão', body: themeName(i), es: { title: 'Reflexión', body: themeNameEs(i) } });
     },
     menu() { hold(); state.open = null; arm(); commit(); },
     start() {
       const p = need();
       if (p.phase === 'done') fail('A votação desta parada já foi encerrada. Use "Reiniciar votação" para abrir de novo.');
       if (p.phase !== 'run') { p.phase = 'run'; p.endsAt = Date.now() + Math.max(1, p.remaining) * 1000; }
-      arm(); commit({ title: 'Votação aberta', body: 'Escolha um projeto no celular.' });
+      arm(); commit({ title: 'Votação aberta', body: '📱 Escolha um projeto no celular.', es: { title: 'Votación abierta', body: '📱 Elige un proyecto en tu celular.' } });
     },
     pause() { const p = need(); if (p.phase !== 'run') return; p.remaining = left(p); p.endsAt = null; p.phase = 'paused'; arm(); commit(); },
     end() { need(); finish(state.open); },
@@ -159,7 +173,7 @@ function createReflexao() {
       const { picks } = topTwo(p);
       if (!picks.length) fail('Nenhum voto nesta parada.');
       p.top = picks.map(x => ({ p: x.p, o: x.o, n: x.n })); p.topAt = Date.now(); p.show = true;
-      commit({ title: 'Projetos mais votados', body: 'Olhe para o telão.' });
+      commit({ title: 'Projetos mais votados', body: 'Olhe para o telão.', es: { title: 'Proyectos más votados', body: 'Mira la pantalla.' } });
     },
     showTop(on) { const p = need(); if (!p.top.length) return; p.show = !!on; commit(); },
     setCounts(on) { config.showCounts = !!on; commit(); },
@@ -211,22 +225,22 @@ function createReflexao() {
     },
     resetConfig() { hold(); config = { ...DEFAULT_CONFIG(), showCounts: config.showCounts }; rev++; state.paradas = config.themes.map((_, i) => state.paradas[i] || blank()); if (state.open !== null && !P(state.open)) state.open = null; arm(); commit(); },
     /* ---------- o que cada tela recebe ---------- */
-    catalog: () => ({ rev, projects: config.projects.map(x => ({ name: x.name, owner: x.owner || NO_OWNER })) }),
+    catalog: () => ({ rev, projects: config.projects.map(x => ({ name: x.name, owner: x.owner || NO_OWNER, ...(es(x.owner || NO_OWNER) ? { ownerEs: es(x.owner || NO_OWNER) } : {}) })) }),
     publicState() {
       const n = config.themes.length, total = state.paradas.reduce((a, p) => a + p.votes.length, 0);
       const energy = p => Math.min(1, p.votes.length / config.fullVotes);
       const i = state.open, p = cur();
       return {
-        rev, title: config.title, subtitle: config.subtitle, voteSeconds: config.voteSeconds, fullVotes: config.fullVotes,
+        rev, title: config.title, subtitle: config.subtitle, titleEs: es(config.title), subtitleEs: es(config.subtitle), voteSeconds: config.voteSeconds, fullVotes: config.fullVotes,
         open: i, votes: total, energy: Math.min(1, total / (config.fullVotes * n)),
-        themes: config.themes.map((t, k) => ({ n: pad(k + 1), t: t.t, q: t.q, c: COLORS[k % COLORS.length], votes: P(k).votes.length, gw: energy(P(k)) * 1.21 / n, phase: P(k).phase, revealed: P(k).top.length > 0 })),
+        themes: config.themes.map((t, k) => ({ n: pad(k + 1), t: t.t, q: t.q, tEs: es(t.t), qEs: es(t.q), c: COLORS[k % COLORS.length], votes: P(k).votes.length, gw: energy(P(k)) * 1.21 / n, phase: P(k).phase, revealed: P(k).top.length > 0 })),
         cur: p ? { idx: i, phase: p.phase, endsAt: p.endsAt, remaining: p.remaining, votes: p.votes.length, energy: energy(p), last: p.last,
           // os mais votados: 1º e 2º, com o responsável; a quantidade de votos só vai se o Doc ligar essa opção
-          top: p.show && p.top.length ? { at: p.topAt, items: p.top.map(v => ({ name: v.p, owner: v.o, ...(config.showCounts ? { votes: v.n } : {}) })) } : null } : null,
+          top: p.show && p.top.length ? { at: p.topAt, items: p.top.map(v => ({ name: v.p, owner: v.o, ...(es(v.o) ? { ownerEs: es(v.o) } : {}), ...(config.showCounts ? { votes: v.n } : {}) })) } : null } : null,
       };
     },
     // os votos da própria pessoa, parada por parada
-    mine(pid) { return { votes: state.paradas.map(p => { const v = p.votes.find(x => x.pid === pid); return v ? { project: v.p, owner: v.o } : null; }) }; },
+    mine(pid) { return { votes: state.paradas.map(p => { const v = p.votes.find(x => x.pid === pid); return v ? { project: v.p, owner: v.o, ...(es(v.o) ? { ownerEs: es(v.o) } : {}) } : null; }) }; },
     adminState() {
       return { rev, config, open: state.open, paradas: state.paradas.map(p => {
         const { list } = topTwo(p);

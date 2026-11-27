@@ -1,11 +1,12 @@
 /* ===== Cenas do deck do townhall no telão =====
- * O conteúdo do deck "CDIO HC + BPC · Townhall 2026" (agenda v18), em português e com a cara do app:
- * plano de voo, boas-vindas, almanaque 2026, reconhecimento (prêmios), intervalo,
- * Visão 2027 (a estratégia, no arquivo original) e 88 MPH. ("IA em 2026" e "Manifesto 2027" continuam
+ * O conteúdo do deck "CDIO HC + BPC · 2026 Townhall" (agenda v18), em INGLÊS (como no deck) e com a cara do app:
+ * vídeo de abertura, boas-vindas (com a nuvem das "duas palavras"), plano de voo, almanaque 2026, reconhecimento
+ * (prêmios), intervalo, Visão 2027 (a estratégia, no arquivo original) e 88 MPH. ("IA em 2026" e "Manifesto 2027" continuam
  * disponíveis como cenas avulsas, mas no roteiro padrão são os próprios blocos Reflexão e Sucesso.)
  * O telão segue o estado do servidor: quem comanda é o Painel do Doc (server/cenas.js guarda conteúdo e estado).
  *   Cenas.html(state) → HTML da cena · Cenas.mount(el, state, hooks) · Cenas.update(state) · Cenas.unmount()
  *   Cenas.tick() (a cada 0,5 s) · Cenas.pulse(p) (carga do Flux Capacitor) · Cenas.calm(state) · Cenas.info(state)
+ *   Cenas.videos() → quais vídeos (abertura, tributo) já estão carregados neste telão
  */
 window.Cenas = (() => {
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
@@ -29,6 +30,23 @@ window.Cenas = (() => {
   const faces = x => { const f = (x && x.fotos) || []; return f.length ? `<div class="avs">${f.map(u => `<div class="av foto">${f.length === 1 ? esc(ini(x.nome)) : ''}<img src="${esc(u)}" alt=""></div>`).join('')}</div>` : `<div class="av">${esc(ini(x && x.nome))}</div>`; };
   document.addEventListener('error', e => { const t = e.target; if (t && t.tagName === 'IMG' && t.parentNode && t.parentNode.classList.contains('av')) { t.parentNode.classList.remove('foto'); t.remove(); } }, true);
 
+  /* Vídeos (abertura e tributo): o arquivo arrastado para a tela fica guardado NESTE navegador (IndexedDB). Recarregar a
+   * página, fechar o telão ou trocar de cena não perde o vídeo: ele só sai se outro for arrastado ou em "remover". */
+  const Vid = (() => {
+    const mem = {}, has = {};
+    const open = () => new Promise((res, rej) => { const r = indexedDB.open('bttf-telao', 1); r.onupgradeneeded = () => r.result.createObjectStore('videos'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+    const tx = async (mode, fn) => { const db = await open(); return new Promise((res, rej) => { const t = db.transaction('videos', mode), q = fn(t.objectStore('videos')); t.oncomplete = () => { db.close(); res(q && q.result); }; t.onerror = t.onabort = () => { db.close(); rej(t.error); }; }); };
+    return {
+      has, // { abertura: true, tributo: true }: o que este telão já tem carregado (o Painel do Doc mostra)
+      async get(k) { if (mem[k]) return mem[k]; try { const f = await tx('readonly', o => o.get(k)); if (f) { mem[k] = f; has[k] = true; } return f || null; } catch { return null; } },
+      async set(k, f) { mem[k] = f; has[k] = true; try { await tx('readwrite', o => o.put(f, k)); return true; } catch { return false; } },
+      async del(k) { delete mem[k]; delete has[k]; try { await tx('readwrite', o => o.delete(k)); } catch { /* segue */ } },
+    };
+  })();
+  for (const k of ['abertura', 'tributo']) Vid.get(k); // já descobre o que está guardado (para avisar o painel antes de a cena entrar)
+  const isVideo = f => !!f && /^video\//.test(f.type || 'video/');
+  const mb = f => (f && f.size ? ` · ${f.size >= 1048576 ? (f.size / 1048576).toFixed(0) + ' MB' : Math.max(1, Math.round(f.size / 1024)) + ' KB'}` : '');
+
   let root = null, st = null, kind = null, hooks = {}, timers = [], L = {}, sig = '', offset = 0;
   const now = () => Date.now() + offset;
   const later = (ms, fn) => { const t = setTimeout(fn, Math.max(0, ms)); timers.push(t); return t; };
@@ -42,12 +60,12 @@ window.Cenas = (() => {
   const chip = (html, c) => `<span class="cn-chip" ${c ? `style="--c:${c}"` : ''}><i></i>${html}</span>`;
   const strip = t => (t ? `<div class="cn-strip">${esc(t)}</div>` : '');
   // quem conduz o bloco: placas com a foto de perfil e o nome (vêm do servidor, em c.hosts)
-  const hostsRow = (c, cls = '', label = 'COM') => { const h = (c && c.hosts) || []; return h.length ? `<div class="hosts ${cls}">${label ? `<small>${label}</small>` : ''}${h.map(x => `<div class="host"><div class="av ${x.foto ? 'foto' : ''}">${esc(ini(x.nome))}${x.foto ? `<img src="${esc(x.foto)}" alt="">` : ''}</div><b>${esc(x.nome)}</b></div>`).join('')}</div>` : ''; };
-  const who = c => `<div class="cn-chips">${c.quem ? chip(`Com <b>${esc(c.quem)}</b>`, c.ato ? ACT_C[c.ato.k] : '') : ''}${c.min ? chip(`<b>${esc(c.min)} min</b>`) : ''}</div>`;
+  const hostsRow = (c, cls = '', label = 'WITH') => { const h = (c && c.hosts) || []; return h.length ? `<div class="hosts ${cls}">${label ? `<small>${label}</small>` : ''}${h.map(x => `<div class="host"><div class="av ${x.foto ? 'foto' : ''}">${esc(ini(x.nome))}${x.foto ? `<img src="${esc(x.foto)}" alt="">` : ''}</div><b>${esc(x.nome)}</b></div>`).join('')}</div>` : ''; };
+  const who = c => `<div class="cn-chips">${c.quem ? chip(`With <b>${esc(c.quem)}</b>`, c.ato ? ACT_C[c.ato.k] : '') : ''}</div>`; // (sem os minutos do bloco)
   function qrBox() {
     const url = location.origin + '/'; let svg = '';
     try { const q = qrcode(0, 'M'); q.addData(url); q.make(); svg = q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } catch { svg = ''; }
-    return `<div class="cn-qr">${svg ? `<div class="qr">${svg}</div>` : ''}<small>ABRA O APP NO CELULAR</small><b>${esc(url.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</b></div>`;
+    return `<div class="cn-qr">${svg ? `<div class="qr">${svg}</div>` : ''}<small>OPEN THE APP ON YOUR PHONE</small><b>${esc(url.replace(/^https?:\/\//, '').replace(/\/$/, ''))}</b></div>`;
   }
   function typeTo(el, text, ms = 45) { if (!el) return; let i = 0; el.textContent = ''; const iv = every(ms, () => { el.textContent = text.slice(0, ++i); if (i >= text.length) clearInterval(iv); }); }
   function scramble(el, text, ms = 600) {
@@ -70,16 +88,63 @@ window.Cenas = (() => {
   }
   confetti.run = 0;
 
+  /* ================= VÍDEO DE ABERTURA =================
+   * Antes de tocar, o telão mostra o cartão do evento. O vídeo vem do endereço configurado no painel ou do arquivo
+   * arrastado para esta tela (fica guardado neste navegador). O Doc toca, pausa e recomeça pelo painel; no fim, o telão
+   * avisa o painel e volta para o cartão. */
+  function vAbertura(c) {
+    return `<div class="ab-card" id="abCard">${FLUX}${head(c)}<h1 class="ab-title"><span class="bttf">${esc(plain(c.titulo))}</span></h1><p class="cn-sub">${esc(c.sub)}</p>
+        <div class="ab-hint" id="abHint"></div></div>
+      <video class="ab-video" id="abVideo" playsinline preload="auto"></video>
+      <input type="file" id="abFile" accept="video/*" hidden>`;
+  }
+  function mAbertura(c, first) {
+    const v = $('#abVideo'), hint = $('#abHint'), l = c.live || {}; if (!v) return;
+    const has = () => !!v.getAttribute('src');
+    const paint = () => { // o que quem opera o telão vê no cartão (some quando o vídeo está tocando)
+      const f = L.abFile;
+      hint.innerHTML = has() ? `<b>🎬 OPENING VIDEO READY</b><small>${f ? `${esc(f.name || 'video')}${mb(f)} · ${L.abSaved === false ? 'loaded for now, but this browser could not save it: keep this page open' : 'saved in this browser'} · <a href="#" id="abDel">remove</a>` : 'from the address set in the control panel'}</small>${L.abBlocked ? '<em>CLICK THE SCREEN TO START THE VIDEO</em>' : ''}`
+        : '<b>DRAG &amp; DROP THE OPENING VIDEO HERE</b><small>or click anywhere to choose the file · it stays saved in this browser</small>';
+      const del = $('#abDel'); if (del) del.onclick = e => { e.preventDefault(); e.stopPropagation(); Vid.del('abertura').then(() => { L.abFile = null; v.removeAttribute('src'); v.load(); paint(); hooks.report && hooks.report(); }); };
+    };
+    const full = on => { root.classList.toggle('playing', on); document.body.classList.toggle('ab-playing', on); }; // em tela cheia: sem o relógio e as linhas de TV por cima
+    const play = () => { if (!has()) return; full(true); const p = v.play(); if (p && p.catch) p.catch(() => { L.abBlocked = true; full(false); paint(); }); }; // sem um clique na tela, o navegador não deixa tocar com som
+    const apply = () => {
+      const cur = cena(); if (!cur || cur.kind !== 'abertura') return; const s = cur.live || {};
+      if (L.abAt !== s.at) { L.abAt = s.at; try { v.currentTime = 0; } catch { /* ainda carregando */ } }
+      if (s.play && has()) play(); else { v.pause(); full(false); }
+    };
+    if (first) {
+      L.abAt = l.at; L.abBlocked = false; L.abFile = null;
+      const load = f => { if (!isVideo(f)) return; if (L.vurl) URL.revokeObjectURL(L.vurl); L.vurl = URL.createObjectURL(f); L.abFile = f; v.src = L.vurl; paint(); apply(); };
+      const pick = f => { if (!isVideo(f)) return; load(f); Vid.set('abertura', f).then(ok => { L.abSaved = ok; paint(); if (hooks.report) hooks.report(); }); }; // se o navegador não conseguir guardar (arquivo grande demais), o telão avisa
+      ['dragenter', 'dragover'].forEach(t => root.addEventListener(t, e => { e.preventDefault(); root.classList.add('drag'); }));
+      ['dragleave', 'drop'].forEach(t => root.addEventListener(t, () => root.classList.remove('drag')));
+      root.addEventListener('drop', e => { e.preventDefault(); pick(e.dataTransfer.files[0]); });
+      $('#abFile').addEventListener('change', e => pick(e.target.files[0]));
+      root.addEventListener('click', () => { if (L.abBlocked) { L.abBlocked = false; paint(); return apply(); } if (!has()) $('#abFile').click(); });
+      v.addEventListener('play', () => hooks.duck && hooks.duck(true));
+      ['pause', 'ended'].forEach(t => v.addEventListener(t, () => hooks.duck && hooks.duck(false)));
+      v.addEventListener('ended', () => { full(false); if (hooks.emit) hooks.emit('cena:fim', { kind: 'abertura' }); });
+      v.addEventListener('error', () => { if (has() && !L.abFile) { hint.innerHTML = '<b>THE VIDEO ADDRESS DID NOT LOAD</b><small>drag &amp; drop the file here instead</small>'; full(false); } });
+      if (c.video) { v.src = c.video; paint(); apply(); }
+      else { paint(); Vid.get('abertura').then(f => { if (f && v.isConnected && !has()) load(f); }); }
+      return;
+    }
+    apply();
+  }
+
   /* ================= PLANO DE VOO ================= */
   function vAgenda(c) {
     const [h, m] = c.inicio.split(':').map(Number), start = h * 60 + m, f = x => `${pad(Math.floor(x / 60) % 24)}:${pad(x % 60)}`, ticks = [];
     for (let t = 0; t <= c.total; t += 30) ticks.push(t);
     return `<div class="cn-top"><div>${head(c)}<h1 class="cn-h1">${fire(c.titulo)}</h1></div>
-        <div class="cn-meta">${[['DATA', c.data], ['INÍCIO', c.inicio], ['DURAÇÃO', c.total + '′'], ['ATOS', c.atos.length]].map(([l, v]) => `<div class="tcbox"><b>${esc(v)}</b><span>${l}</span></div>`).join('')}</div></div>
+        <div class="cn-meta">${[['DATE', c.data], ['START', c.inicio], ['END', c.fim], ['ACTS', c.atos.length]].map(([l, v]) => `<div class="tcbox"><b>${esc(v)}</b><span>${l}</span></div>`).join('')}</div></div>
       <div class="ag-bar">${c.itens.map(x => `<i style="flex:${x.min};--c:${ACT_C[x.ato - 1]}"></i>`).join('')}</div>
       <div class="ag-scale">${ticks.map(t => `<span style="left:${t / c.total * 100}%">${f(start + t)}</span>`).join('')}</div>
-      <div class="ag-acts">${c.atos.map((a, k) => `<div class="ag-act" style="--c:${ACT_C[k]}"><div class="n">${esc(a.n)}</div><h3>${esc(a.nome)}</h3><div class="r">${a.de} – ${a.ate} · ${a.min}′</div>
-        ${c.itens.map((x, i) => (x.ato === k + 1 ? `<div class="ag-it" data-i="${i}"><span class="tm">${x.hora}<i class="du">${x.min}′</i></span><span class="tx"><b>${esc(x.t)}</b><small>${esc(x.d)}</small></span></div>` : '')).join('')}</div>`).join('')}</div>`;
+      <div class="ag-acts">${c.atos.map((a, k) => `<div class="ag-act" style="--c:${ACT_C[k]}"><div class="n">${esc(a.n)}</div><h3>${esc(a.nome)}</h3><div class="r">${a.de} – ${a.ate}</div>
+        ${c.itens.map((x, i) => (x.ato === k + 1 ? `<div class="ag-it" data-i="${i}"><span class="tm">${x.hora}</span><span class="tx"><b>${esc(x.t)}${x.fone ? ' <i class="fone" title="On your phone">📱</i>' : ''}</b><small>${esc(x.d)}</small></span></div>` : '')).join('')}</div>`).join('')}</div>
+      <div class="ag-note">📱 = happens on your phone, in the app</div>`;
   }
   // Nenhum item fica marcado como "no ar": um destaque suave passeia por todos, um de cada vez, do começo ao fim do dia
   function mAgenda(c, first) {
@@ -97,8 +162,18 @@ window.Cenas = (() => {
       const html = `<span class="w ${on ? 'fire' : ''}" style="--i:${i++}">${esc(w.replace(/\*/g, ''))}</span>`; if (close) on = false; return html;
     }).join(' ');
     return `${head(c)}<div class="bv-quote">${words}</div>
-      <div class="bv-people">${(c.pessoas || []).map(p => `<div class="cn-person">${faces(p)}<div><b>${esc(p.nome)}</b><small>${esc(p.papel)}</small></div></div>`).join('')}${c.min ? chip(`<b>${esc(c.min)} min</b>`) : ''}</div>
-      ${strip(c.faixa)}`;
+      <div class="bv-people">${(c.pessoas || []).map(p => `<div class="cn-person">${faces(p)}<div><b>${esc(p.nome)}</b><small>${esc(p.papel)}</small></div></div>`).join('')}</div>
+      ${strip(c.faixa)}
+      <div class="bv-cloud" id="bvCloud"><div class="bvc-h">${head(c, 'Two words · check-in')}<h2 class="cn-h2">${fire(c.nuvemTitulo || 'How the crew *arrived* today')}</h2></div><canvas id="bvCanvas"></canvas><div class="bvc-n"><b id="bvCount">0</b> travelers shared their two words</div></div>`;
+  }
+  // A nuvem das "duas palavras" (o que cada pessoa respondeu logo depois do login): entra quando o Doc clica em "Mostrar a nuvem"
+  function mBoasvindas(c, first) {
+    const w = (st && st.words) || { top: [], count: 0 }, on = !!(c.live && c.live.nuvem);
+    if (first || !L.bvCloud) L.bvCloud = window.NuvemDePalavras && $('#bvCanvas') ? new NuvemDePalavras($('#bvCanvas'), { scale: 1.6, wide: true, empty: 'WAITING FOR THE FIRST WORDS…' }) : null;
+    if (L.bvCloud) L.bvCloud.sync(w.top);
+    const n = $('#bvCount'); if (n) n.textContent = w.count;
+    if (on && !root.classList.contains('cloud')) { root.classList.add('cloud'); if (!first) { sfx('reveal'); flash(); } }
+    else if (!on) root.classList.remove('cloud');
   }
 
   /* ================= JORNADA 2026 · ALMANAQUE ================= */
@@ -120,12 +195,12 @@ window.Cenas = (() => {
   function alPage(c) { // o ano em uma página: tudo o que foi entregue, por BU
     const s = c.stats, pg = c.pagina, del = c.itens.filter(x => x.k === 'E');
     return `<div class="pg-head"><div>${head(c, pg.kicker)}<h2 class="cn-h2">${fire(pg.titulo)}</h2></div>
-        <div class="pg-kpis"><div style="--c:var(--yellow)"><b>${s.entregues}</b><small>ENTREGUES</small></div><div style="--c:var(--yellow)"><b>${esc(s.beneficiosTxt)}</b><small>BENEFÍCIOS</small></div>
+        <div class="pg-kpis"><div style="--c:var(--yellow)"><b>${s.entregues}</b><small>DELIVERED</small></div><div style="--c:var(--yellow)"><b>${esc(s.beneficiosTxt)}</b><small>BENEFITS</small></div>
           ${s.bus.map(b => `<div style="--c:${BU_C[b.bu]}"><b>${b.n}</b><small>${esc(b.name)} · ${esc(b.txt)}</small></div>`).join('')}</div></div>
       <div class="pg-cols">${s.bus.map((b, k) => `<div class="pg-col" style="--c:${BU_C[b.bu]};--i:${k}"><h4><span>${esc(b.name)}</span><span>${b.n} · ${esc(b.txt)}</span></h4>
         ${del.filter(x => (x.bu || 'BPC') === b.bu).map(x => `<div class="pg-row"><span>${c.meses[x.m]}</span><div>${esc(x.t)}</div></div>`).join('')}</div>`).join('')}</div>
       <p class="pg-note">${esc(pg.nota)}</p>
-      <div class="pg-lead"><b>APRENDIZADOS DA LIDERANÇA 2026</b><span>${esc(pg.lideranca)}</span></div>`;
+      <div class="pg-lead"><b>2026 LEADERSHIP TAKEAWAYS</b><span>${esc(pg.lideranca)}</span></div>`;
   }
   function alMonth(c, i, animate) {
     const blank = i < 0, m = Math.max(0, i), it = blank ? [] : c.itens.filter(x => x.m === m), off = new Set(c.live.off || []);
@@ -136,9 +211,9 @@ window.Cenas = (() => {
     const mn = $('#alMn'); mn.textContent = c.meses[m]; if (animate) { mn.classList.remove('flip'); void mn.offsetWidth; mn.classList.add('flip'); }
     $('#alQ').textContent = `Q${Math.floor(m / 3) + 1} · 2026`;
     const dl = it.filter(x => x.k === 'E').length, ms = it.filter(x => x.k === 'M').length;
-    $('#alSt').innerHTML = `<span><b>${dl}</b>${dl === 1 ? 'entregue' : 'entregues'}</span><span><b>${ms}</b>${ms === 1 ? 'marco em andamento' : 'marcos em andamento'}</span>`;
+    $('#alSt').innerHTML = `<span><b>${dl}</b>delivered</span><span><b>${ms}</b>${ms === 1 ? 'milestone in motion' : 'milestones in motion'}</span>`;
     const box = $('#alCards'); box.className = `al-cards ${it.length > 4 ? 'cmp' : ''} ${it.length > 6 ? 'cmp3' : ''} ${animate ? 'anim' : ''}`;
-    box.innerHTML = blank ? '' : it.map((e, k) => `<div class="al-card k${e.k} ${off.has(e.k) || (e.bu && off.has(e.bu)) ? 'hid' : ''}" style="--i:${k};--c:${TIPO_C[e.k]}"><small>${esc(c.tipos[e.k].toUpperCase())}${e.bu ? `<em style="--b:${BU_C[e.bu]}">${esc(c.bus[e.bu])}</em>` : ''}</small><p>${esc(e.t)}</p>${e.k === 'E' ? '<div class="stamp">ENTREGUE<i>2026 ✓</i></div>' : ''}</div>`).join('');
+    box.innerHTML = blank ? '' : it.map((e, k) => `<div class="al-card k${e.k} ${off.has(e.k) || (e.bu && off.has(e.bu)) ? 'hid' : ''}" style="--i:${k};--c:${TIPO_C[e.k]}"><small>${esc(c.tipos[e.k].toUpperCase())}${e.bu ? `<em style="--b:${BU_C[e.bu]}">${esc(c.bus[e.bu])}</em>` : ''}</small><p>${esc(e.t)}</p>${e.k === 'E' ? '<div class="stamp">DELIVERED<i>2026 ✓</i></div>' : ''}</div>`).join('');
     if (animate && !blank) { sfx('key', m); if (dl) { later(650, () => sfx('reveal')); later(900, () => { const r = $('.al-card.kE:not(.hid)'); if (r) { const b = r.getBoundingClientRect(); confetti(70, (b.right - 60) / innerWidth, (b.top + b.height / 2) / innerHeight); } }); } }
   }
   function alLegend(c) {
@@ -203,26 +278,26 @@ window.Cenas = (() => {
   function vReconhecimento(c) {
     const l = c.live, n = c.premios.length, done = c.premios.filter(p => p.feito).length;
     if (l.fase === 'intro') return `<div class="rc-intro">${FLUX}${head(c)}<div class="rc-lines">${(c.abertura || []).map((t, i) => `<span style="--i:${i}">${fire(t)}</span>`).join('')}</div><p class="rc-sub" style="--i:${(c.abertura || []).length}">${esc(c.aberturaSub)}</p>${hostsRow(c, 'center')}</div>`;
-    if (l.fase === 'tributo') return `<div class="rc-trib">${head(c, `${c.kicker} · Tributo`)}<h2 class="cn-h2">${fire(c.tributo)}</h2>
-        <div class="rc-vid" id="rcVid"><div class="hint" id="rcHint">${FLUX}<b>ARRASTE O VÍDEO-TRIBUTO PARA CÁ</b><small>ou use este espaço para a fala da liderança</small></div><video id="rcVideo" hidden playsinline controls></video></div>
-        ${c.fala ? `<p class="rc-foot">Fala: ${esc(c.fala)}</p>` : ''}</div>`;
-    if (l.fase === 'premios') return `<div class="rc-board"><div class="cn-top"><div>${head(c, 'Cerimônia ao vivo')}<h1 class="cn-h1">${fire(c.premiosTitulo)}</h1></div><div class="tcbox" style="--c:var(--yellow)"><b>${done} / ${n}</b><span>PRÊMIOS REVELADOS</span></div></div>
-        <div class="rc-env n${n}">${c.premios.map((p, i) => { const w = p.feito && winnerOf(p); return w ? `<div class="env done" style="--i:${i}"><div class="k">${esc(p.n.toUpperCase())}</div>${faces(w)}<b>${esc(w.nome)}</b><small>${esc(w.projeto)}</small><span class="tag">REVELADO</span></div>`
-          : `<div class="env" style="--i:${i}"><div class="seal"><svg viewBox="0 0 24 24">${ICO[p.ic] || ICO.i}</svg></div><div class="k">${esc(p.k)}</div><b>${esc(p.n)}</b><small>LACRADO</small></div>`; }).join('')}</div>
-        ${c.exemplo ? '<div class="rc-dummy">NOMES DE EXEMPLO · NÃO SÃO AS INDICAÇÕES FINAIS</div>' : ''}</div>`;
-    if (l.fase === 'hall') return `<div class="rc-hall">${head(c, `${c.kicker} · Grande final`)}<div class="hof-t"><span class="bttf">${esc(c.hallTitulo)}</span></div><p class="cn-sub">${esc(c.hallSub)}</p>
-        <div class="rc-hof n${n}">${c.premios.map((p, i) => { const w = p.feito && winnerOf(p); return `<div class="hc ${w ? '' : 'pending'}" style="--i:${i}"><div class="k">${esc(p.k)}</div><h4>${esc(p.n)}</h4>${w ? faces(w) : '<div class="av">?</div>'}<b>${w ? esc(w.nome) : 'A revelar'}</b><small>${w ? esc(w.projeto) : '&nbsp;'}</small></div>`; }).join('')}</div></div>`;
+    if (l.fase === 'tributo') return `<div class="rc-trib">${head(c, `${c.kicker} · Tribute`)}<h2 class="cn-h2">${fire(c.tributo)}</h2>
+        <div class="rc-vid" id="rcVid"><div class="hint" id="rcHint">${FLUX}<b>DRAG &amp; DROP THE TRIBUTE VIDEO HERE</b><small>or use this space for the leadership speech</small></div><video id="rcVideo" hidden playsinline controls></video></div>
+        ${c.fala ? `<p class="rc-foot">Speaker: ${esc(c.fala)}</p>` : ''}</div>`;
+    if (l.fase === 'premios') return `<div class="rc-board"><div class="cn-top"><div>${head(c, 'Live ceremony')}<h1 class="cn-h1">${fire(c.premiosTitulo)}</h1></div><div class="tcbox" style="--c:var(--yellow)"><b>${done} / ${n}</b><span>AWARDS REVEALED</span></div></div>
+        <div class="rc-env n${n}">${c.premios.map((p, i) => { const w = p.feito && winnerOf(p); return w ? `<div class="env done" style="--i:${i}"><div class="k">${esc(p.n.toUpperCase())}</div>${faces(w)}<b>${esc(w.nome)}</b><small>${esc(w.projeto)}</small><span class="tag">REVEALED</span></div>`
+          : `<div class="env" style="--i:${i}"><div class="seal"><svg viewBox="0 0 24 24">${ICO[p.ic] || ICO.i}</svg></div><div class="k">${esc(p.k)}</div><b>${esc(p.n)}</b><small>SEALED</small></div>`; }).join('')}</div>
+        ${c.exemplo ? '<div class="rc-dummy">EXAMPLE NAMES · NOT FINAL NOMINATIONS</div>' : ''}</div>`;
+    if (l.fase === 'hall') return `<div class="rc-hall">${head(c, `${c.kicker} · Grand finale`)}<div class="hof-t"><span class="bttf">${esc(c.hallTitulo)}</span></div><p class="cn-sub">${esc(c.hallSub)}</p>
+        <div class="rc-hof n${n}">${c.premios.map((p, i) => { const w = p.feito && winnerOf(p); return `<div class="hc ${w ? '' : 'pending'}" style="--i:${i}"><div class="k">${esc(p.k)}</div><h4>${esc(p.n)}</h4>${w ? faces(w) : '<div class="av">?</div>'}<b>${w ? esc(w.nome) : 'To be revealed'}</b><small>${w ? esc(w.projeto) : '&nbsp;'}</small></div>`; }).join('')}</div></div>`;
     const p = c.premios[l.premio] || c.premios[0]; // cerimônia de um prêmio
     // como o Flux Capacitor carrega: pelos aplausos (o microfone do Painel do Doc ouve a sala), pelos toques nos celulares, ou pelos dois
     const mic = c.carga !== 'toques', tap = c.carga !== 'mic';
-    const how = mic && tap ? 'Aplausos e toques em <b>⚡ CARREGAR</b> no celular: tudo carrega o Flux Capacitor!' : mic ? 'Quanto mais <b>aplausos</b>, mais rápido o Flux Capacitor carrega. <b>Todo mundo junto!</b>' : 'Os aplausos carregam o Flux Capacitor. Toquem em <b>⚡ CARREGAR</b> no celular!';
+    const how = mic && tap ? 'Applause and taps on <b>⚡ CHARGE</b> on your phone: everything charges the flux capacitor!' : mic ? 'The louder the <b>applause</b>, the faster the flux capacitor charges. <b>Everyone together!</b>' : 'Your applause charges the flux capacitor. Tap <b>⚡ CHARGE</b> on your phone!';
     return `<div class="rc-cer" id="rcCer" data-passo="${l.passo}">
-        <div class="rc-cerh"><div class="tcbox led" style="--c:var(--red)"><b id="rcLed">— — —</b><span>DESTINO · VENCEDOR</span></div><div class="rc-steps">${[0, 1, 2, 3, 4].map(() => '<i></i>').join('')}</div></div>
-        <div class="rc-cat"><div class="ck">O PRÊMIO 2026 DE ${esc(p.k)}</div><div class="cn2"><span class="bttf">${esc(p.n)}</span></div><p class="cw">${esc(p.porque)}</p><div class="cc">${p.criterios.map((x, i) => `<span style="--i:${i}">${esc(x)}</span>`).join('')}</div></div>
+        <div class="rc-cerh"><div class="tcbox led" style="--c:var(--red)"><b id="rcLed">— — —</b><span>DESTINATION · WINNER</span></div><div class="rc-steps">${[0, 1, 2, 3, 4].map(() => '<i></i>').join('')}</div></div>
+        <div class="rc-cat"><div class="ck">THE 2026 AWARD FOR ${esc(p.k)}</div><div class="cn2"><span class="bttf">${esc(p.n)}</span></div><p class="cw">${esc(p.porque)}</p><div class="cc">${p.criterios.map((x, i) => `<span style="--i:${i}">${esc(x)}</span>`).join('')}</div></div>
         <div class="rc-noms n${p.indicados.length}" id="rcNoms">${p.indicados.map((x, j) => `<div class="nom" data-j="${j}" style="--rt:${[-4, 3, -2, 4, -3, 2][j % 6]}deg"><div class="ph">${faces(x)}</div><b></b><small></small></div>`).join('')}</div>
-        <div class="rc-gw ${mic ? 'mic' : ''}"><div class="gwl">${FLUX}<div class="gwx"><div class="gwt">FAÇAM BARULHO!</div><div class="gws">${how}</div></div>
-            ${mic ? `<div class="vu" id="rcVu" title="Som da sala"><span>👏 APLAUSOS</span><div class="bars">${Array.from({ length: 18 }, () => '<i></i>').join('')}</div></div>` : ''}</div>
-          <div class="gbar"><i id="rcFill"></i><span>1,21 GW</span></div><div class="gnum"><b id="rcNum">0,00</b> GIGAWATTS</div></div>
+        <div class="rc-gw ${mic ? 'mic' : ''}"><div class="gwl">${FLUX}<div class="gwx"><div class="gwt">MAKE SOME NOISE!</div><div class="gws">${how}</div></div>
+            ${mic ? `<div class="vu" id="rcVu" title="Room sound"><span>👏 APPLAUSE</span><div class="bars">${Array.from({ length: 18 }, () => '<i></i>').join('')}</div></div>` : ''}</div>
+          <div class="gbar"><i id="rcFill"></i><span>1.21 GW</span></div><div class="gnum"><b id="rcNum">0.00</b> GIGAWATTS</div></div>
         <svg class="rc-bolt" id="rcBolt"></svg>
         <div class="rc-win" id="rcWin"><div class="wk" id="rcWk"></div><div class="wav" id="rcWav"></div><div class="wn"><span class="bttf" id="rcWn"></span></div><div class="wp" id="rcWp"></div><div class="wc" id="rcWc"></div></div>
       </div>`;
@@ -238,8 +313,8 @@ window.Cenas = (() => {
       const gw = vu.closest('.rc-gw'); if (gw) gw.style.setProperty('--n', n.toFixed(2));
       clearTimeout(L.vuT); if (n > 0) L.vuT = later(1000, () => rcCharge(v, 0));
     }
-    f.style.width = v * 100 + '%'; $('#rcNum').textContent = (v * 1.21).toFixed(2).replace('.', ',');
-    const cer = $('#rcCer'); if (cer && cer.dataset.passo === 'carga') { $('#rcLed').textContent = `CARREGANDO… ${Math.round(v * 100)}%`; cer.style.setProperty('--e', v); }
+    f.style.width = v * 100 + '%'; $('#rcNum').textContent = (v * 1.21).toFixed(2);
+    const cer = $('#rcCer'); if (cer && cer.dataset.passo === 'carga') { $('#rcLed').textContent = `CHARGING… ${Math.round(v * 100)}%`; cer.style.setProperty('--e', v); }
   }
   function rcStrike(card) { // o raio cai no vencedor
     const svg = $('#rcBolt'), cer = $('#rcCer'); if (!svg || !card || !cer) return;
@@ -253,7 +328,7 @@ window.Cenas = (() => {
   }
   function rcWinner(c, p, fresh) {
     const w = winnerOf(p), o = $('#rcWin'); if (!w || !o) return;
-    $('#rcWk').textContent = `E O PRÊMIO ${p.n.toUpperCase()} VAI PARA…`; $('#rcWav').innerHTML = faces(w); $('#rcWn').textContent = w.nome; $('#rcWp').textContent = w.projeto.toUpperCase();
+    $('#rcWk').textContent = `AND THE ${p.n.toUpperCase()} AWARD GOES TO…`; $('#rcWav').innerHTML = faces(w); $('#rcWn').textContent = w.nome; $('#rcWp').textContent = w.projeto.toUpperCase();
     $$('#rcNoms .nom').forEach((el, j) => { el.classList.remove('hot'); el.classList.add(j === p.vencedor ? 'win' : 'out'); });
     o.classList.add('on'); $('#rcCer').classList.remove('dim');
     if (!fresh) { $('#rcLed').textContent = w.nome.toUpperCase(); $('#rcWc').textContent = `“${p.citacao}”`; return; }
@@ -268,7 +343,7 @@ window.Cenas = (() => {
     cer.classList.toggle('dim', l.passo === 'sorteio');
     if (l.passo === 'categoria') { $('#rcLed').textContent = '— — —'; if (since < 1500) { sfx('thunder'); flash(); } return; }
     if (l.passo === 'indicados') { // um por um, com suspense
-      if (since < 600) { scramble($('#rcLed'), 'OS INDICADOS SÃO…'); sfx('roll', el.length + 1); } else $('#rcLed').textContent = 'OS INDICADOS SÃO…';
+      if (since < 600) { scramble($('#rcLed'), 'THE NOMINEES ARE…'); sfx('roll', el.length + 1); } else $('#rcLed').textContent = 'THE NOMINEES ARE…';
       p.indicados.forEach((x, j) => { const d = 700 + j * 1000 - since; if (d <= 0) rcShowNom(el[j], x, false); else later(d, () => rcShowNom(el[j], x, true)); });
       return;
     }
@@ -292,12 +367,13 @@ window.Cenas = (() => {
     if (l.fase === 'tributo') { // vídeo-tributo: endereço configurado no painel ou arquivo arrastado para a tela
       const v = $('#rcVideo'), hint = $('#rcHint'), box = $('#rcVid');
       if (first) {
-        const load = f => { if (!f || !/^video\//.test(f.type || 'video/')) return; if (L.vurl) URL.revokeObjectURL(L.vurl); L.vurl = URL.createObjectURL(f); v.src = L.vurl; v.hidden = false; hint.hidden = true; v.play().catch(() => {}); };
+        const load = (f, play) => { if (!isVideo(f)) return; if (L.vurl) URL.revokeObjectURL(L.vurl); L.vurl = URL.createObjectURL(f); v.src = L.vurl; v.hidden = false; hint.hidden = true; if (play) v.play().catch(() => {}); };
         ['dragenter', 'dragover'].forEach(t => box.addEventListener(t, e => { e.preventDefault(); box.classList.add('drag'); }));
         ['dragleave', 'drop'].forEach(t => box.addEventListener(t, () => box.classList.remove('drag')));
-        box.addEventListener('drop', e => { e.preventDefault(); load(e.dataTransfer.files[0]); });
+        box.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (!isVideo(f)) return; load(f, true); Vid.set('tributo', f).then(() => hooks.report && hooks.report()); }); // fica guardado neste navegador
         v.addEventListener('play', () => hooks.duck && hooks.duck(true)); ['pause', 'ended'].forEach(t => v.addEventListener(t, () => hooks.duck && hooks.duck(false)));
         if (c.video) { v.src = c.video; v.hidden = false; hint.hidden = true; }
+        else Vid.get('tributo').then(f => { if (f && v.isConnected && !v.getAttribute('src')) load(f, false); }); // o vídeo arrastado em outra hora (ensaio) continua aqui
       }
       if (c.video && v.getAttribute('src') === c.video) { if (l.video) v.play().catch(() => {}); else v.pause(); }
     }
@@ -309,7 +385,7 @@ window.Cenas = (() => {
   }
 
   /* ================= INTERVALO ================= */
-  const IV_ST = { idle: 'AGUARDANDO O DOC INICIAR O INTERVALO', run: '● REABASTECENDO…', paused: '❚❚ PAUSADO', done: '⚡ 1,21 GW · TANQUE CHEIO · VOLTEM AOS SEUS LUGARES' };
+  const IV_ST = { idle: 'THE BREAK IS ABOUT TO START', run: '● REFUELING…', paused: '❚❚ PAUSED', done: '⚡ 1.21 GW · FULL TANK · BACK TO YOUR SEATS' };
   const vIntervalo = c => `${head(c)}<h1 class="cn-h1">${fire(c.titulo)}</h1>
     <div class="iv-row"><div class="iv-ring"><svg viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="90"/><circle class="fg" id="ivRing" cx="100" cy="100" r="90" stroke-dasharray="565.5" stroke-dashoffset="0"/></svg><div class="cd" id="ivCd">--:--</div></div>
       <div class="iv-side"><p>${esc(c.texto)}</p><div class="iv-st" id="ivSt"></div></div></div>`;
@@ -325,7 +401,7 @@ window.Cenas = (() => {
 
   /* ================= VISÃO 2027 · ESTRATÉGIA (arquivo original, sem alterações) ================= */
   const vVisao = c => `<div class="vs-top"><div>${head(c)}<h1 class="vs-title"><span class="bttf">${esc(c.titulo)}</span></h1></div><div class="vs-side">${hostsRow(c, 'sm')}<span class="vs-note">${esc(c.nota)}</span></div></div>
-    <div class="vs-frame"><iframe id="vsFrame" title="Estratégia CDIO LATAM 2027" src="${esc(c.src)}"></iframe></div>`;
+    <div class="vs-frame"><iframe id="vsFrame" title="CDIO LATAM 2027 Strategy" src="${esc(c.src)}"></iframe></div>`;
   function mVisao(c, first) {
     const fr = $('#vsFrame'), intro = !!c.live.intro; if (!fr) return;
     // Sem a abertura em vídeo, a página vai direto para o mapa da estratégia (igual ao deck): o arquivo não é alterado,
@@ -337,7 +413,7 @@ window.Cenas = (() => {
 
   /* ================= MANIFESTO 2027 ================= */
   const vManifesto = c => `<div class="cn-split"><div class="cn-col">${head(c)}
-      <div class="mf-cal">${[['MÊS', c.mes], ['DIA', c.dia], ['ANO', c.ano]].map(([l, v]) => `<div class="tcbox" style="--c:var(--green)"><b>${esc(v)}</b><span>${l}</span></div>`).join('')}</div>
+      <div class="mf-cal">${[['MONTH', c.mes], ['DAY', c.dia], ['YEAR', c.ano]].map(([l, v]) => `<div class="tcbox" style="--c:var(--green)"><b>${esc(v)}</b><span>${l}</span></div>`).join('')}</div>
       <h1 class="cn-h1">${esc(c.titulo)}<br><span class="fire typed" id="mfTy"></span></h1>${who(c)}</div>${qrBox()}</div>${strip(c.faixa)}`;
 
   /* ================= 88 MPH ================= */
@@ -373,8 +449,8 @@ window.Cenas = (() => {
   }
 
   /* ---------- montagem ---------- */
-  const VIEW = { agenda: vAgenda, boasvindas: vBoasvindas, almanaque: vAlmanaque, ia: vIa, reconhecimento: vReconhecimento, intervalo: vIntervalo, visao: vVisao, manifesto: vManifesto, mph: vMph };
-  const LIVE = { agenda: mAgenda, almanaque: mAlmanaque, reconhecimento: mReconhecimento, visao: mVisao, mph: mMph, intervalo: tIntervalo };
+  const VIEW = { abertura: vAbertura, agenda: vAgenda, boasvindas: vBoasvindas, almanaque: vAlmanaque, ia: vIa, reconhecimento: vReconhecimento, intervalo: vIntervalo, visao: vVisao, manifesto: vManifesto, mph: vMph };
+  const LIVE = { abertura: mAbertura, agenda: mAgenda, boasvindas: mBoasvindas, almanaque: mAlmanaque, reconhecimento: mReconhecimento, visao: mVisao, mph: mMph, intervalo: tIntervalo };
   // o que obriga a desenhar a cena de novo (o conteúdo, ou a fase do reconhecimento); o resto é atualização por cima
   function signature(c) {
     const { live, ...content } = c;
@@ -409,17 +485,17 @@ window.Cenas = (() => {
     }
     if (LIVE[c.kind]) LIVE[c.kind](c, false);
   }
-  function unmount() { clear(); confetti.run++; const cv = $('#cnConfetti'); if (cv) cv.remove(); document.body.classList.remove('cn-clean'); root = null; kind = null; sig = ''; }
+  function unmount() { clear(); confetti.run++; const cv = $('#cnConfetti'); if (cv) cv.remove(); document.body.classList.remove('cn-clean', 'ab-playing'); root = null; kind = null; sig = ''; }
   function tick() { const c = cena(); if (c && root && c.kind === 'intervalo') tIntervalo(c); }
   function pulse(p) { if (p && p.kind === 'reconhecimento' && kind === 'reconhecimento') { const c = cena(); if (c && c.live.passo === 'carga') { c.live.carga = p.carga; c.live.nivel = p.nivel || 0; rcCharge(p.carga, p.nivel); } } }
   // O céu e a estrada continuam rodando no fundo em todas as cenas (parado, parecia que o telão tinha travado).
   // Na estratégia (uma moldura que ocupa a tela inteira) o fundo fica bem escuro e sem raios (calm); nas cenas com texto,
   // um pouco mais escuro (dim); no intervalo e nos 88 MPH, com o céu vivo.
-  const calm = state => { const c = state && state.cena; return !!c && c.kind === 'visao'; };
-  const dim = state => { const c = state && state.cena; return !!c && !['intervalo', 'mph', 'visao'].includes(c.kind); };
+  const calm = state => { const c = state && state.cena; return !!c && ['visao', 'abertura'].includes(c.kind); };
+  const dim = state => { const c = state && state.cena; return !!c && !['intervalo', 'mph', 'visao', 'abertura'].includes(c.kind); };
   // nome para os circuitos de tempo da transição e a frase do deck
-  const TR = { agenda: ['circuits', 'Programem os circuitos de tempo.'], boasvindas: ['clock', 'O Doc reúne a tripulação.'], almanaque: ['speed', 'Nosso ano, mês a mês.'], ia: ['fuel', 'O efeito borboleta.'], reconhecimento: ['clock', 'O raio está chegando.'],
-    intervalo: ['fuel', 'Mr. Fusion recarregando.'], visao: ['speed', 'Para onde vamos…'], manifesto: ['speed', 'O futuro de vocês é o que vocês fizerem dele.'], mph: ['speed', 'Segurem firme…'] };
-  const info = state => { const c = state && state.cena; if (!c) return null; const t = TR[c.kind] || TR.agenda; return { id: 'cena:' + c.kind, type: 'cena', name: plain(c.name), tr: { kind: t[0], ms: 3600, quote: [t[1], `${c.ato ? c.ato.n + ' · ' + c.ato.nome : 'CDIO HC + BPC · Townhall 2026'}`] } }; };
-  return { html, mount, update, unmount, tick, pulse, calm, dim, info, confetti };
+  const TR = { abertura: ['circuits', 'Roads? Where we\'re going, we don\'t need roads.'], agenda: ['circuits', 'Set the time circuits.'], boasvindas: ['clock', 'Doc gathers the crew.'], almanaque: ['speed', 'Our year, month by month.'], ia: ['fuel', 'The butterfly effect.'], reconhecimento: ['clock', 'The lightning is coming.'],
+    intervalo: ['fuel', 'Mr. Fusion recharging.'], visao: ['speed', 'Where we\'re going…'], manifesto: ['speed', 'Your future is whatever you make it.'], mph: ['speed', 'Hold on…'] };
+  const info = state => { const c = state && state.cena; if (!c) return null; const t = TR[c.kind] || TR.agenda; return { id: 'cena:' + c.kind, type: 'cena', name: plain(c.name), tr: { kind: t[0], ms: 3600, quote: [t[1], `${c.ato ? c.ato.n + ' · ' + c.ato.nome : 'CDIO HC + BPC · 2026 Townhall'}`] } }; };
+  return { html, mount, update, unmount, tick, pulse, calm, dim, info, confetti, videos: () => ({ ...Vid.has }) };
 })();
