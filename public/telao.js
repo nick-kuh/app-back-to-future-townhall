@@ -443,15 +443,16 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#tr').classList.contains('on')) stopTransition(); });
 
   /* ---------- dinâmicas no celular ----------
-   * Conexões, Reflexão e Sucesso acontecem no app. Enquanto o celular é necessário, um ícone discreto fica no canto do
-   * telão (nada em tela cheia). A nuvem de palavras e o feedback do encerramento têm o próprio chamado dentro da cena. */
+   * Conexões, Reflexão e Sucesso acontecem no app. Enquanto o celular é necessário, um selo animado (o celular vibrando) fica
+   * no canto do telão: entra grande, assenta no canto e de tempos em tempos dá uma chamada (nada em tela cheia). A nuvem de palavras e o feedback do encerramento têm o próprio chamado dentro da cena. */
   function phoneNeeded(st) {
     if (!st || ((st.screen && st.screen.scene) || 'auto') !== 'auto') return false;
     if (st.presentation) return sucPhase(st.presentation.live) !== 'done';               // depois de encerrar: nuvem e sorteio são no telão
     if (st.reflexao) { const c = st.reflexao.cur; return !c || rfPhase(c) !== 'done'; }  // votação encerrada: os mais votados são no telão
     return st.block === 'connections';
   }
-  function phoneTag() { const el = $('#phoneTag'), on = !!S.state && phoneNeeded(S.state); if (el.hidden === on) el.hidden = !on; }
+  // (o selo só entra depois que a transição do bloco termina, para a animação de entrada dele ser vista)
+  function phoneTag() { const el = $('#phoneTag'), on = !!S.state && phoneNeeded(S.state) && !$('#tr').classList.contains('on'); if (el.hidden === on) el.hidden = !on; }
 
   /* ---------- cenas ---------- */
   function sceneFor() {
@@ -464,7 +465,10 @@
 
     const b = st.block;
     if (b === 'welcome') { // chegada: QR do app, o carro carregando a cada check-in e os circuitos de tempo do evento
-      return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox()}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} aboard</small></div></div></div>`];
+      // cada pessoa escolhe o idioma, faz o login e já responde as duas perguntas da nuvem de palavras (as palavras só aparecem no passo da nuvem)
+      const w = st.words || {};
+      return ['welcome', `${logo()}<div class="rowx welcome-row">${qrBox(w.open ? 'SCAN · CHECK IN · ANSWER THE TWO QUESTIONS' : '')}<div class="checkin-car">${carBox()}<div class="count"><span id="count">${st.counts.checkedIn}</span><small> / ${st.counts.total} aboard</small></div>
+        ${w.open ? `<div class="wcount">☁️ <b id="wAns">${w.count || 0}</b> answered the two questions · the word cloud comes right after the welcome</div>` : ''}</div></div>`];
     }
     if (b === 'standby') return ['logo', `${logo()}${flux()}`]; // olhos no telão: só o logo
     if (b === 'stage') { // bloco de fala: tela calma, com o título no estilo do logo do filme
@@ -522,7 +526,7 @@
     const [key, html] = sceneFor();
     const pr = S.state.presentation, rf = key === 'reflexao' ? S.state.reflexao : null;
     const dk = key === 'doc' && S.state.doc ? `${S.state.doc.rev}:${S.state.doc.message ? 1 : 0}` : ''; // nova mensagem (ou a cena começou): monta de novo
-    const ck = key === 'cena' ? S.state.cena.kind : key === 'closing' ? JSON.stringify(S.state.creditos || '').length : key === 'welcome' || key === 'logo' ? JSON.stringify(S.state.evento || '') : ''; // cena do deck no ar / conteúdo do evento
+    const ck = key === 'cena' ? S.state.cena.kind : key === 'closing' ? JSON.stringify(S.state.creditos || '').length : key === 'welcome' || key === 'logo' ? JSON.stringify(S.state.evento || '') + (key === 'welcome' && S.state.words && S.state.words.open ? '|perguntas' : '') : ''; // cena do deck no ar / conteúdo do evento
     const k = `${key}|${dk}|${ck}|${rf ? `${rf.open}:${rf.rev}` : ''}|${pr ? pr.roomId + pr.activityId : ''}|${key === 'stage' ? JSON.stringify(S.state.stage) : ''}|${S.state.conn.round}|${S.state.conn.timer ? S.state.conn.timer.kind : ''}|${JSON.stringify(S.state.message)}|${S.state.conn.mutualCount}|${(S.state.conn.mutualPairs || []).length}|${S.people ? S.people.length : -1}|${key === 'cena' ? '' : (S.state.hosts || []).map(h => h.nome + (h.foto || '')).join() + JSON.stringify(S.state.especial || '')}`;
     if (k !== S.key) {
       if (window.DocCena) DocCena.unmount();
@@ -547,6 +551,7 @@
     } else {
       const c = $('#count'); if (c) { c.textContent = S.state.counts.checkedIn; setEnergy(S.state.counts.checkedIn / Math.max(1, S.state.counts.total), S.checked !== null && S.state.counts.checkedIn > S.checked); }
       const fc = $('#fbCount'); if (fc && S.state.feedback) fc.textContent = S.state.feedback.count;
+      const wa = $('#wAns'); if (wa && S.state.words) wa.textContent = S.state.words.count;
       if (key === 'projection') patchProjection();
       if (key === 'reflexao') patchReflexao();
       if (key === 'doc') DocCena.update(S.state);

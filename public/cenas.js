@@ -183,7 +183,7 @@ window.Cenas = (() => {
   function vNuvem(c) {
     const q = c.perguntas || [];
     return `<div class="cn-top nv-top"><div>${head(c)}<h1 class="cn-h1">${fire(c.titulo)}</h1></div>
-        <div class="nv-side"><div class="nv-call"><span>📱</span><div><b>ANSWER ON YOUR PHONE</b><small>the two questions are in the app</small></div></div>
+        <div class="nv-side"><div class="nv-call"><span>📱</span><div><b>NOT ANSWERED YET?</b><small>answer now on your phone · it goes straight to the cloud</small></div></div>
           <div class="nv-n"><b id="nvCount">0</b><small>ANSWERS</small></div></div></div>
       <div class="nv-grid" id="nvGrid" data-foco="0">${q.map((t, i) => `<div class="nv-box" data-i="${i + 1}" style="--c:${i ? 'var(--orange)' : 'var(--cyan)'}">
         <div class="nv-q"><b>${i + 1}</b><span>${esc(t)}</span></div><canvas id="nvC${i}"></canvas></div>`).join('')}</div>`;
@@ -228,7 +228,7 @@ window.Cenas = (() => {
         ${c.meses.map((m, i) => `<div class="mo ${c.itens.some(x => x.m === i && x.k === 'E') ? 'dl' : ''}" data-i="${i}" style="left:${i / 11 * 100}%"><i></i><span>${m}</span></div>`).join('')}
         <span class="rw">◀◀ REWINDING 2026</span>
         <div class="car" id="alCar"><i class="trail"></i><canvas aria-hidden="true"></canvas></div></div>
-      <div class="al-focus"><div class="al-month"><div class="q" id="alQ"></div><div class="mn"><span class="bttf" id="alMn"></span></div><div class="stt" id="alSt"></div>${hostsRow(c, 'col')}</div>
+      <div class="al-focus"><div class="al-month"><div class="q" id="alQ"></div><div class="mn"><span class="bttf" id="alMn"></span></div><div class="stt" id="alSt"></div></div>
         <div class="al-cards" id="alCards"></div>
         <div class="al-hero"><div class="al-side">${head(c, c.ato ? c.ato.nome : c.kicker)}<div class="al-cover"><span class="bttf">${esc(c.name)}</span></div><p class="al-coversub">${fire(c.titulo)} · ${esc(c.sub)}</p>${hostsRow(c, 'stack')}</div>
           <div class="carbox"><canvas class="car3d" data-car></canvas></div></div></div>
@@ -476,6 +476,10 @@ window.Cenas = (() => {
     }
   }
 
+  /* ================= CAPA DO BLOCO JORNADA 2026 =================
+   * O bloco começa pela capa (o nome e quem conduz); depois vêm a Estratégia 2026 e o almanaque de dezembro a janeiro. */
+  const vCapaJornada = c => cover(c, { title: c.titulo, sub: c.sub });
+
   /* ================= CAPA DO BLOCO SUCESSO (em português, como a dinâmica) ================= */
   const vCapaSucesso = c => cover(c, { title: c.titulo, sub: c.sub, label: 'COM', note: '<span>📱</span><b>Em instantes, as dinâmicas acontecem no celular</b>' });
 
@@ -517,8 +521,8 @@ window.Cenas = (() => {
   }
 
   /* ---------- montagem ---------- */
-  const VIEW = { abertura: vAbertura, agenda: vAgenda, boasvindas: vBoasvindas, nuvem: vNuvem, plano26: vPlano26, capasucesso: vCapaSucesso, almanaque: vAlmanaque, ia: vIa, reconhecimento: vReconhecimento, intervalo: vIntervalo, visao: vVisao, manifesto: vManifesto, mph: vMph };
-  const LIVE = { abertura: mAbertura, agenda: mAgenda, nuvem: mNuvem, plano26: mPlano26, capasucesso: (c, first) => coverLive(first), almanaque: mAlmanaque, reconhecimento: mReconhecimento, visao: mVisao, mph: mMph, intervalo: tIntervalo };
+  const VIEW = { abertura: vAbertura, agenda: vAgenda, boasvindas: vBoasvindas, nuvem: vNuvem, plano26: vPlano26, capajornada: vCapaJornada, capasucesso: vCapaSucesso, almanaque: vAlmanaque, ia: vIa, reconhecimento: vReconhecimento, intervalo: vIntervalo, visao: vVisao, manifesto: vManifesto, mph: vMph };
+  const LIVE = { abertura: mAbertura, agenda: mAgenda, nuvem: mNuvem, plano26: mPlano26, capajornada: (c, first) => coverLive(first), capasucesso: (c, first) => coverLive(first), almanaque: mAlmanaque, reconhecimento: mReconhecimento, visao: mVisao, mph: mMph, intervalo: tIntervalo };
   // o que obriga a desenhar a cena de novo (o conteúdo, ou a fase do reconhecimento); o resto é atualização por cima
   function signature(c) {
     const { live, ...content } = c;
@@ -560,9 +564,9 @@ window.Cenas = (() => {
   // No vídeo de abertura o fundo fica bem escuro e sem raios (calm); nas cenas com texto, um pouco mais escuro (dim);
   // no intervalo, nas capas dos blocos e nos 88 MPH, com o céu vivo.
   const calm = state => { const c = state && state.cena; return !!c && c.kind === 'abertura'; };
-  const dim = state => { const c = state && state.cena; return !!c && !['intervalo', 'mph', 'abertura', 'visao', 'capasucesso'].includes(c.kind); };
+  const dim = state => { const c = state && state.cena; return !!c && !['intervalo', 'mph', 'abertura', 'visao', 'capasucesso', 'capajornada'].includes(c.kind); };
   // nome para os circuitos de tempo da transição e a frase do deck
-  const TR = { abertura: ['circuits', 'Roads? Where we\'re going, we don\'t need roads.'], agenda: ['circuits', 'Set the time circuits.'], boasvindas: ['clock', 'Doc gathers the crew.'], nuvem: ['circuits', 'The crew has something to say.'], plano26: ['clock', 'First, where we said we would go.'], capasucesso: ['speed', 'Your future is whatever you make it.'], almanaque: ['speed', 'Our year, month by month.'], ia: ['fuel', 'The butterfly effect.'], reconhecimento: ['clock', 'The lightning is coming.'],
+  const TR = { abertura: ['circuits', 'Roads? Where we\'re going, we don\'t need roads.'], agenda: ['circuits', 'Set the time circuits.'], boasvindas: ['clock', 'Doc gathers the crew.'], nuvem: ['circuits', 'The crew has something to say.'], plano26: ['clock', 'First, where we said we would go.'], capajornada: ['speed', 'Our year, month by month.'], capasucesso: ['speed', 'Your future is whatever you make it.'], almanaque: ['speed', 'Our year, month by month.'], ia: ['fuel', 'The butterfly effect.'], reconhecimento: ['clock', 'The lightning is coming.'],
     intervalo: ['fuel', 'Mr. Fusion recharging.'], visao: ['speed', 'Where we\'re going…'], manifesto: ['speed', 'Your future is whatever you make it.'], mph: ['speed', 'Hold on…'] };
   const info = state => { const c = state && state.cena; if (!c) return null; const t = TR[c.kind] || TR.agenda; return { id: 'cena:' + c.kind, type: 'cena', name: plain(c.name), tr: { kind: t[0], ms: 3600, quote: [t[1], `${c.ato ? c.ato.n + ' · ' + c.ato.nome : 'CDIO HC + BPC · 2026 Townhall'}`] } }; };
   return { html, mount, update, unmount, tick, pulse, calm, dim, info, confetti, videos: () => ({ ...Vid.has }) };

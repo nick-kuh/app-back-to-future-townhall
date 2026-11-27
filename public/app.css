@@ -446,3 +446,10 @@ textarea.input.short{min-height:0}
 .wcloud span.me{outline:1px dashed rgba(255,255,255,.6);outline-offset:3px;border-radius:6px}
 .wcloud .wc-empty{width:100%}
 @keyframes wfloat{50%{transform:translateY(-3px)}}
+
+/* ---- primeira tela: a escolha do idioma (o toque já configura o app e segue para o login) ---- */
+.langstart{display:flex;flex-direction:column;gap:10px}
+.langstart .kicker{text-align:center;color:var(--cyan);font-size:9px;line-height:1.9;margin-bottom:4px}
+.langstart .btn.ghost{font:800 17px Inter;letter-spacing:0;text-transform:none;padding:16px;background:rgba(21,11,46,.82)}
+.langstart .btn.ghost.sug{border-color:var(--cyan);box-shadow:0 0 18px rgba(46,230,214,.35)} /* o idioma do aparelho (ou o escolhido da última vez) vem em destaque */
+.langchip b{padding:4px 6px}
