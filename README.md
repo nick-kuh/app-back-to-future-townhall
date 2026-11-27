@@ -7,30 +7,141 @@ no telão, em português) e os blocos interativos. O bloco **Conexões** são tr
 por ranking e cálculo automático de quem cada pessoa deve procurar depois.
 
 - **App do viajante** (celular): `http://SEU-SERVIDOR/`
-- **Painel do Doc** (apresentador/admin): `http://SEU-SERVIDOR/admin.html` · senha padrão `doc1985`
+- **Painel do Doc** (apresentador/admin, tudo): `http://SEU-SERVIDOR/admin.html` · **senha mestra**, padrão `doc1985`
   (troque definindo a variável de ambiente `ADMIN_PASSWORD`).
+- **Painel das Dinâmicas** (só Conexões, Reflexão e Sucesso): `http://SEU-SERVIDOR/dinamicas` · **senha das dinâmicas**
+  (variável de ambiente `DINAMICAS_PASSWORD`).
+
+## 🔐 Dois níveis de acesso e modo confidencial
+
+O conteúdo do townhall (roteiro, agenda, vídeo, boas-vindas, Estratégia 2026, Jornada 2026, prêmios, estratégia 2027,
+créditos) é **confidencial até o evento**. O app separa quem vê o quê:
+
+| Quem entra com… | Vê e controla |
+|---|---|
+| **Senha mestra** (`ADMIN_PASSWORD`) | o Painel do Doc completo: roteiro inteiro, Agenda e cenas, prêmios, tudo |
+| **Senha das dinâmicas** (`DINAMICAS_PASSWORD`) | o "segundo app": só os passos de **Conexões, Reflexão e Sucesso** (mais o check-in, a capa do bloco Sucesso e o Doc, que fecha o Sucesso), as pessoas, as perguntas, a Reflexão, os tempos das viagens e os dados dessas três dinâmicas |
+
+- O bloqueio é **no servidor**: para a senha das dinâmicas ele nem envia o roteiro completo, as cenas, a agenda ou os prêmios,
+  e recusa os comandos (pôr uma cena no ar, editar conteúdo, reiniciar tudo). Não é só um botão escondido.
+- É a mesma página: a senha digitada decide o que aparece. O endereço `/dinamicas` existe para passar à equipe.
+- Sem `DINAMICAS_PASSWORD` definida (ou igual à mestra), só a senha mestra entra.
+- Quando o que está no ar é um bloco do townhall, o Painel das Dinâmicas mostra só "o townhall está em outro bloco".
+
+**Modo confidencial** (🔒 no topo do Painel do Doc; vem **ligado**): enquanto ligado, as cenas do townhall só chegam ao
+Painel do Doc e ao **telão aberto no navegador logado com a senha mestra**. Os celulares e os outros telões veem
+"olhe para o telão", e o endereço da estratégia 2027 não abre. Dá para ensaiar com a sala vazia ou cheia sem mostrar nada.
+
+- Ao pôr no ar uma cena com o modo ligado, o painel pergunta: **"É o evento"** (libera para todos e mostra) ou
+  **"É ensaio"** (mostra só para você).
+- **No dia do evento**: clique em 🔒 → **Liberar para todos** (ou responda "É o evento" na primeira cena). Daí em diante
+  todos os celulares e telões recebem as cenas, como antes.
+- Conexões, Reflexão e Sucesso nunca são confidenciais. Também chegam a todos, mesmo com o modo ligado, as telas que
+  precisam dos celulares e não contam nada do townhall: a **nuvem de palavras**, o **intervalo** (com o alerta de volta),
+  a **capa do bloco Sucesso** e o **encerramento** nos celulares (o formulário de feedback; os créditos do telão continuam guardados).
+
+> ⚠️ **O repositório do GitHub é outra porta.** As senhas protegem o app. Se o repositório continuar **público**, quem
+> tiver o link lê o conteúdo direto nos arquivos (`server/cenas.js`, `public/estrategia-2027.html`, este README).
+> Para o conteúdo ficar de fato confidencial, deixe o repositório **privado** (GitHub → Settings → General → Danger Zone
+> → Change visibility) e confira no Render se o serviço continua com acesso a ele.
+
+## 🌎 Idiomas
+
+- **O app é em inglês**: check-in, a nuvem de palavras, o feedback, o telão, as cenas do deck (com os textos originais do deck, incluindo
+  os blocos da Claudia e do Fermín: Jornada 2026 e Visão 2027), as transições e os créditos.
+- **As dinâmicas são em português**: Conexões, Reflexão e Sucesso (e a mensagem do Doc), no telão e no celular.
+- **Português ou Español no celular**: no login, cada pessoa escolhe o idioma das dinâmicas (dá para trocar depois pela
+  chave **PT | ES** no topo do app). Quem escolhe Español vê em espanhol as perguntas das Conexões (a dupla continua vendo
+  a **mesma** pergunta, cada um no seu idioma), as paradas da Reflexão, as perguntas do Sucesso e todos os botões e avisos.
+  O telão das dinâmicas fica em português.
+- **O Painel do Doc é em português.** Os textos das cenas ficam em Preparar → Agenda e cenas (em inglês; edite à vontade).
+  Cada pergunta das Conexões tem o campo "em espanhol" (Preparar → Perguntas); sem ele, a pergunta aparece em português.
+
+## ☁️ Nuvem de palavras: duas perguntas, texto livre
+
+É um passo do roteiro, **logo depois das Boas-vindas e antes do Plano de voo**. Quando o Doc coloca no ar:
+
+- nos **celulares** aparecem as **duas perguntas**, cada uma com um **campo de texto** para a pessoa escrever (até 80
+  letras; as duas são obrigatórias). Depois de enviar, o celular mostra as respostas da pessoa e as duas nuvens crescendo;
+- no **telão**, cada pergunta forma a sua **nuvem de palavras**, lado a lado, ao vivo, com o contador de respostas.
+  Respostas curtas entram inteiras; frases são quebradas em palavras (sem os conectivos). No painel dá para **destacar
+  uma pergunta por vez** (a nuvem dela ocupa a tela).
+
+As perguntas são editáveis em **Preparar → Agenda e cenas → ☁️ Nuvem de palavras** (padrão: "How are you arriving at the
+Townhall today?" e "Which word best describes your 2026?"). Quem já respondeu **não vê o formulário de novo**, mesmo
+entrando por outro celular: a resposta fica ligada à pessoa no servidor (dá para trocar a resposta enquanto o passo está
+no ar). As respostas param de chegar quando o Doc avança no roteiro. No passo, o Doc vê quem respondeu o quê, **remove**
+alguma resposta que não deva aparecer ou apaga todas; a extração fica em 📊 Dados → Nuvem de palavras (só a senha mestra).
+
+## 📝 Feedback no encerramento
+
+No último passo do roteiro (**Encerramento**), os celulares mostram um mini formulário: **nota de 1 a 5** ("How was the
+Townhall for you?"), **"What did you like the most?"** e **"What should we do better next time?"** (os dois textos são
+opcionais) e a opção **"Send without my name"**. Vale uma resposta por pessoa (dá para trocar). O telão chama para o
+celular e mostra quantas pessoas já responderam, acima dos créditos. No painel, o passo mostra a nota média, a
+distribuição das notas e os comentários; tudo sai em 📊 Dados → Feedback (só a senha mestra). Quem pediu "sem o meu nome"
+aparece sem nome no painel e na extração.
+
+## 🚨 Alerta de volta do intervalo
+
+Quando o cronômetro do intervalo **zera**, o app chama todo mundo de volta com um "alerta de emergência" no estilo dos
+alertas da defesa civil:
+
+- no **telão**: tela cheia, faixas amarelas e pretas, "BACK TO YOUR SEATS" e a sirene de duas notas (toca se o som do
+  telão já foi liberado com um clique);
+- nos **celulares**: um cartão de alerta por cima do app, com o mesmo toque e vibração; sai com "OK · I'm on my way".
+
+O alerta some quando o Doc clica em **🔕 Silenciar o alerta** ou avança no roteiro. Também dá para disparar na mão
+(**🚨 Chamar todo mundo de volta agora**) e repetir. Os textos ficam em Preparar → Agenda e cenas → ☕ Intervalo.
+
+> **Limite honesto:** o alerta aparece no celular de quem está com o **app aberto na tela**. Uma página da web não
+> consegue acordar um celular bloqueado no bolso (isso exigiria um aplicativo instalado com notificações). Por isso o
+> telão com a sirene é o chamado principal; peça para o pessoal deixar o app aberto durante o intervalo.
+
+## 🔌 Login que não se perde
+
+- O login fica guardado no aparelho (armazenamento do navegador e, de reserva, um cookie de 30 dias). Apagar a tela, fechar a
+  aba ou trocar de app não tira ninguém do evento.
+- Quando o celular volta (tela acesa, aba de volta, rede de volta), a conexão é refeita na hora e a tela mostra o que está no
+  ar. Se o WebSocket não responder, o estado vem por HTTP; de tempos em tempos o app confere se está em dia.
+- **Versão nova publicada**: os celulares abertos recarregam sozinhos (sem atrapalhar quem está digitando) e continuam logados.
+- **Servidor reiniciado sem banco** (plano gratuito do Render): o celular percebe que o servidor "esqueceu todo mundo" e refaz
+  o próprio check-in sozinho, com o mesmo nome, e reenvia as respostas da nuvem de palavras. Duplas, votos e respostas do evento, porém, se
+  perdem: para o dia do evento use o plano Starter com um disco em `/app/data` (veja "Colocar no ar").
+- Se foi o apresentador que encerrou o check-in (ou reiniciou os check-ins), a pessoa volta para a tela de login.
+
+## 📱 Dinâmicas no celular
+
+Conexões, Reflexão e Sucesso acontecem no app. Enquanto o celular é necessário, o telão mostra só um **ícone discreto no
+canto** (📱 NO CELULAR · EN TU CELULAR); não há aviso em tela cheia. No celular, a dinâmica abre com o aviso "esta
+dinâmica acontece aqui, no seu celular". No plano de voo e no roteiro do painel, 📱 marca o que acontece no celular
+(as três dinâmicas, a nuvem de palavras e o feedback do encerramento).
 
 ## 🎬 Roteiro em 4 atos e as cenas do deck
 
-O roteiro padrão segue a agenda do deck `CDIO_HC_BPC_Townhall_2026_BTTF_v18` (14:00 às 17:00, 180 minutos).
-Todo o conteúdo do deck está no app, **em português** e com o visual do app; **Conexões, Reflexão e Sucesso
-continuam como eram**. "Como a IA nos ajudou em 2026" é o próprio bloco **Reflexão** e o "Manifesto 2027" é o próprio
+O roteiro padrão segue a agenda do deck `CDIO_HC_BPC_Townhall_2026_BTTF_v18` (14:00 às 17:00).
+Todo o conteúdo do deck está no app, **em inglês (os textos originais do deck)** e com o visual do app; **Conexões, Reflexão
+e Sucesso continuam em português**. A duração de cada bloco **não aparece** nas telas (só os horários do plano de voo). "Como a IA nos ajudou em 2026" é o próprio bloco **Reflexão** e o "Manifesto 2027" é o próprio
 bloco **Sucesso**: cada um é um passo só no roteiro e um item só na agenda.
 
 | Ato | Passo do roteiro | O que é |
 |---|---|---|
 | I · Reconectar | 🚪 Chegada · Check-in | QR do app e o carro carregando a cada check-in |
-| | 🗺️ Plano de voo | a agenda do dia em 4 atos, com horários; no telão, um destaque suave passeia por todos os itens (nenhum fica fixo) |
-| | 👋 Boas-vindas e jornada | "Fechar 2026 com orgulho. Sair com um destino claro para 2027." e quem fala |
-| | ⚡ Conexões | bloco interativo (sem mudanças de tela, só os ajustes abaixo) |
-| II · Rebobinar 2026 | 📅 Jornada 2026 | o **almanaque**: 12 meses, 51 itens, 41 entregas, €51,3M; "tocar o ano" e o ano em uma página |
-| | 💭 Reflexão | bloco interativo: "Como a IA nos ajudou em 2026" |
+| | 🎬 Vídeo de abertura | o vídeo que abre o evento, em tela cheia (veja abaixo) |
+| | 👋 Boas-vindas e jornada | "Close 2026 with pride. Leave with a clear 2027 destination." e quem fala |
+| | ☁️ Nuvem de palavras 📱 | duas perguntas no celular (texto livre); cada uma forma uma nuvem no telão |
+| | 🗺️ Plano de voo | a agenda do dia em 4 atos, com os horários; no telão, um destaque suave passeia por todos os itens |
+| | ⚡ Conexões 📱 | bloco interativo (em português/espanhol) |
+| II · Rebobinar 2026 | 🧭 Estratégia 2026 | o **plano estratégico LATAM GDT 2026** no visual do filme: o destino (Desire at Scale), os três motores (Growth, Operational Effectiveness, Net Productivity) e a estrada (Governance & Culture) |
+| | 📅 Jornada 2026 | o **almanaque**: 12 meses, 51 itens, 41 entregas, €51,3M, **de dezembro para janeiro** (a DeLorean vai de ré), e o ano em uma página |
+| | 💭 Reflexão 📱 | bloco interativo: "Como a IA nos ajudou em 2026" |
 | III · Reconhecer | 🏆 Reconhecimento 2026 | abertura → tributo (vídeo) → **Prêmios Torre do Relógio** → cerimônia de cada prêmio → Hall da Fama |
-| | ☕ Intervalo | cronômetro de 15 min no telão e nos celulares; a música entra |
-| IV · Avançar para 2027 | 🔭 Visão 2027 · Estratégia | a **Estratégia CDIO LATAM 2027** no telão, interativa (arquivo original, sem alterações) |
-| | 🚀 Sucesso 01 a 04 · 🧪 o Doc | bloco interativo: o manifesto coletivo de 2027 |
+| | ☕ Intervalo | cronômetro de 15 min no telão e nos celulares; a música entra; no fim, o **alerta de volta** |
+| IV · Avançar para 2027 | 🔭 Visão 2027 · Estratégia | a **capa do bloco** (nome e quem conduz) e, em seguida, a **Estratégia CDIO LATAM 2027** em **tela cheia**, interativa (arquivo original, sem alterações) |
+| | 🚀 Sucesso · capa do bloco | a capa "De Volta para o Sucesso", com quem conduz |
+| | 🚀 Sucesso 01 a 04 📱 · 🧪 o Doc | bloco interativo: o manifesto coletivo de 2027 |
 | | 🏎️ 88 MPH · Encerramento | o velocímetro vai a 88 (telão e celulares) e "Bem-vindos a 2027" |
-| | 🏁 Créditos | as frases finais do deck, os créditos e o elenco (todos os nomes do check-in) |
+| | 🏁 Encerramento 📱 | as frases finais do deck, os créditos e o elenco (todos os nomes do check-in); nos celulares, o **formulário de feedback** |
 
 As telas avulsas "🦋 Como a IA nos ajudou em 2026" e "📜 Manifesto 2027" continuam existindo como cenas extras
 (Preparar → Roteiro → Cenas extras), para quem quiser uma tela de abertura antes do bloco.
@@ -44,25 +155,44 @@ conduz, para quem ajudou a organizar e merece o crédito mesmo sem estar na sala
 
 Como conduzir cada cena (no **Ao vivo**, um botão principal por vez):
 
-- **Jornada 2026:** `▶ Tocar o ano` avança um mês a cada 3 s e, em dezembro, abre o ano em uma página. Dá para clicar
-  direto em um mês, ir mês a mês e esconder/mostrar BUs e tipos (Mais opções). Antes de começar, o telão mostra só a
-  **capa do bloco** (o nome, quem conduz e a DeLorean 3D na estrada); os indicadores e a linha do tempo entram quando
-  o ano começa. Na linha do tempo, quem anda de mês em mês é o **modelo 3D de verdade**
-  (rodas girando e rastro de fogo a cada mês). O céu e a estrada continuam rodando no fundo em todas as cenas.
+- **Vídeo de abertura:** o jeito mais seguro é **arrastar o arquivo do vídeo para a tela do telão** (ou clicar na tela do
+  telão para escolher o arquivo). Ele fica **guardado no navegador do telão**: pode carregar dias antes, fechar e abrir de
+  novo, que continua lá (use no dia o mesmo computador e navegador). O painel mostra "✔ vídeo carregado no telão". Por
+  padrão o vídeo começa quando o passo entra no ar; os botões são `▶ Tocar`, `⏸ Pausar`, `↺ Tocar do começo` e
+  `⏹ Encerrar`. No fim, o telão volta para o cartão do evento e o painel oferece o próximo passo. O vídeo toca com som
+  depois de um clique na tela do telão (o mesmo que libera o som). Também dá para informar um endereço direto do arquivo
+  (.mp4/.webm) em Preparar → Agenda e cenas → Vídeo de abertura.
+- **Nuvem de palavras:** ao entrar no ar, os celulares recebem as duas perguntas. `☁️☁️ As duas nuvens`, `1 · Destacar a
+  pergunta 1` e `2 · Destacar a pergunta 2` escolhem o que o telão mostra.
+- **Estratégia 2026:** o plano inteiro aparece de uma vez; os botões `1 · Desire at Scale` … `5 · Governance & Culture`
+  (ou `Destacar a próxima parte →`) deixam uma parte em destaque e apagam as outras. O conteúdo (inclusive os líderes, com
+  foto) é editável em Preparar → Agenda e cenas → 🧭 Estratégia 2026. Ao avançar, a Jornada 2026 entra direto.
+- **Visão 2027:** o passo entra com a transição e mostra a **capa**. `🔭 Abrir a estratégia em tela cheia` troca a capa
+  pela página da estratégia ocupando a tela inteira (sem moldura, sem relógio); `← Voltar para a capa do bloco` desfaz.
+- **Intervalo:** além do cronômetro, `🚨 Chamar todo mundo de volta agora` e `🔕 Silenciar o alerta`.
+
+- **Jornada 2026:** a viagem é **de trás para a frente**: começa em **dezembro** e a DeLorean vai **de ré**, mês a mês,
+  até **janeiro**, para rever tudo o que passou. `◀◀ Voltar no tempo` anda um mês a cada 3 s e, em janeiro, abre o ano em
+  uma página. Dá para clicar direto em um mês, ir mês a mês e esconder/mostrar BUs e tipos (Mais opções). Antes de
+  começar, o telão mostra só a **capa do bloco** (o nome, quem conduz e a DeLorean 3D na estrada); os indicadores e a
+  linha do tempo entram quando a viagem começa. Na linha do tempo, quem anda de mês em mês é o **modelo 3D de verdade**
+  (de frente para o futuro, andando de ré, com as rodas girando para trás e o rastro de fogo a cada mês). O céu e a estrada continuam rodando no fundo em todas as cenas.
 - **Reconhecimento 2026:** `▶ Tributo` → `Abrir os Prêmios` → para cada prêmio: `Conhecer os indicados` →
   `⚡ Carregar o Flux Capacitor` → o raio cai e o vencedor aparece. Na carga, **os aplausos da sala carregam o Flux
   Capacitor**: quanto mais barulho, mais rápido (veja "🎤 Aplausos" abaixo). O painel tem `+15%` e `Raio agora` de reserva.
   Os vencedores são definidos antes (Preparar → Agenda e cenas); o "sorteio" é o suspense. Os aparelhos só recebem
   o nome do vencedor quando o sorteio daquele prêmio começa.
   - Os indicados do deck são **nomes de exemplo**: o telão mostra o aviso "NOMES DE EXEMPLO" até eles serem editados.
-  - Vídeo-tributo: cole o endereço em Agenda e cenas → Reconhecimento, ou arraste o arquivo para a tela do telão.
+  - Vídeo-tributo: cole o endereço em Agenda e cenas → Reconhecimento, ou arraste o arquivo para a tela do telão (ele
+    fica guardado no navegador do telão, como o vídeo de abertura).
 - **Intervalo:** `▶ Iniciar intervalo`, pausar, ±1 min. O cronômetro segue contando se outro passo for mostrado.
 - **Visão 2027 · Estratégia:** a página é clicada **direto na tela do telão** (filtros, pilares). Por padrão ela abre
   no mapa da estratégia, como no deck; há uma opção para começar pela abertura em vídeo da própria página.
 - **88 MPH:** `🏎️ Acelerar até 2027`.
 
-**Preparar → Agenda e cenas** edita todo o conteúdo sem mexer em código: horários e itens da agenda, textos, itens
-do almanaque (`mês | tipo | BU | benefício | texto`), prêmios (indicados, vencedor, citação), créditos.
+**Preparar → Agenda e cenas** edita todo o conteúdo sem mexer em código: horários e itens da agenda (os minutos de cada
+item servem só para calcular os horários; não aparecem na tela), textos, itens do almanaque
+(`mês | tipo | BU | benefício | texto`), prêmios (indicados, vencedor, citação), créditos.
 `*Asteriscos*` marcam palavras em destaque. Cada seção tem "Restaurar o conteúdo original".
 
 ### 🎤 Aplausos carregam o Flux Capacitor
@@ -91,8 +221,8 @@ Em Preparar → Agenda e cenas → Reconhecimento dá para escolher como o capac
 **toques no botão ⚡ CARREGAR dos celulares** (em média, 6 toques por pessoa enchem) ou **os dois**.
 
 Onde o deck dizia uma coisa no slide e outra na agenda, vale a **agenda** (ela é a versão atualizada): intervalo de
-15 min (o slide dizia 10), Sucesso/Manifesto de 15 min (o slide dizia 10) e o Intervalo dentro do Ato III. As notas para quem
-apresenta ("use apenas destaques selecionados…", "a confirmar") aparecem só no painel, não no telão.
+15 min (o slide dizia 10) e o Intervalo dentro do Ato III. As notas para quem apresenta ("use apenas destaques
+selecionados…", "to confirm") aparecem só no painel, não no telão.
 
 O código está em `server/cenas.js` (conteúdo, estado e comandos), `public/cenas.js` e `public/cenas.css` (telão).
 A estratégia é `public/estrategia-2027.html`, cópia byte a byte do arquivo enviado (o teste confere o SHA-256).
@@ -120,12 +250,15 @@ O botão **↺ Reiniciar…** (no "Ao vivo", embaixo do roteiro, e em Preparar �
 
 | Bloco | O que o reinício apaga |
 |---|---|
-| Chegada · Check-in | os check-ins de todo mundo (cada pessoa escolhe o nome de novo) e, junto, as Conexões |
+| Chegada · Check-in | os check-ins de todo mundo (cada pessoa escolhe o nome de novo), as respostas da nuvem de palavras, o feedback e, junto, as Conexões |
+| Nuvem de palavras | as respostas das duas perguntas (cada pessoa responde de novo) e o destaque |
+| Encerramento | as respostas do formulário de feedback |
 | Conexões | duplas, perguntas já vistas, avaliações e conexões calculadas (os check-ins ficam) |
 | Reflexão | votos e mais votados de todas as paradas |
 | Sucesso 01 a 04 | as respostas de cada dinâmica, o sorteio e a nuvem revelada |
 | Visão 2027 · o Doc | a mensagem do Doc e a cena no telão |
-| Jornada 2026 · Reconhecimento · Intervalo · Estratégia · 88 MPH | o mês do almanaque, os prêmios revelados, o cronômetro, o velocímetro |
+| Vídeo de abertura | volta o vídeo para o começo |
+| Estratégia 2026 · Jornada 2026 · Reconhecimento · Intervalo · Visão 2027 · 88 MPH | o destaque, o mês do almanaque, os prêmios revelados, o cronômetro e o alerta, a capa (em vez da estratégia aberta), o velocímetro |
 | Roteiro | nada: só volta o telão e os celulares para o primeiro passo |
 
 Dentro de cada passo do "Ao vivo" há também o link **↺ Reiniciar este bloco**.
@@ -133,7 +266,8 @@ Dentro de cada passo do "Ao vivo" há também o link **↺ Reiniciar este bloco*
 Reiniciar **não mexe no que foi preparado**: lista de pessoas e fotos, perguntas, roteiro, textos e conteúdo das
 cenas. Antes de reiniciar depois do evento, baixe os dados em 📊 Dados. No servidor é um endereço só:
 `POST /api/admin/reset` com `scope` (`all`, `checkin`, `connections`, `reflexao`, `sucesso`, `sucesso:d1`…, `doc`,
-`cenas`, `cena:<nome>`, `roteiro`).
+`words`, `feedback`, `cenas`, `cena:<nome>`, `roteiro`). Com a senha das dinâmicas só valem `connections`, `reflexao`, `sucesso`,
+`sucesso:d1`… e `doc`.
 
 ## 📷 Fotos de perfil
 
@@ -294,13 +428,16 @@ dados) e `public/flux.js` (o Flux Capacitor 3D do protótipo).
 
 A página **`/dados.html`** (mesma senha do Painel do Doc; botão **📊 Dados** no topo do painel)
 reúne o que o evento gerou, um bloco por aba. Cada bloco baixa em **um arquivo Excel (.xlsx)** com uma
-aba por tabela, e cada tabela também em .csv. O botão "Tudo em Excel" junta os três blocos.
+aba por tabela, e cada tabela também em .csv. O botão "Tudo em Excel" junta todos os blocos. As abas da nuvem de palavras
+e do feedback só aparecem para a senha mestra.
 
 | Aba | O que mostra | Arquivo Excel (abas) |
 |---|---|---|
 | ⚡ Conexões | as **duplas** de cada viagem, as **perguntas que cada dupla pegou**, o **ranking de cada pessoa** (posição que deu e que recebeu em cada conversa, pontos) e os **matches** (conexão sugerida, pontos, se foi mútua) | `Conexoes.xlsx`: Duplas · Perguntas por dupla · Ranking de cada pessoa · Matches |
 | 💭 Reflexão | **o que cada pessoa escolheu** (uma linha por pessoa, uma coluna por parada), a contagem por projeto e os 2 mais votados de cada parada | `Reflexao.xlsx`: Escolhas por pessoa · Votos · Mais votados por parada |
 | 🚀 Sucesso | **todas as respostas de todas as perguntas** em uma tabela só (pergunta, nome, resposta, hora) | `Sucesso.xlsx`: Respostas |
+| ☁️ Nuvem de palavras | o que cada pessoa respondeu nas duas perguntas e os termos de cada nuvem (com quantas pessoas) | `Nuvem_de_palavras.xlsx`: Respostas · Termos das nuvens |
+| 📝 Feedback | nota média, distribuição das notas e todas as respostas (sem o nome de quem pediu) | `Feedback.xlsx`: Feedback |
 
 No plano gratuito do Render os dados somem quando o servidor reinicia: **baixe os arquivos logo
 depois do evento**.
@@ -327,10 +464,12 @@ viagens (depois do sorteio, é preciso sortear de novo).
   telão (ou do painel, se o som estiver nele) e segue o volume do painel. O botão **⏱ Bipes** no topo
   do painel liga e desliga; eles tocam mesmo com "Sem áudio". É preciso um clique na tela do telão
   para o navegador liberar o som (o painel avisa quando falta).
-- **Transições.** Ao trocar de bloco, o telão pode fazer uma "viagem no tempo" de **15 segundos**. Cada passo do
-  roteiro escolhe se entra **com a transição** ou **direto** (Preparar → Roteiro, botão `⚡ transição` / `⏭ direto`).
-  No roteiro padrão a transição fica em: Plano de voo, Conexões, Jornada 2026 e Reflexão. Entram **direto**:
-  Boas-vindas, Reconhecimento, Intervalo, Visão 2027, Sucesso (as quatro dinâmicas e o Doc), 88 MPH e Créditos.
+- **Transições.** Ao trocar de bloco, o telão pode fazer uma "viagem no tempo" de **8 segundos** (era 15; a duração é
+  ajustável de 3 a 30 s em Preparar → Ajustes). Cada passo do roteiro escolhe se entra **com a transição** ou **direto**
+  (Preparar → Roteiro, botão `⚡ transição` / `⏭ direto`). No roteiro padrão a transição fica em: Plano de voo, Conexões,
+  Estratégia 2026, Reflexão, **Visão 2027** e a **capa do Sucesso**. Entram **direto**: Vídeo de abertura, Boas-vindas,
+  Nuvem de palavras, Jornada 2026 (a transição do bloco já aconteceu na Estratégia 2026), Reconhecimento, Intervalo, as
+  quatro dinâmicas do Sucesso e o Doc (a transição do bloco acontece na capa), 88 MPH e Encerramento.
   A transição tem quatro atos, para todo mundo olhar para o telão:
   1. **Programando o destino**: os circuitos de tempo digitam o nome do próximo bloco, letra a letra
      (LAST TIME DEPARTED mostra de onde saímos), com uma fala do filme;
@@ -388,11 +527,12 @@ Variáveis de ambiente:
 | Variável         | Padrão     | Para quê                                  |
 |------------------|------------|-------------------------------------------|
 | `PORT`           | `3000`     | porta HTTP                                |
-| `ADMIN_PASSWORD` | `doc1985`  | senha do Painel do Doc                    |
+| `ADMIN_PASSWORD` | `doc1985`  | senha mestra: o Painel do Doc completo    |
+| `DINAMICAS_PASSWORD` | (vazio) | senha das dinâmicas: o painel só com Conexões, Reflexão e Sucesso (`/dinamicas`). Sem ela, só a senha mestra entra |
 | `DATA_DIR`       | `./data`   | pasta do banco SQLite                     |
 | `FOTOS_KEY`      | (vazio)    | chave que abre o pacote de fotos de perfil (`server/seed/fotos.enc`) |
 
-Testes (algoritmo de duplas + fluxo completo do evento + sorteio das perguntas + integração com o Sucesso + cenas do deck + testes originais do Lucas):
+Testes (algoritmo de duplas + fluxo completo do evento + sorteio das perguntas + integração com o Sucesso + cenas do deck + os dois níveis de acesso, o modo confidencial, a nuvem de palavras, o feedback e o alerta do intervalo + testes originais do Lucas):
 
 ```bash
 npm test
@@ -404,7 +544,8 @@ npm test
 2. No painel: **New → Web Service → Public Git Repository** e cole
    `https://github.com/nick-kuh/app-back-to-future-townhall`.
 3. Escolha a branch (`claude/nice-ptolemy-l4hnfq` ou `main`), Runtime **Docker**, plano **Free**,
-   região **Virginia** e adicione a variável de ambiente `ADMIN_PASSWORD` com a senha do painel.
+   região **Virginia** e adicione as variáveis de ambiente `ADMIN_PASSWORD` (a senha mestra) e `DINAMICAS_PASSWORD`
+   (a senha da equipe das dinâmicas).
 4. **Create Web Service**. Em 2 a 3 minutos o app fica em `https://NOME.onrender.com`
    (app dos viajantes na raiz, painel em `/admin.html`). Cada novo push na branch republica sozinho.
 
@@ -426,7 +567,8 @@ entre dispositivos). O servidor usa WebSocket (Socket.IO) para avisar os celular
 |---|---|---|
 | `/` | viajantes (celular) | check-in pelo nome (a busca acha pelo começo do nome ou de um sobrenome: "ni" traz Nicolas, não Vinicius), blocos, viagens, avaliação, resultado |
 | `/telao.html` | projetor | QR do check-in, circuitos de tempo, cronômetros gigantes, 88 MPH, avaliação, conexões, créditos; modo "só o logo" para servir de fundo |
-| `/admin.html` | apresentador (notebook) | Painel do Doc: roteiro do evento (Ao vivo) e preparação |
+| `/admin.html` | apresentador (notebook) | Painel do Doc: roteiro do evento (Ao vivo) e preparação (senha mestra) |
+| `/dinamicas` | equipe das dinâmicas | o mesmo painel, só com Conexões, Reflexão e Sucesso (senha das dinâmicas) |
 | `/dados.html` | apresentador | Extração de dados: Conexões, Reflexão e Sucesso em tabelas, com download em .csv |
 | `/painel` | apresentador | painel 3D do De Volta para o Sucesso (mesma senha) |
 | `/participar/<sala>` | participantes | formulário de resposta das dinâmicas (sem login) |
@@ -473,7 +615,7 @@ O painel tem duas áreas.
 
 **▶ Ao vivo** (é onde você fica durante o evento)
 
-- À esquerda, o **roteiro** em 4 atos: Chegada → Plano de voo → Boas-vindas → Conexões → Jornada 2026 →
+- À esquerda, o **roteiro** em 4 atos: Chegada → Vídeo de abertura → Boas-vindas → Plano de voo → Conexões → Jornada 2026 →
   Reflexão → Reconhecimento → Intervalo → Visão 2027 → Sucesso 01 a 04 → o Doc → 88 MPH → Créditos.
   O passo que está no ar fica marcado como **NO AR**.
 - À direita, **só o passo atual**: o que os celulares e o telão estão mostrando, os números do momento
@@ -491,14 +633,15 @@ O que cada passo faz:
 
 | Passo | Celulares | Telão | Você faz |
 |---|---|---|---|
-| Check-in | cada pessoa digita o nome e embarca | QR do app + carro carregando | acompanha quem falta |
+| Check-in | cada pessoa digita o nome, escolhe Português ou Español e embarca | QR do app + carro carregando | acompanha quem falta |
+| Nuvem de palavras | as duas perguntas, com um campo de texto para cada | uma nuvem por pergunta, ao vivo | acompanha as respostas, destaca uma pergunta, modera |
 | Cena do townhall | "olhe para o telão" (agenda, cronômetro, prêmios e 88 MPH aparecem no celular) | a cena do deck | os botões da cena (ver "Roteiro em 4 atos") |
 | Bloco de fala (opcional) | nome e tema do bloco, no estilo do logo do filme | modo calmo: título no estilo do logo (seta, rastros de fogo, placa com quem fala, circuitos de tempo) | nada (som desliga sozinho) |
 | Conexões | dupla, perguntas, avaliação e resultado | cronômetros e "88 MPH" | **Iniciar viagens**; o resto anda sozinho |
 | Reflexão | escolher 1 projeto por parada | menu das paradas, Flux Capacitor, os 2 mais votados (com suspense) | **Abrir parada**, **Iniciar / Encerrar votação**, **Revelar os 2 mais votados**, **Próxima parada** |
 | Sucesso 01–04 | pergunta e resposta, com o nome do check-in | carro carregando; nuvem só ao revelar; sorteio | **Iniciar / Encerrar recebimento**, **Revelar respostas**, **Sortear**, tempo de fala |
 | Aviso / intervalo | o aviso | o aviso | nada |
-| Encerramento | agradecimento e a conexão de cada um | créditos com todos os nomes | baixar as respostas |
+| Encerramento | agradecimento, o **formulário de feedback** e a conexão de cada um | créditos com todos os nomes e o chamado para o feedback | acompanhar o feedback e baixar os dados |
 
 Sair do passo Conexões no meio das viagens deixa a viagem em pausa; ao voltar, ela continua de onde
 parou. A sala das dinâmicas do Sucesso é criada sozinha.
@@ -542,7 +685,7 @@ server/index.js      servidor HTTP + Socket.IO + API do admin
 server/engine.js     estado do evento: blocos, fases, timer, duplas, filas, ranking, resultados
 server/matching.js   algoritmo de pareamento (área ≠, WL ≠, sem repetição, trio se ímpar)
 server/queues.js     filas de perguntas por dupla (três categorias, sorteio por dupla, sem repetir)
-server/cenas.js      cenas do deck do townhall: conteúdo em português, estado ao vivo e comandos do Doc
+server/cenas.js      cenas do deck do townhall: conteúdo em inglês (textos do deck), estado ao vivo e comandos do Doc
 server/fotos.js      fotos de perfil: de quem é cada arquivo (pelo nome), validação e armazenamento
 server/results.js    ranking → conexões
 server/db.js         SQLite (node:sqlite) e esquema
@@ -551,7 +694,7 @@ server/sucesso.js    ponte com o De Volta para o Sucesso (API do Lucas sem alter
 server/reflexao.js   bloco Reflexão: paradas, projetos, votos, cronômetro e os 2 mais votados
 public/dados.*       página de extração de dados (Conexões, Reflexão, Sucesso) com download em .csv
 public/              app do viajante (index.html, app.*), telão (telao.*), Painel do Doc (admin.*)
-public/cenas.*       as cenas do deck no telão (plano de voo, almanaque, prêmios, intervalo, estratégia, 88 MPH)
+public/cenas.*       as cenas do deck no telão (vídeo de abertura, boas-vindas com a nuvem, plano de voo, almanaque, prêmios, intervalo, estratégia, 88 MPH)
 public/estrategia-2027.html  a Estratégia CDIO LATAM 2027 (arquivo original, sem alterações)
 public/delorean3d.js motor 3D (céu, estrada, raios, portal) extraído do painel do Sucesso
 public/delorean-model.js  DeLorean realista (Three.js) · public/nuvem.js  nuvem de palavras

@@ -1,11 +1,13 @@
-/* ===== Dados do evento: página de extração (Conexões · Reflexão · Sucesso) =====
- * Usa a mesma senha do Painel do Doc. Busca tudo em /api/admin/export e monta as tabelas;
+/* ===== Dados do evento: página de extração (Conexões · Reflexão · Sucesso · nuvem de palavras · feedback) =====
+ * Usa a mesma senha do Painel do Doc (com a senha das dinâmicas, só Conexões, Reflexão e Sucesso). Busca tudo em /api/admin/export e monta as tabelas;
  * cada bloco baixa em um arquivo Excel (.xlsx, uma aba por tabela) e cada tabela também em .csv. */
 (() => {
   const $ = s => document.querySelector(s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const TABS = [['conexoes', '⚡ Conexões'], ['reflexao', '💭 Reflexão'], ['sucesso', '🚀 Sucesso']];
-  const D = { key: localStorage.getItem('bttf.admin') || '', data: null, tab: TABS.some(t => '#' + t[0] === location.hash) ? location.hash.slice(1) : 'conexoes' };
+  const MASTER_TABS = [['nuvem', '☁️ Nuvem de palavras'], ['feedback', '📝 Feedback']]; // só com a senha mestra (o servidor só manda esses dados para ela)
+  const tabs = () => (D.data && D.data.feedback ? [...TABS, ...MASTER_TABS] : TABS);
+  const D = { key: localStorage.getItem('bttf.admin') || '', data: null, tab: [...TABS, ...MASTER_TABS].some(t => '#' + t[0] === location.hash) ? location.hash.slice(1) : 'conexoes' };
   const when = v => (v ? new Date(v).toLocaleString('pt-BR') : '');
   const ord = n => (n ? `${n}º` : '—');
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -63,9 +65,12 @@
     conexoes: () => [['Duplas', CSV.pares()[1]], ['Perguntas por dupla', CSV.duplas()[1]], ['Ranking de cada pessoa', CSV.ranking()[1]], ['Matches', CSV.matches()[1]]],
     reflexao: () => [['Escolhas por pessoa', CSV.rfEscolhas()[1]], ['Votos', CSV.rfVotos()[1]], ['Mais votados por parada', CSV.rfResultado()[1]]],
     sucesso: () => [['Respostas', CSV.sucesso()[1]]],
+    nuvem: () => [['Respostas', CSV.nuvem()[1]], ['Termos das nuvens', CSV.nuvemTermos()[1]]],
+    feedback: () => [['Feedback', CSV.feedback()[1]]],
   };
-  const BOOK_FILE = { conexoes: 'Conexoes.xlsx', reflexao: 'Reflexao.xlsx', sucesso: 'Sucesso.xlsx', tudo: 'Townhall_Dados.xlsx' };
-  const book = k => xlsx(BOOK_FILE[k], k === 'tudo' ? [...BOOKS.conexoes().map(([n, r]) => ['Conexões · ' + n.replace(' de cada pessoa', ''), r]), ...BOOKS.reflexao().map(([n, r]) => ['Reflexão · ' + n.replace(' por parada', ''), r]), ['Sucesso · Respostas', CSV.sucesso()[1]]] : BOOKS[k]());
+  const BOOK_FILE = { conexoes: 'Conexoes.xlsx', reflexao: 'Reflexao.xlsx', sucesso: 'Sucesso.xlsx', nuvem: 'Nuvem_de_palavras.xlsx', feedback: 'Feedback.xlsx', tudo: 'Townhall_Dados.xlsx' };
+  const book = k => xlsx(BOOK_FILE[k], k === 'tudo' ? [...BOOKS.conexoes().map(([n, r]) => ['Conexões · ' + n.replace(' de cada pessoa', ''), r]), ...BOOKS.reflexao().map(([n, r]) => ['Reflexão · ' + n.replace(' por parada', ''), r]), ['Sucesso · Respostas', CSV.sucesso()[1]],
+    ...(D.data.feedback ? [['Nuvem · Respostas', CSV.nuvem()[1]], ['Nuvem · Termos', CSV.nuvemTermos()[1]], ['Feedback', CSV.feedback()[1]]] : [])] : BOOKS[k]());
   // Reflexão: uma linha por pessoa, uma coluna por parada, com o projeto que ela escolheu
   function choices() {
     const R = D.data.reflexao, by = new Map();
@@ -122,6 +127,23 @@
       for (const a of D.data.sucesso.acts) for (const r of a.responses) rows.push([`${a.id.slice(1).padStart(2, '0')} · ${a.title}`, a.question, r.name, r.answer, when(r.at)]);
       return ['Sucesso_Respostas.csv', rows];
     },
+    // Nuvem de palavras: o que cada pessoa respondeu nas duas perguntas, e os termos de cada nuvem
+    nuvem() {
+      const N = D.data.nuvem, rows = [['Nome', `1 · ${N.perguntas[0]}`, `2 · ${N.perguntas[1]}`, 'Data/Hora']];
+      for (const r of N.respostas) rows.push([r.name, r.words[0] || '', r.words[1] || '', when(r.at)]);
+      return ['Nuvem_Respostas.csv', rows];
+    },
+    nuvemTermos() {
+      const N = D.data.nuvem, rows = [['Pergunta', 'Termo', 'Pessoas']];
+      N.clouds.forEach((c, i) => c.forEach(([w, n]) => rows.push([`${i + 1} · ${N.perguntas[i]}`, w, n])));
+      return ['Nuvem_Termos.csv', rows];
+    },
+    // Feedback do encerramento (quem pediu "sem o meu nome" aparece sem nome)
+    feedback() {
+      const rows = [['Nome', 'Área', 'Nota (1 a 5)', 'O que mais gostou', 'O que melhorar', 'Sem nome', 'Data/Hora']];
+      for (const f of D.data.feedback.list) rows.push([f.anonymous ? '' : f.name, f.anonymous ? '' : f.area, f.rating, f.liked, f.improve, f.anonymous ? 'Sim' : 'Não', when(f.at)]);
+      return ['Feedback.csv', rows];
+    },
   };
   const dl = (label, key, arg = '', n = 1) => `<button class="btn sm ghost" data-csv="${key}" data-arg="${arg}" ${n ? '' : 'disabled'}>⬇ ${label}</button>`;
   const dx = (label, key, n = 1) => `<button class="btn" data-book="${key}" ${n ? '' : 'disabled'}>⬇ ${label}</button>`;
@@ -177,11 +199,33 @@
         ${table(['Pergunta', 'Nome', 'Resposta', 'Hora'], rows, 'Nenhuma resposta ainda.')}</div>`;
   }
 
+  /* ---------- Nuvem de palavras: as respostas das duas perguntas ---------- */
+  function vNuvem() {
+    const N = D.data.nuvem, n = N.respostas.length;
+    const terms = i => table(['Termo', 'Pessoas'], (N.clouds[i] || []).map(([w, c]) => `<tr><td>${esc(w)}</td><td class="n">${c}</td></tr>`), 'Ainda sem respostas.');
+    return `<div class="card"><h1>☁️ Nuvem de palavras</h1>
+        <div class="stats"><div class="stat"><b>${n}</b><span>pessoas responderam</span></div><div class="stat"><b>${(N.clouds[0] || []).length}</b><span>termos na nuvem 1</span></div><div class="stat"><b>${(N.clouds[1] || []).length}</b><span>termos na nuvem 2</span></div></div>
+        <div class="actions">${dx('Baixar a nuvem de palavras (Excel)', 'nuvem', n)}<span class="small">ou em .csv:</span>${dl('Respostas', 'nuvem', '', n)}${dl('Termos das nuvens', 'nuvemTermos', '', n)}</div></div>
+      <div class="card"><h2>1 · O que cada pessoa respondeu</h2>${table(['Pessoa', `1 · ${esc(N.perguntas[0])}`, `2 · ${esc(N.perguntas[1])}`, 'Hora'], N.respostas.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.words[0] || '')}</td><td>${esc(r.words[1] || '')}</td><td>${esc(when(r.at))}</td></tr>`), 'Ninguém respondeu ainda.')}</div>
+      <div class="card"><h2>2 · Os termos de cada nuvem</h2><p class="small">Respostas curtas entram inteiras; frases são quebradas em palavras (sem os conectivos). O número é quantas pessoas escreveram o termo.</p>
+        <h3>1 · ${esc(N.perguntas[0])}</h3>${terms(0)}<h3>2 · ${esc(N.perguntas[1])}</h3>${terms(1)}</div>`;
+  }
+  /* ---------- Feedback do encerramento ---------- */
+  function vFeedback() {
+    const F = D.data.feedback, S = F.stats, mx = Math.max(1, ...S.dist);
+    return `<div class="card"><h1>📝 Feedback do Townhall</h1>
+        <div class="stats"><div class="stat"><b>${S.count}</b><span>respostas</span></div><div class="stat"><b>${S.count ? String(S.avg).replace('.', ',') : '—'}</b><span>nota média (de 1 a 5)</span></div>${[5, 4, 3, 2, 1].map(k => `<div class="stat"><b>${S.dist[k - 1]}</b><span>nota ${k}</span></div>`).join('')}</div>
+        <div class="actions">${dx('Baixar o feedback (Excel)', 'feedback', S.count)}<span class="small">ou em .csv:</span>${dl('Feedback', 'feedback', '', S.count)}</div></div>
+      <div class="card"><h2>Todas as respostas</h2><p class="small">Quem marcou "sem o meu nome" aparece sem nome. Os dois textos são opcionais.</p>
+        ${table(['Pessoa', 'Nota', 'O que mais gostou', 'O que melhorar', 'Hora'], F.list.map(f => `<tr><td>${f.anonymous ? '<span class="muted">sem nome</span>' : esc(f.name)}</td><td class="n">${f.rating}</td><td>${esc(f.liked)}</td><td>${esc(f.improve)}</td><td>${esc(when(f.at))}</td></tr>`), 'Ninguém respondeu ainda. O formulário aparece nos celulares no encerramento.')}</div>`;
+  }
+
   function render() {
-    $('#tabs').innerHTML = TABS.map(([k, l]) => `<button type="button" class="${D.tab === k ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
+    if (!tabs().some(t => t[0] === D.tab) && D.data) D.tab = 'conexoes';
+    $('#tabs').innerHTML = tabs().map(([k, l]) => `<button type="button" class="${D.tab === k ? 'on' : ''}" data-tab="${k}">${l}</button>`).join('');
     if (!D.data) return;
     $('#stamp').textContent = `${D.data.event} · atualizado às ${new Date(D.data.now).toLocaleTimeString('pt-BR')}`;
-    $('#main').innerHTML = ({ conexoes: vConexoes, reflexao: vReflexao, sucesso: vSucesso })[D.tab]();
+    $('#main').innerHTML = ({ conexoes: vConexoes, reflexao: vReflexao, sucesso: vSucesso, nuvem: vNuvem, feedback: vFeedback })[D.tab]();
   }
   async function load(quiet) {
     try {

@@ -400,3 +400,20 @@ body.dim .sky{filter:brightness(.56) saturate(.85);transition:filter 1.2s}
 .tr.long[data-phase=arrive] .tr-progress{display:none}
 .tr-progress i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--yellow),var(--orange));box-shadow:0 0 14px var(--orange)}
 @media (prefers-reduced-motion:reduce){.tr.shake .tr-box,.tr-step{animation:none}}
+
+.qrbox .cta{font:700 clamp(10px,.95vw,15px) var(--led);letter-spacing:2px;color:var(--cyan);max-width:21vw;line-height:1.5;text-shadow:0 0 8px rgba(46,230,214,.5)}
+/* ---- o que acontece no celular: um ícone discreto no canto do telão ---- */
+@keyframes pcbuzz{0%,100%{transform:rotate(0)}15%{transform:rotate(-9deg)}30%{transform:rotate(8deg)}45%{transform:rotate(-6deg)}60%{transform:rotate(4deg)}75%{transform:rotate(0)}}
+.phonetag{position:fixed;left:24px;top:12px;z-index:21;display:flex;align-items:center;gap:9px;padding:6px 15px 6px 10px;border:2px solid var(--cyan);border-radius:99px;background:rgba(5,4,9,.92);box-shadow:0 0 18px rgba(46,230,214,.4);animation:ptglow 2.6s ease-in-out infinite}
+.phonetag[hidden]{display:none}
+.pt-ico{font-size:clamp(18px,1.6vw,28px);display:inline-block;animation:pcbuzz 1.6s ease-in-out infinite}
+.pt-tx{display:flex;flex-direction:column;text-align:left;line-height:1.15}
+.pt-tx b{font:900 clamp(11px,.95vw,17px) var(--display);letter-spacing:2px;color:var(--cyan)}
+.pt-tx small{font:700 clamp(8px,.62vw,11px) var(--led);letter-spacing:2px;color:var(--muted)}
+@keyframes ptglow{50%{box-shadow:0 0 32px rgba(46,230,214,.75)}}
+/* encerramento: o chamado para o feedback no celular, acima dos créditos */
+.fbcall{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-top:1.6vh;padding:10px 22px;border:2px solid var(--cyan);border-radius:99px;background:rgba(5,4,9,.85);box-shadow:0 0 22px rgba(46,230,214,.35)}
+.fbcall span{font-size:clamp(20px,2vw,34px)}
+.fbcall b{font:900 clamp(12px,1.25vw,22px) var(--display);letter-spacing:2px;color:var(--cyan)}
+.fbcall i{font:600 clamp(11px,1.05vw,18px) Inter;font-style:normal;color:var(--muted)}
+.fbcall em{font-style:normal;font-weight:800;color:var(--yellow)}

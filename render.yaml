@@ -14,7 +14,9 @@ services:
     dockerfilePath: ./Dockerfile
     autoDeploy: true
     envVars:
-      - key: ADMIN_PASSWORD
+      - key: ADMIN_PASSWORD      # senha mestra: o Painel do Doc completo (/admin.html)
+        sync: false
+      - key: DINAMICAS_PASSWORD  # senha das dinâmicas: o painel só com Conexões, Reflexão e Sucesso (/dinamicas)
         sync: false
       - key: ANTHROPIC_API_KEY  # opcional: a IA (Claude) escreve a mensagem do Doc na Visão 2027
         sync: false

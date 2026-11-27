@@ -64,6 +64,21 @@ CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
   value TEXT
 );
+CREATE TABLE IF NOT EXISTS words (
+  person_id INTEGER PRIMARY KEY,
+  w1 TEXT NOT NULL,
+  w2 TEXT DEFAULT '',
+  at TEXT
+);
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  person_id INTEGER UNIQUE,
+  rating INTEGER NOT NULL,
+  liked TEXT DEFAULT '',
+  improve TEXT DEFAULT '',
+  anonymous INTEGER DEFAULT 0,
+  at TEXT
+);
 CREATE TABLE IF NOT EXISTS photos (
   person_id INTEGER PRIMARY KEY,
   mime TEXT NOT NULL,
@@ -72,6 +87,9 @@ CREATE TABLE IF NOT EXISTS photos (
   updated_at TEXT
 );
 `);
+
+// Perguntas das Conexões também em espanhol (quem escolhe "Español" no login vê a mesma pergunta no seu idioma)
+if (!db.prepare('PRAGMA table_info(questions)').all().some(c => c.name === 'text_es')) db.exec("ALTER TABLE questions ADD COLUMN text_es TEXT DEFAULT ''");
 
 function kvGet(key, fallback = null) {
   const row = db.prepare('SELECT value FROM kv WHERE key = ?').get(key);
@@ -97,8 +115,15 @@ function seedIfEmpty() {
 function resetQuestions() {
   const questions = require('./seed/questions');
   db.exec('DELETE FROM questions');
-  const ins = db.prepare('INSERT INTO questions (text, era, sort_order) VALUES (?, ?, ?)');
-  for (const q of questions) ins.run(q.text, q.cat, q.sort_order); // a coluna "era" guarda a categoria da pergunta
+  const ins = db.prepare('INSERT INTO questions (text, text_es, era, sort_order) VALUES (?, ?, ?, ?)');
+  for (const q of questions) ins.run(q.text, q.es || '', q.cat, q.sort_order); // a coluna "era" guarda a categoria da pergunta
+}
+// "Época" do banco: um código sorteado quando o banco nasce. Se o servidor reinicia com o banco zerado (no plano
+// gratuito do Render isso acontece), o código muda e os celulares sabem que precisam refazer o próprio check-in sozinhos.
+function dbEpoch() {
+  let e = kvGet('epoch', null);
+  if (typeof e !== 'string' || !e) { e = require('crypto').randomBytes(6).toString('hex'); kvSet('epoch', e); }
+  return e;
 }
 
-module.exports = { db, kvGet, kvSet, seedIfEmpty, resetQuestions, DB_PATH, DATA_DIR };
+module.exports = { db, kvGet, kvSet, seedIfEmpty, resetQuestions, dbEpoch, DB_PATH, DATA_DIR };
